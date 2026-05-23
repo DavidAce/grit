@@ -1,0 +1,31 @@
+#include <grit/grit.h>
+#include <grit/internal/MatVec.ipp>
+#include <grit/internal/config.ipp>
+#include <grit/internal/result.ipp>
+#include <grit/internal/prob/standard.ipp>
+#include <grit/internal/prob/generalized.ipp>
+#include <grit/internal/form/base.ipp>
+#include <grit/internal/form/standard.ipp>
+#include <grit/internal/form/generalized.ipp>
+#include <grit/internal/algo/gdplusk.ipp>
+#include <grit/internal/algo/lanczos.ipp>
+#include <grit/internal/algo/lobpcg.ipp>
+
+using Scalar = @SCALAR@;
+
+template class grit::MatVec<Scalar>;
+template grit::MatVec<Scalar> grit::matvec<Scalar>(Eigen::Index, typename grit::MatVec<Scalar>::MultAXFunc);
+template grit::MatVec<Scalar> grit::matvec<Scalar>(Eigen::Index, grit::raw_t, typename grit::MatVec<Scalar>::RawMultAXFunc);
+template class grit::gdplusk_config<Scalar>;
+template class grit::result_view<Scalar>;
+template class grit::standard::problem<Scalar>;
+template class grit::generalized::problem<Scalar>;
+template class grit::form::base<Scalar>;
+template class grit::form::standard<Scalar>;
+template class grit::form::generalized<Scalar>;
+template class grit::algo::gdplusk<grit::form::standard<Scalar>>;
+template class grit::algo::gdplusk<grit::form::generalized<Scalar>>;
+template class grit::algo::lanczos<grit::form::standard<Scalar>>;
+template class grit::algo::lanczos<grit::form::generalized<Scalar>>;
+template class grit::algo::lobpcg<grit::form::standard<Scalar>>;
+template class grit::algo::lobpcg<grit::form::generalized<Scalar>>;

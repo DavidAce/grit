@@ -1,0 +1,12 @@
+file(GLOB GRIT_TESTS CONFIGURE_DEPENDS "test-*.cpp")
+add_custom_target(grit-test-all)
+
+foreach(test ${GRIT_TESTS})
+    get_filename_component(test_src ${test} NAME)
+    get_filename_component(test_nwe ${test} NAME_WE)
+    set(test_tgt grit-${test_nwe})
+    add_executable(${test_tgt} ${test_src})
+    target_link_libraries(${test_tgt} PRIVATE grit::grit)
+    add_test(NAME ${test_tgt} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} COMMAND ${test_tgt})
+    add_dependencies(grit-test-all ${test_tgt})
+endforeach()

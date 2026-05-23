@@ -1,0 +1,16 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/modules")
+find_package(Eigen3 5)
+if(NOT Eigen3_FOUND)
+    find_dependency(Eigen3 3.4)
+endif()
+find_dependency(OpenMP COMPONENTS CXX)
+find_dependency(fmt)
+find_dependency(spdlog)
+if("@GRIT_HAS_ATOMIC@")
+    find_dependency(atomic MODULE)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/gritTargets.cmake")

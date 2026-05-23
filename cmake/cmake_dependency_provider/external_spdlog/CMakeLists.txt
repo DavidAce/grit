@@ -1,0 +1,23 @@
+cmake_minimum_required(VERSION 3.24)
+project(external-spdlog)
+
+include(ExternalProject)
+ExternalProject_Add(external_spdlog
+        URL https://github.com/gabime/spdlog/archive/refs/tags/v1.16.0.tar.gz
+        PREFIX ${CMAKE_BINARY_DIR}
+        INSTALL_DIR ${CMAKE_INSTALL_PREFIX}
+        USES_TERMINAL_DOWNLOAD TRUE
+        USES_TERMINAL_UPDATE TRUE
+        USES_TERMINAL_CONFIGURE TRUE
+        USES_TERMINAL_BUILD TRUE
+        USES_TERMINAL_INSTALL TRUE
+        CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
+        -DCMAKE_PREFIX_PATH:PATH=<INSTALL_DIR>
+        -DCMAKE_INSTALL_MESSAGE=NEVER
+        -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON
+        -DSPDLOG_BUILD_EXAMPLE:BOOL=OFF
+        -DSPDLOG_BUILD_TESTS:BOOL=OFF
+        -DSPDLOG_BUILD_BENCH:BOOL=OFF
+        -DSPDLOG_INSTALL:BOOL=ON
+        -DSPDLOG_FMT_EXTERNAL:BOOL=ON)

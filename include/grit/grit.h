@@ -1,0 +1,18 @@
+#pragma once
+
+#include "algo/gdplusk.h"
+#include "algo/lanczos.h"
+#include "algo/lobpcg.h"
+#include "config.h"
+#include "enums.h"
+#include "form/base.h"
+#include "form/generalized.h"
+#include "form/standard.h"
+#include "internal/precondition/IterativeLinearSolverPreconditioner.h"
+#include "internal/scalars.h"
+#include "MatVec.h"
+#include "prob/generalized.h"
+#include "prob/standard.h"
+#include "result.h"
+#include "solv/generalized.h"
+#include "solv/standard.h"

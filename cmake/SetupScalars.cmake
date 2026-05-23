@@ -1,0 +1,48 @@
+cmake_minimum_required(VERSION 3.24)
+
+option(GRIT_ENABLE_32BIT "Build explicit instantiations for fp32/cx32" OFF)
+option(GRIT_ENABLE_64BIT "Build explicit instantiations for fp64/cx64" ON)
+option(GRIT_ENABLE_80BIT "Build explicit instantiations for fp80/cx80" OFF)
+option(GRIT_ENABLE_128BIT "Build explicit instantiations for std::float128_t/cx128" OFF)
+
+if(NOT TARGET grit-config)
+    add_library(grit-config INTERFACE)
+endif()
+
+set(GRIT_ENABLED_SCALARS "")
+if(GRIT_ENABLE_32BIT)
+    list(APPEND GRIT_ENABLED_SCALARS fp32 cx32)
+endif()
+if(GRIT_ENABLE_64BIT)
+    list(APPEND GRIT_ENABLED_SCALARS fp64 cx64)
+endif()
+if(GRIT_ENABLE_80BIT)
+    list(APPEND GRIT_ENABLED_SCALARS fp80 cx80)
+endif()
+if(GRIT_ENABLE_128BIT)
+    include(cmake/CheckStdFloat128.cmake)
+    check_std_float128_t()
+    list(APPEND GRIT_ENABLED_SCALARS fp128 cx128)
+    list(APPEND GRIT_PUBLIC_SCALAR_DEFINITIONS GRIT_USE_FLOAT128)
+endif()
+
+if(NOT GRIT_ENABLED_SCALARS)
+    message(FATAL_ERROR "At least one explicit-instantiation scalar must be enabled")
+endif()
+
+foreach(grit_scalar IN LISTS GRIT_ENABLED_SCALARS)
+    message(STATUS "Enabled scalar type: ${grit_scalar}")
+    string(TOUPPER "${grit_scalar}" grit_scalar_upper)
+    target_compile_definitions(grit-config INTERFACE GRIT_ENABLE_${grit_scalar_upper})
+endforeach()
+
+if(GRIT_PUBLIC_SCALAR_DEFINITIONS)
+    target_compile_definitions(grit-config INTERFACE ${GRIT_PUBLIC_SCALAR_DEFINITIONS})
+endif()
+
+function(grit_apply_scalar_config tgt)
+    if(GRIT_PUBLIC_SCALAR_DEFINITIONS)
+        target_compile_definitions(${tgt} PUBLIC ${GRIT_PUBLIC_SCALAR_DEFINITIONS})
+    endif()
+endfunction()
+

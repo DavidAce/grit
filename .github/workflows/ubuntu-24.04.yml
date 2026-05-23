@@ -1,0 +1,173 @@
+name: Ubuntu 24.04
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+      - development
+
+jobs:
+  ci:
+    name: ${{ matrix.compiler }}-${{ matrix.manager }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      cache-name: cache-v1-${{ matrix.compiler }}-${{ matrix.manager }}
+      CCACHE_SLOPPINESS: include_file_mtime,pch_defines,time_macros
+      CCACHE_MAXSIZE: 384M
+      INSTALL_DIR: ${{ github.workspace }}/install/github-actions-${{ matrix.manager }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { compiler: gcc, compiler_c: gcc-14, compiler_cxx: g++-14, manager: cmake, preset: github-actions-cmake }
+          - { compiler: gcc, compiler_c: gcc-14, compiler_cxx: g++-14, manager: conan, preset: github-actions-conan }
+          - { compiler: clang, compiler_c: clang-18, compiler_cxx: clang++-18, manager: conan, preset: github-actions-conan-clang }
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - uses: lukka/get-cmake@v4.3.2
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Upgrade Python tooling
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Update apt
+        run: sudo apt-get update
+
+      - name: Setup GCC
+        if: matrix.compiler == 'gcc'
+        run: |
+          sudo apt-get install gcc-14 g++-14 -y
+          echo "CC=${{ matrix.compiler_c }}" >> "$GITHUB_ENV"
+          echo "CXX=${{ matrix.compiler_cxx }}" >> "$GITHUB_ENV"
+
+      - name: Setup Clang
+        if: matrix.compiler == 'clang'
+        run: |
+          sudo apt-get install clang-18 libomp-18-dev -y
+          echo "CC=${{ matrix.compiler_c }}" >> "$GITHUB_ENV"
+          echo "CXX=${{ matrix.compiler_cxx }}" >> "$GITHUB_ENV"
+
+      - name: Setup build tools
+        run: sudo apt-get install ccache ninja-build mold -y
+
+      - name: Prepare cache directories
+        run: mkdir -p ~/.ccache ~/.cache/ccache ~/.conan2 "$INSTALL_DIR"
+
+      - name: Restore ccache
+        id: restore-ccache
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            ~/.ccache
+            ~/.cache/ccache
+          key: ${{ github.workflow }}-${{ env.cache-name }}-ccache-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ github.workflow }}-${{ env.cache-name }}-ccache-
+
+      - name: Restore dependency install cache
+        id: restore-deps
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ env.INSTALL_DIR }}
+          key: ${{ github.workflow }}-${{ env.cache-name }}-deps-${{ hashFiles('CMakePresets.json', 'cmake/**/*.cmake', 'conanfile.*') }}
+          restore-keys: |
+            ${{ github.workflow }}-${{ env.cache-name }}-deps-
+
+      - name: Restore conan cache
+        if: matrix.manager == 'conan'
+        id: restore-conan
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.conan2
+          key: ${{ github.workflow }}-${{ env.cache-name }}-conan-${{ hashFiles('conanfile.*') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ github.workflow }}-${{ env.cache-name }}-conan-${{ hashFiles('conanfile.*') }}-
+            ${{ github.workflow }}-${{ env.cache-name }}-conan-
+
+      - name: Configure ccache
+        run: |
+          ccache --set-config=max_size=${CCACHE_MAXSIZE}
+          ccache --show-config
+          ccache --zero-stats
+
+      - name: Install conan
+        if: matrix.manager == 'conan'
+        run: |
+          python -m pip install --upgrade conan
+          mkdir -p ~/.conan2
+          {
+            echo "core.net.http:timeout=90"
+            echo "core.download:retry=5"
+            echo "core.download:retry_wait=5"
+            echo "tools.files.download:retry=5"
+            echo "tools.files.download:retry_wait=5"
+          } >> ~/.conan2/global.conf
+          conan profile detect --force
+
+      - name: Configure and build
+        uses: lukka/run-cmake@v10.9
+        with:
+          configurePreset: '${{ matrix.preset }}'
+          configurePresetAdditionalArgs: "['-DCMAKE_INSTALL_PREFIX=${{ env.INSTALL_DIR }}']"
+          buildPreset: '${{ matrix.preset }}'
+
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }} --output-on-failure
+
+      - name: Install
+        run: cmake --install build/${{ matrix.preset }}
+
+      - name: Configure installed consumer
+        run: >
+          cmake -S tests/cmake_consumer
+          -B build/consumer-${{ matrix.compiler }}-${{ matrix.manager }}
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          "-DCMAKE_PREFIX_PATH=${{ env.INSTALL_DIR }};${{ github.workspace }}/build/${{ matrix.preset }}/conan"
+          -DCMAKE_FIND_PACKAGE_PREFER_CONFIG=TRUE
+
+      - name: Build installed consumer
+        run: cmake --build build/consumer-${{ matrix.compiler }}-${{ matrix.manager }}
+
+      - name: Show ccache stats
+        if: always()
+        run: ccache --show-stats
+
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: |
+            ~/.ccache
+            ~/.cache/ccache
+          key: ${{ steps.restore-ccache.outputs.cache-primary-key }}
+
+      - name: Save dependency install cache
+        if: success() && steps.restore-deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ env.INSTALL_DIR }}
+          key: ${{ steps.restore-deps.outputs.cache-primary-key }}
+
+      - name: Save conan cache
+        if: matrix.manager == 'conan' && success()
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ~/.conan2
+          key: ${{ steps.restore-conan.outputs.cache-primary-key }}

@@ -1,0 +1,15 @@
+cmake_minimum_required(VERSION 3.24)
+
+if(COMPILER_ENABLE_CCACHE)
+    find_program(CCACHE_PROGRAM ccache)
+    if(CCACHE_PROGRAM)
+        message(STATUS "Using ccache: ${CCACHE_PROGRAM}")
+        set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}" CACHE FILEPATH "" FORCE)
+        set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}" CACHE FILEPATH "" FORCE)
+        set(GRIT_CCACHE_ACTIVE TRUE CACHE INTERNAL "")
+    else()
+        message(STATUS "ccache requested but not found")
+        set(GRIT_CCACHE_ACTIVE FALSE CACHE INTERNAL "")
+    endif()
+endif()
+
