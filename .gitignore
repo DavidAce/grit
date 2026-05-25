@@ -6,3 +6,5 @@ CMakeUserPresets.json
 compile_commands.json
 .cache/
 __pycache__/
+bench/data/
+bench/results/

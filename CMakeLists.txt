@@ -12,6 +12,7 @@ list(INSERT CMAKE_MODULE_PATH 0 ${PROJECT_SOURCE_DIR}/cmake/modules)
 
 option(GRIT_ENABLE_TESTS "Enable unit testing with ctest" OFF)
 option(GRIT_BUILD_EXAMPLES "Build example programs" OFF)
+option(GRIT_ENABLE_BENCH "Build benchmark programs" OFF)
 option(GRIT_CMAKE_DEBUG "Print extra CMake configuration details" OFF)
 
 option(COMPILER_PROFILE_BUILD "Enable -ftime-trace where supported" OFF)
@@ -106,8 +107,13 @@ if(GRIT_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
+if(GRIT_ENABLE_BENCH)
+    add_subdirectory(bench)
+endif()
+
 if(GRIT_CMAKE_DEBUG)
     message(STATUS "grit package manager: ${GRIT_PACKAGE_MANAGER}")
     message(STATUS "grit install prefix: ${CMAKE_INSTALL_PREFIX}")
     message(STATUS "grit enabled scalars: ${GRIT_ENABLED_SCALARS}")
+    message(STATUS "grit benchmarks: ${GRIT_ENABLE_BENCH}")
 endif()

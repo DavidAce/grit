@@ -19,6 +19,12 @@ class GritConan(ConanFile):
     generators = ("CMakeDeps", "CMakeConfigDeps")
     no_copy_source = True
     short_paths = True
+    options = {
+        "with_bench": [True, False],
+    }
+    default_options = {
+        "with_bench": False,
+    }
 
     @property
     def _compilers_minimum_version(self):
@@ -42,3 +48,6 @@ class GritConan(ConanFile):
         self.requires("eigen/[>=3.4.0 <6.0.0]", force=True, transitive_headers=True)
         self.requires("fmt/[>=11 <13]", transitive_headers=True)
         self.requires("spdlog/[>=1.11.0 <2]", transitive_headers=True)
+        if self.options.with_bench:
+            self.requires("cli11/[>=2.6 <3]", transitive_headers=True)
+            self.requires("h5pp/[>=1.11.3 <2]", transitive_headers=True)

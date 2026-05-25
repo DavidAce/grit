@@ -35,6 +35,7 @@
         "CMAKE_CXX_FLAGS_DEBUG_INIT": "-O0 -g -ftemplate-backtrace-limit=0 -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "TRUE",
         "CMAKE_LINKER_TYPE": "MOLD",
+        "CMAKE_LINK_DEPENDS_USE_LINKER": "FALSE",
         "CMAKE_SKIP_BUILD_RPATH": "FALSE",
         "CMAKE_BUILD_WITH_INSTALL_RPATH": "FALSE",
         "CMAKE_INSTALL_RPATH_USE_LINK_PATH": "TRUE"
@@ -104,6 +105,14 @@
       }
     },
     {
+      "name": "bench",
+      "hidden": true,
+      "cacheVariables": {
+        "GRIT_ENABLE_BENCH": "TRUE",
+        "CONAN_INSTALL_ARGS": "--build=missing;-o;&:with_bench=True"
+      }
+    },
+    {
       "name": "debug-conan",
       "displayName": "Debug|conan",
       "inherits": [
@@ -145,6 +154,7 @@
       "inherits": [
         "haswell",
         "conan",
+        "bench",
         "release",
         "default"
       ],
@@ -154,6 +164,25 @@
         "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "TRUE",
         "COMPILER_ENABLE_PCH": "TRUE",
         "COMPILER_ENABLE_CCACHE": "TRUE",
+        "GRIT_ENABLE_32BIT": "FALSE",
+        "GRIT_ENABLE_64BIT": "TRUE",
+        "GRIT_ENABLE_80BIT": "FALSE",
+        "GRIT_ENABLE_128BIT": "FALSE"
+      }
+    },
+    {
+      "name": "kraken-debug",
+      "displayName": "Debug|march=haswell|conan",
+      "inherits": [
+        "haswell",
+        "conan",
+        "bench",
+        "debug",
+        "default"
+      ],
+      "binaryDir": "${sourceDir}/build/Debug",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "$env{HOME}/grit-debug-pkg-install",
         "GRIT_ENABLE_32BIT": "FALSE",
         "GRIT_ENABLE_64BIT": "TRUE",
         "GRIT_ENABLE_80BIT": "FALSE",
@@ -228,7 +257,13 @@
     },
     {
       "name": "kraken",
-      "configurePreset": "kraken"
+      "configurePreset": "kraken",
+      "jobs": 32
+    },
+    {
+      "name": "kraken-debug",
+      "configurePreset": "kraken-debug",
+      "jobs": 32
     },
     {
       "name": "github-actions-cmake",
@@ -275,6 +310,13 @@
     {
       "name": "kraken",
       "configurePreset": "kraken",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "kraken-debug",
+      "configurePreset": "kraken-debug",
       "output": {
         "outputOnFailure": true
       }
