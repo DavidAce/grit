@@ -4,7 +4,6 @@
 #include <grit/grit.h>
 
 #include <cmath>
-#include <optional>
 
 namespace {
     template<typename VecA, typename VecB>
@@ -42,17 +41,18 @@ TEST_CASE("preconditioner callbacks are invoked") {
 
     int calc_count = 0;
     int prec_count = 0;
-    A.set_CalcPc([&](double) { calc_count++; });
-    A.set_MultPX([&](const Eigen::Ref<const Matrix> &X, const Eigen::Ref<const grit::MatVec<double>::VectorReal> &,
-                     std::optional<const Eigen::Ref<const Matrix>>) {
-        prec_count += static_cast<int>(X.cols());
-        return X;
+    A.set_preconditioner_update([&](double) { calc_count++; });
+    A.set_preconditioner_apply([&](const Eigen::Ref<const grit::MatVec<double>::VectorType> &x, Eigen::Ref<grit::MatVec<double>::VectorType> y, double) {
+        prec_count++;
+        y = x;
     });
 
-    A.CalcPc(0.0);
-    auto evals = grit::MatVec<double>::VectorReal::Zero(1);
-    (void) A.MultPX(Matrix::Identity(3, 1), evals);
+    A.preconditioner_update(0.0);
+    grit::MatVec<double>::VectorType x = grit::MatVec<double>::VectorType::Ones(3);
+    grit::MatVec<double>::VectorType y = grit::MatVec<double>::VectorType::Zero(3);
+    A.preconditioner_apply(x, y, 0.0);
 
     REQUIRE(calc_count == 1);
     REQUIRE(prec_count == 1);
+    require_close(x, y, 1e-12);
 }

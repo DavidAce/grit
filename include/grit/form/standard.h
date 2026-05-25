@@ -20,7 +20,9 @@ namespace grit::form {
         using base<Scalar_>::status;
 
         std::string_view form_name() const final;
+        bool             is_generalized_problem() const final;
         MatrixType       MultB(const Eigen::Ref<const MatrixType> &X) final;
+        MatrixType       MultB_inner(const Eigen::Ref<const MatrixType> &X) final;
         void             diagonalizeT() final;
     };
 }

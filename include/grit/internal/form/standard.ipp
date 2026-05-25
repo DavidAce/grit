@@ -10,9 +10,19 @@ namespace grit::form {
     }
 
     template<typename Scalar>
+    bool standard<Scalar>::is_generalized_problem() const {
+        return false;
+    }
+
+    template<typename Scalar>
     typename standard<Scalar>::MatrixType standard<Scalar>::MultB(const Eigen::Ref<const MatrixType> &X) {
         auto token_matvecs  = status.time_matvecs.tic_token();
         status.num_matvecs += X.cols();
+        return X;
+    }
+
+    template<typename Scalar>
+    typename standard<Scalar>::MatrixType standard<Scalar>::MultB_inner(const Eigen::Ref<const MatrixType> &X) {
         return X;
     }
 

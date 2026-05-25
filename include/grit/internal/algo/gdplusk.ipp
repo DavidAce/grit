@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <grit/algo/gdplusk.h>
 #include <optional>
+#include <stdexcept>
 #include <string>
 
 namespace grit::algo {
@@ -22,23 +23,34 @@ namespace grit::algo {
 
     template<typename Form>
     void gdplusk<Form>::initialize_config() {
-        config.b                      = std::clamp<Eigen::Index>(config.b, 1, std::max<Eigen::Index>(1, this->N));
-        config.nev                    = std::min<Eigen::Index>(std::max<Eigen::Index>(1, config.nev), this->N);
-        config.ncv                    = std::min<Eigen::Index>(std::max<Eigen::Index>(config.nev, config.ncv), this->N);
-        config.maxExtraRitzHistory    = std::clamp<Eigen::Index>(config.maxExtraRitzHistory, 0, this->N / std::max<Eigen::Index>(1, config.b));
-        config.maxRitzResidualHistory = std::clamp<Eigen::Index>(config.maxRitzResidualHistory, 0, this->N / std::max<Eigen::Index>(1, config.b));
-        config.maxBasisBlocks         = std::clamp<Eigen::Index>(config.maxBasisBlocks, 1, this->N / std::max<Eigen::Index>(1, config.b));
-        config.maxRetainBlocks        = std::clamp<Eigen::Index>(config.maxRetainBlocks, 1, this->N / std::max<Eigen::Index>(1, config.b));
-        this->b                       = config.b;
-        this->nev                     = config.nev;
-        this->ncv                     = config.ncv;
-        this->ritz                    = config.ritz;
-        this->max_iters               = config.max_iters;
-        this->max_matvecs             = config.max_matvecs;
-        this->abstol                  = config.abstol;
-        this->reltol                  = config.reltol;
-        max_mBlocks                   = config.maxExtraRitzHistory;
-        max_sBlocks                   = config.maxRitzResidualHistory;
+        config.nev                              = std::min<Eigen::Index>(std::max<Eigen::Index>(1, config.nev), this->N);
+        config.b                                = std::clamp<Eigen::Index>(std::max<Eigen::Index>(config.nev, config.b), 1, std::max<Eigen::Index>(1, this->N));
+        const auto maxBasisBlocks               = std::max<Eigen::Index>(1, this->N / std::max<Eigen::Index>(1, config.b));
+        config.maxExtraRitzHistory              = std::clamp<Eigen::Index>(config.maxExtraRitzHistory, 0, maxBasisBlocks);
+        config.maxRitzResidualHistory           = std::clamp<Eigen::Index>(config.maxRitzResidualHistory, 0, maxBasisBlocks);
+        if(config.ncv < 0) {
+            config.maxBasisBlocks = std::clamp<Eigen::Index>(config.maxBasisBlocks, 1, maxBasisBlocks);
+            config.ncv            = config.maxBasisBlocks * config.b;
+        } else {
+            config.ncv            = std::min<Eigen::Index>(std::max<Eigen::Index>(config.nev, config.ncv), this->N);
+            config.maxBasisBlocks = std::clamp<Eigen::Index>(config.ncv / config.b, 1, maxBasisBlocks);
+            config.ncv            = config.maxBasisBlocks * config.b;
+        }
+        config.maxRetainBlocks                  = std::clamp<Eigen::Index>(config.maxRetainBlocks, 1, config.maxBasisBlocks);
+        this->b                                 = config.b;
+        this->nev                               = config.nev;
+        this->ncv                               = config.ncv;
+        this->ritz                              = config.ritz;
+        this->max_iters                         = config.max_iters;
+        this->max_matvecs                       = config.max_matvecs;
+        this->abstol                            = config.abstol;
+        this->reltol                            = config.reltol;
+        this->tol_stall_evals  = config.tol_stall_evals;
+        this->tol_stall_rnorm = config.tol_stall_rnorm;
+        this->inner_tol                         = config.inner_tol;
+        this->inner_iters                       = config.inner_iters;
+        max_mBlocks                             = config.maxExtraRitzHistory;
+        max_sBlocks                             = config.maxRitzResidualHistory;
         this->setLogger(config.logLevel, std::string("grit|") + std::string(this->form_name()));
     }
 
@@ -65,32 +77,47 @@ namespace grit::algo {
     }
 
     template<typename Form>
-    void gdplusk<Form>::make_new_Q_block(fMultP_t fMultP) {
+    void gdplusk<Form>::make_new_Q_block() {
         if(S.cols() == 0) return;
-        VectorReal evals = status.eigVal;
-        Q_new            = use_preconditioner ? fMultP(S, evals, std::nullopt) : S;
-        MatrixType basis = Q.cols() == 0 ? V : Q;
-        if(basis.cols() > 0) Q_new.noalias() -= basis * (basis.adjoint() * Q_new);
-        OrthMeta   m;
-        MatrixType AQ_tmp = MultA(Q_new);
-        MatrixType BQ_tmp = MultB(Q_new);
-        block_l2_orthonormalize(Q_new, AQ_tmp, BQ_tmp, m);
-        AQ_new = AQ_tmp;
-        BQ_new = BQ_tmp;
+        Q_new = get_sBlock(S);
+
+        auto orthogonalize_Q_new = [&]() {
+            OrthMeta m;
+            m.maskPolicy = Form::MaskPolicy::COMPRESS;
+            AQ_new       = MatrixType();
+            BQ_new       = MatrixType();
+
+            if(is_generalized_problem()) {
+                if(use_b_inner_product) {
+                    if(V.cols() > 0) block_bm_orthogonalize(V, AV, BV, Q_new, AQ_new, BQ_new, m);
+                    if(Q.cols() > 0) block_bm_orthogonalize(Q, AQ, BQ, Q_new, AQ_new, BQ_new, m);
+                    block_bm_orthonormalize(Q_new, AQ_new, BQ_new, m);
+                } else {
+                    if(V.cols() > 0) block_l2_orthogonalize(V, AV, BV, Q_new, AQ_new, BQ_new, m);
+                    if(Q.cols() > 0) block_l2_orthogonalize(Q, AQ, BQ, Q_new, AQ_new, BQ_new, m);
+                    block_l2_orthonormalize(Q_new, AQ_new, BQ_new, m);
+                }
+            } else {
+                if(V.cols() > 0) block_l2_orthogonalize(V, AV, Q_new, AQ_new, m);
+                if(Q.cols() > 0) block_l2_orthogonalize(Q, AQ, Q_new, AQ_new, m);
+                block_l2_orthonormalize(Q_new, AQ_new, m);
+                BQ_new = Q_new;
+            }
+        };
+
+        orthogonalize_Q_new();
+        if(Q_new.cols() == 0 && inject_randomness) {
+            if(eiglog) eiglog->debug("Replacing Q_new with a random vector");
+            Q_new = Eigen::MatrixXf::Random(N, b).template cast<Scalar>();
+            orthogonalize_Q_new();
+        }
     }
 
     template<typename Form>
     void gdplusk<Form>::build() {
-        auto fMultP = [this](const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const VectorReal> &evals,
-                             std::optional<const Eigen::Ref<const MatrixType>> iG) -> MatrixType { return this->MultP(X, evals, iG); };
-        make_new_Q_block(fMultP);
-        if(Q_new.cols() == 0) return;
-        if(Q.cols() + Q_new.cols() > ncv) {
-            Q  = V;
-            AQ = AV;
-            BQ = BV;
-        }
-        build(Q, AQ, BQ, Q_new, AQ_new, BQ_new);
+        bool had_residual = S.cols() > 0;
+        make_new_Q_block();
+        build(Q, AQ, BQ, had_residual ? Q_new : MatrixType{}, had_residual ? AQ_new : MatrixType{}, had_residual ? BQ_new : MatrixType{});
     }
 
     template<typename Form>
@@ -101,14 +128,173 @@ namespace grit::algo {
 
     template<typename Form>
     void gdplusk<Form>::build(MatrixType &Q, MatrixType &AQ, MatrixType &BQ, const MatrixType &Q_new, const MatrixType &AQ_new, const MatrixType &BQ_new) {
-        auto old_cols = Q.cols();
-        Q.conservativeResize(Eigen::NoChange, old_cols + Q_new.cols());
-        AQ.conservativeResize(Eigen::NoChange, old_cols + AQ_new.cols());
-        BQ.conservativeResize(Eigen::NoChange, old_cols + BQ_new.cols());
-        Q.rightCols(Q_new.cols())   = Q_new;
-        AQ.rightCols(AQ_new.cols()) = AQ_new;
-        BQ.rightCols(BQ_new.cols()) = BQ_new;
-        qBlocks                     = Q.cols() / std::max<Eigen::Index>(1, b);
+        if(status.stopReason != StopReason::none) return;
+
+        if(Q_new.cols() == 0 && status.iter <= status.iter_last_restart + 2) {
+            status.stopReason |= StopReason::subspace_exhausted;
+            status.stopMessage.emplace_back(fmt::format("saturated basis: exhausted subspace search | iter {} | mv {} | {:.3e} s", status.iter,
+                                                        status.num_matvecs_total, status.time_elapsed.get_time()));
+            return;
+        }
+        if(Q_new.cols() == 0) return;
+
+        auto restart_basis = [&]() {
+            Eigen::Index cols_ks = 0;
+
+            if(is_generalized_problem()) {
+                MatrixType T1 = Q.adjoint() * AQ;
+                MatrixType T2 = Q.adjoint() * BQ;
+                T1            = (T1 + T1.adjoint()) * Form::half;
+                T2            = (T2 + T2.adjoint()) * Form::half;
+
+                auto [W, Winv] = get_bm_normalizer_for_the_projected_pencil(T2);
+                cols_ks        = std::clamp(std::min(config.maxRetainBlocks * b, W.cols()), b, W.cols());
+
+                MatrixType WT1W = W.adjoint() * T1 * W;
+                MatrixType WT2W = W.adjoint() * T2 * W;
+                WT1W            = (WT1W + WT1W.adjoint()) * Form::half;
+                WT2W            = (WT2W + WT2W.adjoint()) * Form::half;
+
+                Eigen::GeneralizedSelfAdjointEigenSolver<MatrixType> ges(WT1W, WT2W, Eigen::Ax_lBx);
+                if(ges.info() != Eigen::Success) throw std::runtime_error("gdplusk restart: generalized eigensolver failed");
+                cols_ks        = std::min(cols_ks, ges.eigenvalues().size());
+                auto selectIdx = this->get_ritz_indices(ritz, 0, cols_ks, ges.eigenvalues());
+
+                VectorReal Y     = ges.eigenvalues()(selectIdx);
+                MatrixType Z_rr  = ges.eigenvectors()(Eigen::placeholders::all, selectIdx);
+                MatrixType Z_ref = get_refined_ritz_eigenvectors_gen(Z_rr, Y, AQ, BQ);
+                MatrixType Z_opt = get_optimal_rayleigh_ritz_matrix(Z_rr, Z_ref, WT1W, WT2W);
+                MatrixType Z     = W * Z_opt;
+                orthonormalize_Z(Z, T2);
+
+                MatrixType Q_ks  = Q * Z;
+                MatrixType AQ_ks = AQ * Z;
+                MatrixType BQ_ks = BQ * Z;
+
+                MatrixType AK_prev, BK_prev;
+                {
+                    OrthMeta m;
+                    m.maskPolicy = Form::MaskPolicy::COMPRESS;
+                    if(use_b_inner_product) {
+                        block_bm_orthonormalize(Q_ks, AQ_ks, BQ_ks, m);
+                        block_bm_orthogonalize(Q_ks, AQ_ks, BQ_ks, K_prev, AK_prev, BK_prev, m);
+                        block_bm_orthonormalize(K_prev, AK_prev, BK_prev, m);
+                    } else {
+                        block_l2_orthonormalize(Q_ks, AQ_ks, BQ_ks, m);
+                        block_l2_orthogonalize(Q_ks, AQ_ks, BQ_ks, K_prev, AK_prev, BK_prev, m);
+                        block_l2_orthonormalize(K_prev, AK_prev, BK_prev, m);
+                    }
+                }
+
+                Q.conservativeResize(N, Q_ks.cols() + K_prev.cols());
+                if(Q_ks.cols() > 0) Q.leftCols(Q_ks.cols()) = Q_ks;
+                if(K_prev.cols() > 0) Q.rightCols(K_prev.cols()) = K_prev;
+
+                AQ.conservativeResize(N, AQ_ks.cols() + AK_prev.cols());
+                if(AQ_ks.cols() > 0) AQ.leftCols(AQ_ks.cols()) = AQ_ks;
+                if(AK_prev.cols() > 0) AQ.rightCols(AK_prev.cols()) = AK_prev;
+
+                BQ.conservativeResize(N, BQ_ks.cols() + BK_prev.cols());
+                if(BQ_ks.cols() > 0) BQ.leftCols(BQ_ks.cols()) = BQ_ks;
+                if(BK_prev.cols() > 0) BQ.rightCols(BK_prev.cols()) = BK_prev;
+
+                OrthMeta m;
+                m.Gram       = use_b_inner_product ? Q.adjoint() * BQ : Q.adjoint() * Q;
+                m.Gram       = (m.Gram + m.Gram.adjoint()).eval() * Form::half;
+                m.orthError  = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
+                m.maskPolicy = Form::MaskPolicy::COMPRESS;
+                if(use_b_inner_product) {
+                    block_bm_orthonormalize(Q, AQ, BQ, m);
+                } else {
+                    block_l2_orthonormalize(Q, AQ, BQ, m);
+                }
+            } else {
+                MatrixType T = Q.adjoint() * AQ;
+                T            = (T + T.adjoint()) * Form::half;
+                Eigen::SelfAdjointEigenSolver<MatrixType> es(T, Eigen::ComputeEigenvectors);
+                if(es.info() != Eigen::Success) throw std::runtime_error("gdplusk restart: eigensolver failed");
+                cols_ks        = std::clamp(std::min(config.maxRetainBlocks * b, Q.cols()), b, Q.cols());
+                cols_ks        = std::min(cols_ks, es.eigenvalues().size());
+                auto selectIdx = this->get_ritz_indices(ritz, 0, cols_ks, es.eigenvalues());
+
+                VectorReal Y    = es.eigenvalues()(selectIdx);
+                MatrixType Z_rr = es.eigenvectors()(Eigen::placeholders::all, selectIdx);
+                MatrixType Z    = get_refined_ritz_eigenvectors_std(Z_rr, Y, Q, AQ);
+                orthonormalize_Z(Z, T);
+
+                MatrixType Q_ks  = Q * Z;
+                MatrixType AQ_ks = AQ * Z;
+
+                MatrixType AK_prev;
+                {
+                    OrthMeta m;
+                    m.maskPolicy = Form::MaskPolicy::COMPRESS;
+                    block_l2_orthogonalize(Q_ks, AQ_ks, K_prev, AK_prev, m);
+                    block_l2_orthonormalize(K_prev, AK_prev, m);
+                }
+
+                Q.conservativeResize(N, Q_ks.cols() + K_prev.cols());
+                if(Q_ks.cols() > 0) Q.leftCols(Q_ks.cols()) = Q_ks;
+                if(K_prev.cols() > 0) Q.rightCols(K_prev.cols()) = K_prev;
+
+                AQ.conservativeResize(N, AQ_ks.cols() + AK_prev.cols());
+                if(AQ_ks.cols() > 0) AQ.leftCols(AQ_ks.cols()) = AQ_ks;
+                if(AK_prev.cols() > 0) AQ.rightCols(AK_prev.cols()) = AK_prev;
+
+                BQ = Q;
+
+                OrthMeta m;
+                m.Gram       = Q.adjoint() * Q;
+                m.Gram       = (m.Gram + m.Gram.adjoint()).eval() * Form::half;
+                m.orthError  = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
+                m.maskPolicy = Form::MaskPolicy::COMPRESS;
+                block_l2_orthonormalize(Q, AQ, m);
+                BQ = Q;
+            }
+
+            status.iter_last_restart = status.iter;
+        };
+
+        auto newCols = std::min<Eigen::Index>({Q.cols() + Q_new.cols(), N});
+        if(newCols > config.maxBasisBlocks * b || Q_new.cols() == 0) restart_basis();
+        if(Q_new.cols() == 0) return;
+
+        assert(Q_new.rows() == N);
+
+        auto availableCols = std::max<Eigen::Index>(0, N - Q.cols());
+        auto copyCols      = std::min<Eigen::Index>(availableCols, Q_new.cols());
+        if(copyCols == 0) return;
+
+        newCols = Q.cols() + copyCols;
+
+        Q.conservativeResize(N, newCols);
+        AQ.conservativeResize(N, newCols);
+        BQ.conservativeResize(N, newCols);
+
+        Q.rightCols(copyCols)  = Q_new.leftCols(copyCols);
+        AQ.rightCols(copyCols) = AQ_new.leftCols(copyCols);
+        BQ.rightCols(copyCols) = BQ_new.leftCols(copyCols);
+
+        OrthMeta m;
+        m.maskPolicy = Form::MaskPolicy::COMPRESS;
+        m.Gram       = Q.adjoint() * Q;
+        m.Gram       = (m.Gram + m.Gram.adjoint()).eval() * Form::half;
+        m.orthError  = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
+
+        bool basis_was_restarted = status.iter_last_restart == status.iter;
+        if(basis_was_restarted || m.orthError > this->normTol * std::sqrt(status.op_norm_estimate)) {
+            if(is_generalized_problem()) {
+                if(use_b_inner_product) {
+                    block_bm_orthonormalize(Q, AQ, BQ, m);
+                } else {
+                    block_l2_orthonormalize(Q, AQ, BQ, m);
+                }
+            } else {
+                block_l2_orthonormalize(Q, AQ, m);
+                BQ = Q;
+            }
+        }
+        qBlocks = Q.cols() / std::max<Eigen::Index>(1, b);
     }
 
     template<typename Form>

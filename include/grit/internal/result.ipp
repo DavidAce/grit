@@ -33,6 +33,21 @@ namespace grit {
     }
 
     template<typename Scalar_>
+    Eigen::Index result_view<Scalar_>::num_matvecs() const {
+        return source->status.num_matvecs;
+    }
+
+    template<typename Scalar_>
+    Eigen::Index result_view<Scalar_>::num_matvecs_inner() const {
+        return source->status.num_matvecs_inner;
+    }
+
+    template<typename Scalar_>
+    Eigen::Index result_view<Scalar_>::num_jdops_inner() const {
+        return source->status.num_jdops_inner;
+    }
+
+    template<typename Scalar_>
     Eigen::Index result_view<Scalar_>::num_matvecs_total() const {
         return source->status.num_matvecs_total;
     }

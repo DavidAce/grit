@@ -1,7 +1,6 @@
 #pragma once
 
 #include <grit/MatVec.h>
-
 #include <stdexcept>
 
 namespace grit {
@@ -28,13 +27,13 @@ namespace grit {
     }
 
     template<typename Scalar_>
-    void MatVec<Scalar_>::set_MultPX(MultPXFunc MultPX_) {
-        MultPX_callback = std::move(MultPX_);
+    void MatVec<Scalar_>::set_preconditioner_update(PreconditionerUpdateFunc preconditioner_update_) {
+        preconditioner_update_callback = std::move(preconditioner_update_);
     }
 
     template<typename Scalar_>
-    void MatVec<Scalar_>::set_CalcPc(CalcPcFunc CalcPc_) {
-        CalcPc_callback = std::move(CalcPc_);
+    void MatVec<Scalar_>::set_preconditioner_apply(PreconditionerApplyFunc preconditioner_apply_) {
+        preconditioner_apply_callback = std::move(preconditioner_apply_);
     }
 
     template<typename Scalar_>
@@ -68,6 +67,11 @@ namespace grit {
     }
 
     template<typename Scalar_>
+    bool MatVec<Scalar_>::has_preconditioner_apply() const {
+        return static_cast<bool>(preconditioner_apply_callback);
+    }
+
+    template<typename Scalar_>
     typename MatVec<Scalar_>::MatrixType MatVec<Scalar_>::MultAX(const Eigen::Ref<const MatrixType> &X) const {
         if(!MultAX_callback) throw std::runtime_error("MatVec::MultAX callback is not set");
         num_mv += X.cols();
@@ -84,91 +88,26 @@ namespace grit {
     }
 
     template<typename Scalar_>
-    typename MatVec<Scalar_>::MatrixType MatVec<Scalar_>::MultPX(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const VectorReal> &evals) {
-        if(MultPX_callback) {
-            num_pc += X.cols();
-            return MultPX_callback(X, evals, std::nullopt);
-        }
-        return X;
+    void MatVec<Scalar_>::preconditioner_update(RealScalar theta) const {
+        if(preconditioner_update_callback) preconditioner_update_callback(theta);
     }
 
     template<typename Scalar_>
-    void MatVec<Scalar_>::CalcPc(RealScalar shift) {
-        if(CalcPc_callback) CalcPc_callback(shift);
+    void MatVec<Scalar_>::preconditioner_apply(const Eigen::Ref<const VectorType> &x, Eigen::Ref<VectorType> y, RealScalar theta) const {
+        if(!preconditioner_apply_callback) {
+            y = x;
+            return;
+        }
+        auto token_precond = t_multPc->tic_token();
+        preconditioner_apply_callback(x, y, theta);
+        num_pc++;
     }
 
     template<typename Scalar_>
     void MatVec<Scalar_>::reset() {
         num_mv = 0;
+        num_op = 0;
         num_pc = 0;
-        iLinSolvCfg.result.reset();
-    }
-
-    template<typename Scalar_>
-    void MatVec<Scalar_>::set_iterativeLinearSolverConfig(const IterativeLinearSolverConfig<Scalar> &cfg) {
-        iLinSolvCfg = cfg;
-    }
-
-    template<typename Scalar_>
-    void MatVec<Scalar_>::set_iterativeLinearSolverConfig(long maxiters, RealScalar tolerance, MatDef matdef) {
-        iLinSolvCfg.maxiters  = maxiters;
-        iLinSolvCfg.tolerance = tolerance;
-        iLinSolvCfg.matdef    = matdef;
-    }
-
-    template<typename Scalar_>
-    IterativeLinearSolverConfig<typename MatVec<Scalar_>::Scalar> &MatVec<Scalar_>::get_iterativeLinearSolverConfig() {
-        return iLinSolvCfg;
-    }
-
-    template<typename Scalar_>
-    const IterativeLinearSolverConfig<typename MatVec<Scalar_>::Scalar> &MatVec<Scalar_>::get_iterativeLinearSolverConfig() const {
-        return iLinSolvCfg;
-    }
-
-    template<typename Scalar_>
-    void MatVec<Scalar_>::set_jcbMaxBlockSize(std::optional<long> jcbSize) {
-        jcbMaxBlockSize = jcbSize.value_or(-1);
-    }
-
-    template<typename Scalar_>
-    void MatVec<Scalar_>::set_jcbMaxBlockSize(long jcbSize) {
-        jcbMaxBlockSize = jcbSize;
-    }
-
-    template<typename Scalar_>
-    void MatVec<Scalar_>::set_jcbOverlapSize(std::optional<long> size_) {
-        jcbOverlapSize = size_.value_or(0);
-    }
-
-    template<typename Scalar_>
-    void MatVec<Scalar_>::set_jcbOverlapSize(long size_) {
-        jcbOverlapSize = size_;
-    }
-
-    template<typename Scalar_>
-    void MatVec<Scalar_>::set_jcbNumPasses(std::optional<long> size_) {
-        jcbNumPasses = size_.value_or(1);
-    }
-
-    template<typename Scalar_>
-    void MatVec<Scalar_>::set_jcbNumPasses(long size_) {
-        jcbNumPasses = size_;
-    }
-
-    template<typename Scalar_>
-    long MatVec<Scalar_>::get_jcbMaxBlockSize() const {
-        return jcbMaxBlockSize;
-    }
-
-    template<typename Scalar_>
-    long MatVec<Scalar_>::get_jcbOverlapSize() const {
-        return jcbOverlapSize;
-    }
-
-    template<typename Scalar_>
-    long MatVec<Scalar_>::get_jcbNumPasses() const {
-        return jcbNumPasses;
     }
 
     template<typename Scalar>
@@ -181,7 +120,7 @@ namespace grit {
     template<typename Scalar>
     MatVec<Scalar> matvec(Eigen::Index size, raw_t, typename MatVec<Scalar>::RawMultAXFunc callback) {
         using MatrixType = typename MatVec<Scalar>::MatrixType;
-        auto wrapped = [size, callback = std::move(callback)](const Eigen::Ref<const MatrixType> &X) mutable -> MatrixType {
+        auto wrapped     = [size, callback = std::move(callback)](const Eigen::Ref<const MatrixType> &X) mutable -> MatrixType {
             MatrixType Y(size, X.cols());
             callback(X.data(), Y.data(), X.rows(), X.cols());
             return Y;

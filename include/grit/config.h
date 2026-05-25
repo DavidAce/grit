@@ -16,15 +16,19 @@ namespace grit {
         using RealScalar = decltype(std::real(std::declval<Scalar>()));
         using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
 
-        Eigen::Index              nev         = 1;
-        Eigen::Index              ncv         = 8;
-        Eigen::Index              b           = 2;
-        OptRitz                   ritz        = OptRitz::SR;
-        Eigen::Index              max_iters   = 100;
-        Eigen::Index              max_matvecs = -1;
-        RealScalar                abstol      = std::numeric_limits<RealScalar>::epsilon() * 10000;
-        RealScalar                reltol      = 0;
-        spdlog::level::level_enum logLevel    = spdlog::level::warn;
+        Eigen::Index              nev                               = 1;
+        Eigen::Index              ncv                               = 8;
+        Eigen::Index              b                                 = 2;
+        OptRitz                   ritz                              = OptRitz::SR;
+        Eigen::Index              max_iters                         = 100;
+        Eigen::Index              max_matvecs                       = -1;
+        RealScalar                abstol                            = std::numeric_limits<RealScalar>::epsilon() * 10000;
+        RealScalar                reltol                            = 0;
+        RealScalar                tol_stall_evals                  = RealScalar{0};
+        RealScalar                tol_stall_rnorm                 = RealScalar{0};
+        RealScalar                inner_tol                         = RealScalar{0.1f};
+        Eigen::Index              inner_iters                       = 1000;
+        spdlog::level::level_enum logLevel                          = spdlog::level::warn;
 
         Eigen::Index maxExtraRitzHistory    = 1;
         Eigen::Index maxRitzResidualHistory = 1;

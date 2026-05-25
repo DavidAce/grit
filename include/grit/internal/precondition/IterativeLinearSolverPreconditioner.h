@@ -1,18 +1,10 @@
 #pragma once
 
-#include "../tid.h"
 #include "IterativeLinearSolverConfig.h"
-#include <algorithm>
 #include <cassert>
 #include <chrono>
-#include <cmath>
-#include <cstdio>
 #include <Eigen/Core>
-#include <limits>
-#include <memory>
 #include <stdexcept>
-#include <tuple>
-#include <vector>
 
 namespace grit::internal::precondition {
     template<typename MatrixLikeType>
@@ -21,26 +13,18 @@ namespace grit::internal::precondition {
         using Scalar     = typename MatrixLikeType::Scalar;
         using RealScalar = decltype(std::real(std::declval<Scalar>()));
         using VectorType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
-        using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
 
         protected:
-        mutable Eigen::Index m_iterations     = 0;
-        mutable double       m_time_elapsed   = 0.0;
-        mutable double       m_time_jcb       = 0.0;
-        mutable double       m_time_chebyshev = 0.0;
-        bool                 m_isInitialized  = false;
+        mutable Eigen::Index m_iterations    = 0;
+        mutable double       m_time_elapsed  = 0.0;
+        bool                 m_isInitialized = false;
 
         const MatrixLikeType                      *matrix = nullptr;
         const IterativeLinearSolverConfig<Scalar> *config = nullptr;
 
-        mutable VectorType   y_old;
-        mutable VectorType   y_new;
-        mutable VectorType   y_next;
-        mutable VectorType   z_res;
-        mutable VectorType   temp;
-        mutable MatrixType   C;
-        mutable Eigen::Index C_cols_cached  = -1;
-        mutable RealScalar   C_trace_cached = std::numeric_limits<RealScalar>::quiet_NaN();
+        mutable VectorType y;
+        mutable VectorType z;
+        mutable VectorType temp;
 
         public:
         using StorageIndex = typename VectorType::StorageIndex;
@@ -48,7 +32,7 @@ namespace grit::internal::precondition {
 
         IterativeLinearSolverPreconditioner() = default;
 
-        void attach(MatrixLikeType *matrix_, const IterativeLinearSolverConfig<Scalar> *config_) {
+        void attach(const MatrixLikeType *matrix_, const IterativeLinearSolverConfig<Scalar> *config_) {
             matrix = matrix_;
             config = config_;
             if(matrix != nullptr && config != nullptr) { m_isInitialized = true; }
@@ -58,8 +42,8 @@ namespace grit::internal::precondition {
         explicit IterativeLinearSolverPreconditioner(const MatType &) {}
         Eigen::Index    iterations() const { return m_iterations; }
         double          elapsed_time() const { return m_time_elapsed; }
-        double          time_jacobi() const { return m_time_jcb; }
-        double          time_chebyshev() const { return m_time_chebyshev; }
+        double          time_jacobi() const { return 0.0; }
+        double          time_chebyshev() const { return 0.0; }
         EIGEN_CONSTEXPR Eigen::Index rows() const noexcept { return matrix->rows(); }
         EIGEN_CONSTEXPR Eigen::Index cols() const noexcept { return matrix->cols(); }
 
@@ -79,191 +63,38 @@ namespace grit::internal::precondition {
         }
 
         template<typename Rhs, typename Dest>
-        void solve_chebyshev(const Rhs &b, Dest &x) const {
-            const auto degree     = config->chebyshev.degree;
-            const auto lambda_min = config->chebyshev.lambda_min;
-            const auto lambda_max = config->chebyshev.lambda_max;
-
-            if(degree <= 0 || std::isnan(lambda_min) || std::isnan(lambda_max) || lambda_max <= lambda_min || lambda_min <= 0) {
-                x = b;
-                return;
-            }
+        void _solve_impl(const Rhs &b, Dest &x) const {
             auto t_start = std::chrono::high_resolution_clock::now();
 
-            RealScalar   lmin_eff = std::max<RealScalar>(lambda_min, lambda_max * RealScalar{1e-3f});
-            RealScalar   rho      = (lambda_max - lmin_eff) / (lambda_max + lmin_eff);
-            RealScalar   gamma    = RealScalar{0.1f};
-            Eigen::Index m        = degree;
-            if(m <= 0) {
-                auto m_auto_real = std::ceil(std::log(RealScalar{2} / gamma) / (RealScalar{2} * std::acosh(RealScalar{1} / rho)));
-                if(!std::isfinite(m_auto_real)) throw std::runtime_error("Chebyshev degree selection produced a non-finite value");
-                auto m_auto = static_cast<Eigen::Index>(std::clamp(m_auto_real, RealScalar{1}, RealScalar{20}));
-                m           = std::clamp<Eigen::Index>(m_auto, 1, 20);
-            }
-            if(m != degree && m_iterations == 0) { std::printf("m %ld -> %ld\n", static_cast<long>(degree), static_cast<long>(m)); }
-
-            RealScalar c     = (lambda_max - lmin_eff) / RealScalar{2};
-            RealScalar d     = (lambda_max + lmin_eff) / RealScalar{2};
-            RealScalar sigma = c / (RealScalar{2} * d);
-            RealScalar beta  = sigma * sigma;
-            RealScalar inv_d = RealScalar{1} / d;
-
-            y_old.setZero(b.size());
-            y_new = inv_d * b;
-            y_next.resize(b.size());
-            z_res.resize(b.size());
-
-            if(m == 1) {
-                x = y_new;
-                m_iterations++;
-                return;
-            }
-
-            for(int k = 2; k <= m; ++k) {
-                z_res.noalias()  = b - matrix->MatrixOp(y_new);
-                y_next.noalias() = inv_d * z_res + RealScalar{2} * sigma * y_new - beta * y_old;
-                assert(z_res.allFinite());
-                assert(y_next.allFinite());
-                y_old.swap(y_new);
-                y_new.swap(y_next);
-            }
-            x = y_new;
-            m_iterations++;
-            auto t_end        = std::chrono::high_resolution_clock::now();
-            m_time_chebyshev += std::chrono::duration<double>(t_end - t_start).count();
-        }
-
-        template<typename Rhs, typename Dest, typename SolverType>
-        void apply_jacobi_blocks(const Rhs &b, Dest &x, const std::vector<std::tuple<long, int, std::unique_ptr<SolverType>>> *blocks) const {
-            if(blocks == nullptr) return;
-            if(blocks->empty()) return;
-            auto t_jcb   = tid::tic_scope("jcb", tid::level::higher);
-            auto t_start = std::chrono::high_resolution_clock::now();
-            assert(config->jacobi.jcbMaxMultiplicity > 0);
-            auto pass = [&](Eigen::Index color, const VectorType &in, VectorType &out) {
-                auto start_idx    = static_cast<size_t>(color);
-                auto multiplicity = static_cast<size_t>(config->jacobi.jcbMaxMultiplicity);
-#pragma omp parallel for schedule(static)
-                for(size_t idx = start_idx; idx < blocks->size(); idx += multiplicity) {
-                    const auto &[offset, sign, solver]  = blocks->at(idx);
-                    const long extent                   = solver->rows();
-                    auto       out_segment              = Eigen::Map<VectorType>(out.data() + offset, extent);
-                    auto       in_segment               = Eigen::Map<const VectorType>(in.data() + offset, extent);
-                    out_segment.noalias()              += solver->solve(in_segment * static_cast<RealScalar>(sign));
-                }
-            };
-
-            temp = b;
-            for(Eigen::Index jcbPass = 0; jcbPass < config->jacobi.jcbNumPasses; ++jcbPass) {
-                x.setZero(b.size());
-                for(Eigen::Index color = 0; color < config->jacobi.jcbMaxMultiplicity; ++color) { pass(color, temp, x); }
-                if(jcbPass + 1 < config->jacobi.jcbNumPasses) temp.swap(x);
-            }
-
-            m_iterations++;
-            auto t_end  = std::chrono::high_resolution_clock::now();
-            m_time_jcb += std::chrono::duration<double>(t_end - t_start).count();
-        }
-
-        template<typename Rhs, typename Dest>
-        void solve_jacobi(const Rhs &b, Dest &x) const {
-            if(config->jacobi.skipjcb) {
+            if(!config->preconditioner_apply) {
                 x = b;
+                m_iterations++;
+                auto t_end      = std::chrono::high_resolution_clock::now();
+                m_time_elapsed += std::chrono::duration<double>(t_end - t_start).count();
                 return;
             }
-            VectorType y = b;
-            assert(y.allFinite());
-            if constexpr(MatrixLikeType::has_projector_op) { matrix->ProjectOpL(b, y); }
 
-            x.setZero(y.size());
-            auto old_iterations = m_iterations;
-            if(config->jacobi.invdiag != nullptr) {
-                auto invdiag = Eigen::Map<const VectorType>(config->jacobi.invdiag, rows());
-                assert(invdiag.allFinite());
-                x.noalias() = invdiag.array().cwiseProduct(y.array()).matrix();
-                m_iterations++;
-            }
-            if(config->jacobi.jcbInvSqrtMultiplicity != nullptr && config->jacobi.jcbInvSqrtMultiplicity->size() == y.size()) {
-                y.array() *= config->jacobi.jcbInvSqrtMultiplicity->array();
-            }
-
-            apply_jacobi_blocks(y, x, config->jacobi.lltJcbBlocks);
-            apply_jacobi_blocks(y, x, config->jacobi.ldltJcbBlocks);
-            apply_jacobi_blocks(y, x, config->jacobi.luJcbBlocks);
-            apply_jacobi_blocks(y, x, config->jacobi.qrJcbBlocks);
-
-            if(config->jacobi.jcbInvSqrtMultiplicity != nullptr && config->jacobi.jcbInvSqrtMultiplicity->size() == x.size()) {
-                x.array() *= config->jacobi.jcbInvSqrtMultiplicity->array();
-            }
-
-            if(m_iterations == old_iterations) { throw std::runtime_error("no blocks applied"); }
+            y.resize(b.rows());
+            z.resize(b.rows());
+            temp.resize(b.rows());
 
             if constexpr(MatrixLikeType::has_projector_op) {
-                matrix->ProjectOpR(x, temp);
-                x.swap(temp);
+                matrix->ProjectOpL(b, y);
+            } else {
+                y = b;
+            }
+
+            config->preconditioner_apply(y, z, config->theta);
+
+            if constexpr(MatrixLikeType::has_projector_op) {
+                matrix->ProjectOpR(z, temp);
+                x = temp;
+            } else {
+                x = z;
             }
             assert(x.allFinite());
 
-            if(config->matdef == MatDef::DEF) {
-                [[maybe_unused]] auto beta_new2 = std::real(b.dot(x));
-                eigen_assert(beta_new2 >= RealScalar{0} && "PRECONDITIONER IS NOT POSITIVE DEFINITE");
-            }
-        }
-
-        template<typename Rhs, typename Dest>
-        void solve_deflated_jacobi(const Rhs &b, Dest &x) const {
-            bool has_defl_eigvecs = config->jacobi.deflationEigVecs.rows() == b.rows();
-            bool has_defl_eigvals = config->jacobi.deflationEigInvs.size() > 0;
-            if(!has_defl_eigvecs || !has_defl_eigvals) {
-                solve_jacobi(b, x);
-                return;
-            }
-            if(m_iterations == 0) std::printf("deflating");
-            const MatrixType &Z            = config->jacobi.deflationEigVecs;
-            const VectorType &Y            = config->jacobi.deflationEigInvs;
-            VectorType        alpha        = Z.adjoint() * matrix->gemm(b);
-            VectorType        lambda_alpha = alpha.cwiseQuotient(Y);
-            VectorType        b_deflated   = b - Z * lambda_alpha;
-            solve_jacobi(b_deflated, x);
-            VectorType alpha_scaled  = Y.cwiseProduct(alpha);
-            x.noalias()             += Z * alpha_scaled;
-        }
-
-        template<typename Rhs, typename Dest>
-        void solve_coarse_jacobi(const Rhs &b, Dest &x) const {
-            solve_jacobi(b, x);
-            const MatrixType &Z  = config->jacobi.coarseZ;
-            const MatrixType &BZ = config->jacobi.coarseBZ;
-            if(Z.cols() == 0 || BZ.cols() == 0) return;
-
-            RealScalar trace_now    = std::real((Z.adjoint() * BZ).trace());
-            bool       must_rebuild = C.size() == 0 || C.cols() != Z.cols() || C_cols_cached != Z.cols() ||
-                                std::abs(trace_now - C_trace_cached) > RealScalar{1e-12f} * std::max<RealScalar>(RealScalar{1}, std::abs(trace_now));
-
-            if(must_rebuild) {
-                MatrixType             G = Z.adjoint() * BZ;
-                Eigen::LLT<MatrixType> llt(G);
-                if(llt.info() != Eigen::Success) return;
-                C              = llt.solve(MatrixType::Identity(Z.cols(), Z.cols()));
-                C_cols_cached  = Z.cols();
-                C_trace_cached = trace_now;
-            }
-
-            VectorType Zalpha = Z * C * (Z.adjoint() * b);
-            if constexpr(MatrixLikeType::has_projector_op) {
-                matrix->ProjectOpR(Zalpha, temp);
-                x.noalias() += temp;
-            } else {
-                x.noalias() += Zalpha;
-            }
-        }
-
-        template<typename Rhs, typename Dest>
-        void _solve_impl(const Rhs &b, Dest &x) const {
-            auto t_start = std::chrono::high_resolution_clock::now();
-            if(config->precondType == PreconditionerType::CHEBYSHEV) { solve_chebyshev(b, x); }
-            if(config->precondType == PreconditionerType::JACOBI) { solve_coarse_jacobi(b, x); }
-
+            m_iterations++;
             auto t_end      = std::chrono::high_resolution_clock::now();
             m_time_elapsed += std::chrono::duration<double>(t_end - t_start).count();
         }
@@ -276,6 +107,6 @@ namespace grit::internal::precondition {
             return Eigen::Solve<IterativeLinearSolverPreconditioner, Rhs>(*this, b.derived());
         }
 
-        Eigen::ComputationInfo info() { return Eigen::Success; }
+        Eigen::ComputationInfo info() const { return Eigen::Success; }
     };
 }

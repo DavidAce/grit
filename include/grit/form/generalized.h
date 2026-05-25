@@ -23,16 +23,11 @@ namespace grit::form {
                     spdlog::level::level_enum logLevel_ = spdlog::level::warn);
 
         std::string_view form_name() const final;
+        bool             is_generalized_problem() const final;
         MatrixType       MultB(const Eigen::Ref<const MatrixType> &X) final;
+        MatrixType       MultB_inner(const Eigen::Ref<const MatrixType> &X) final;
         void             diagonalizeT() final;
 
         MatVec<Scalar> &B;
-
-        protected:
-        void set_form_jcbMaxBlockSize(Eigen::Index jcbMaxBlockSize) final;
-        void set_form_jcbOverlapSize(Eigen::Index jcbOverlapSize) final;
-        void set_form_jcbNumPasses(Eigen::Index jcbNumPasses) final;
-        void set_form_preconditioner_type(Preconditioner preconditioner_type) final;
-        void set_form_preconditioner_params(Eigen::Index maxiters, RealScalar initialTol, Eigen::Index jcbMaxBlockSize) final;
     };
 }

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "internal/precondition/IterativeLinearSolverConfig.h"
 #include "internal/scalars.h"
 #include "internal/tid.h"
 #include <complex>
@@ -15,25 +14,18 @@ namespace grit {
     struct raw_t {};
     inline constexpr raw_t raw{};
 
-    enum class Factorization { NONE, LLT, LDLT, LU, QR, ILUT, ILDLT };
-    enum class Preconditioner { NONE, JACOBI, SOLVE };
-
     template<typename Scalar_>
     class MatVec {
         public:
-        using Scalar     = Scalar_;
-        using RealScalar = decltype(std::real(std::declval<Scalar>()));
-        using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
-        using VectorType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
-        using VectorReal = Eigen::Matrix<RealScalar, Eigen::Dynamic, 1>;
-        using MultAXFunc = std::function<MatrixType(const Eigen::Ref<const MatrixType> &)>;
-        using RawMultAXFunc = std::function<void(const Scalar *, Scalar *, Eigen::Index, Eigen::Index)>;
-        using MultPXFunc = std::function<MatrixType(const Eigen::Ref<const MatrixType> &, const Eigen::Ref<const VectorReal> &,
-                                                    std::optional<const Eigen::Ref<const MatrixType>>)>;
-        using CalcPcFunc = std::function<void(RealScalar)>;
-
-        Factorization  factorization  = Factorization::NONE;
-        Preconditioner preconditioner = Preconditioner::NONE;
+        using Scalar                   = Scalar_;
+        using RealScalar               = decltype(std::real(std::declval<Scalar>()));
+        using MatrixType               = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+        using VectorType               = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
+        using VectorReal               = Eigen::Matrix<RealScalar, Eigen::Dynamic, 1>;
+        using MultAXFunc               = std::function<MatrixType(const Eigen::Ref<const MatrixType> &)>;
+        using RawMultAXFunc            = std::function<void(const Scalar *, Scalar *, Eigen::Index, Eigen::Index)>;
+        using PreconditionerUpdateFunc = std::function<void(RealScalar)>;
+        using PreconditionerApplyFunc  = std::function<void(const Eigen::Ref<const VectorType> &, Eigen::Ref<VectorType>, RealScalar)>;
 
         MatVec() = default;
         MatVec(Eigen::Index size_, MultAXFunc MultAX_);
@@ -45,8 +37,8 @@ namespace grit {
 
         void set_MultAX(MultAXFunc MultAX_);
         void set_MultBX(MultAXFunc MultBX_);
-        void set_MultPX(MultPXFunc MultPX_);
-        void set_CalcPc(CalcPcFunc CalcPc_);
+        void set_preconditioner_update(PreconditionerUpdateFunc preconditioner_update_);
+        void set_preconditioner_apply(PreconditionerApplyFunc preconditioner_apply_);
         void set_op_norm(RealScalar op_norm_);
         void set_size(Eigen::Index size_);
 
@@ -54,47 +46,30 @@ namespace grit {
         [[nodiscard]] int          cols() const;
         [[nodiscard]] Eigen::Index get_size() const;
         [[nodiscard]] RealScalar   get_op_norm() const;
+        [[nodiscard]] bool         has_preconditioner_apply() const;
 
         MatrixType MultAX(const Eigen::Ref<const MatrixType> &X) const;
 
         MatrixType MultBX(const Eigen::Ref<const MatrixType> &X) const;
 
-        MatrixType MultPX(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const VectorReal> &evals);
+        void preconditioner_update(RealScalar theta) const;
+        void preconditioner_apply(const Eigen::Ref<const VectorType> &x, Eigen::Ref<VectorType> y, RealScalar theta) const;
 
-        void CalcPc(RealScalar shift = RealScalar{0});
         void reset();
-
-        void set_iterativeLinearSolverConfig(const IterativeLinearSolverConfig<Scalar> &cfg);
-        void set_iterativeLinearSolverConfig(long maxiters = 1000, RealScalar tolerance = RealScalar{0.1f}, MatDef matdef = MatDef::IND);
-        IterativeLinearSolverConfig<Scalar>       &get_iterativeLinearSolverConfig();
-        const IterativeLinearSolverConfig<Scalar> &get_iterativeLinearSolverConfig() const;
-
-        void               set_jcbMaxBlockSize(std::optional<long> jcbSize);
-        void               set_jcbMaxBlockSize(long jcbSize);
-        void               set_jcbOverlapSize(std::optional<long> size_);
-        void               set_jcbOverlapSize(long size_);
-        void               set_jcbNumPasses(std::optional<long> size_);
-        void               set_jcbNumPasses(long size_);
-        [[nodiscard]] long get_jcbMaxBlockSize() const;
-        [[nodiscard]] long get_jcbOverlapSize() const;
-        [[nodiscard]] long get_jcbNumPasses() const;
 
         mutable long             num_mv   = 0;
         mutable long             num_op   = 0;
         mutable long             num_pc   = 0;
         std::unique_ptr<tid::ur> t_multAx = std::make_unique<tid::ur>("Time MultAx");
+        std::unique_ptr<tid::ur> t_multPc = std::make_unique<tid::ur>("Time MultPc");
 
         private:
-        Eigen::Index                        size = 0;
-        MultAXFunc                          MultAX_callback;
-        MultAXFunc                          MultBX_callback;
-        MultPXFunc                          MultPX_callback;
-        CalcPcFunc                          CalcPc_callback;
-        std::optional<RealScalar>           op_norm;
-        IterativeLinearSolverConfig<Scalar> iLinSolvCfg;
-        long                                jcbMaxBlockSize = -1;
-        long                                jcbOverlapSize  = 0;
-        long                                jcbNumPasses    = 1;
+        Eigen::Index              size = 0;
+        MultAXFunc                MultAX_callback;
+        MultAXFunc                MultBX_callback;
+        PreconditionerUpdateFunc  preconditioner_update_callback;
+        PreconditionerApplyFunc   preconditioner_apply_callback;
+        std::optional<RealScalar> op_norm;
     };
 
     template<typename Scalar>

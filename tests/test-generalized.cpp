@@ -36,6 +36,7 @@ TEST_CASE("generalized gdplusk matches dense eigensolver") {
     grit::gdplusk_config<double>       cfg;
     cfg.nev       = 2;
     cfg.ncv       = A_matrix.rows();
+    cfg.b         = 1;
     cfg.ritz      = grit::OptRitz::SR;
     cfg.max_iters = 20;
     cfg.set_initial_guess(V);
@@ -47,4 +48,53 @@ TEST_CASE("generalized gdplusk matches dense eigensolver") {
     auto                                             result = solver.result();
     REQUIRE(result.stopReason() == grit::StopReason::converged);
     require_close(result.eigVal(), exact.eigenvalues().head(2), 1e-10);
+}
+
+TEST_CASE("generalized jacobi-davidson b-only correction supports l2 and h2 projectors") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix(5, 5);
+    A_matrix << 4.0, 1.0, 0.0, 0.0, 0.0,
+        1.0, 3.0, 0.5, 0.0, 0.0,
+        0.0, 0.5, 2.0, 0.25, 0.0,
+        0.0, 0.0, 0.25, 5.0, 0.5,
+        0.0, 0.0, 0.0, 0.5, 6.0;
+
+    Matrix B_matrix = Matrix::Identity(5, 5);
+    B_matrix.diagonal() << 1.0, 1.5, 2.0, 2.5, 3.0;
+
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+    auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
+
+    Matrix V = Matrix::Identity(A_matrix.rows(), A_matrix.rows());
+
+    grit::gdplusk_config<double> cfg;
+    cfg.nev         = 1;
+    cfg.ncv         = A_matrix.rows();
+    cfg.b           = 1;
+    cfg.ritz        = grit::OptRitz::SR;
+    cfg.max_iters   = 2;
+    cfg.inner_iters = 20;
+    cfg.inner_tol   = 1e-8;
+    cfg.set_initial_guess(V);
+
+    SECTION("l2 projectors") {
+        grit::generalized::problem<double> problem(A, B);
+        grit::generalized::gdplusk<double> solver(problem, cfg);
+        solver.residual_correction_type = grit::form::base<double>::ResidualCorrectionType::JACOBI_DAVIDSON;
+        solver.use_jd_b_only            = true;
+        solver.use_b_inner_product      = false;
+
+        REQUIRE_NOTHROW(solver.run());
+    }
+
+    SECTION("h2 projectors") {
+        grit::generalized::problem<double> problem(A, B);
+        grit::generalized::gdplusk<double> solver(problem, cfg);
+        solver.residual_correction_type = grit::form::base<double>::ResidualCorrectionType::JACOBI_DAVIDSON;
+        solver.use_jd_b_only            = true;
+        solver.use_b_inner_product      = true;
+
+        REQUIRE_NOTHROW(solver.run());
+    }
 }

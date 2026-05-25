@@ -8,7 +8,6 @@
 #include "form/base.h"
 #include "form/generalized.h"
 #include "form/standard.h"
-#include "internal/precondition/IterativeLinearSolverPreconditioner.h"
 #include "internal/scalars.h"
 #include "MatVec.h"
 #include "prob/generalized.h"

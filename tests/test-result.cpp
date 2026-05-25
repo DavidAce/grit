@@ -15,6 +15,7 @@ TEST_CASE("solver result can be cleared") {
     grit::gdplusk_config<double>    cfg;
     cfg.nev = 1;
     cfg.ncv = 3;
+    cfg.b   = 1;
     cfg.set_initial_guess(V);
 
     grit::standard::gdplusk<double> solver(problem, cfg);

@@ -26,6 +26,9 @@ namespace grit {
         [[nodiscard]] const VectorReal &rNorms() const;
         [[nodiscard]] StopReason        stopReason() const;
         [[nodiscard]] Eigen::Index      iter() const;
+        [[nodiscard]] Eigen::Index      num_matvecs() const;
+        [[nodiscard]] Eigen::Index      num_matvecs_inner() const;
+        [[nodiscard]] Eigen::Index      num_jdops_inner() const;
         [[nodiscard]] Eigen::Index      num_matvecs_total() const;
         [[nodiscard]] Eigen::Index      num_precond_total() const;
 

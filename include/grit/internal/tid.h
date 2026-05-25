@@ -29,31 +29,54 @@ namespace grit::tid {
         private:
         using clock                     = std::chrono::high_resolution_clock;
         clock::time_point tic_timepoint = clock::now();
+        clock::time_point lap_timepoint = clock::now();
         double            measured_time = 0.0;
         double            last_interval = 0.0;
         size_t            count         = 0;
+        bool              running       = false;
         std::string       label;
 
         public:
         ur() = default;
         explicit ur(std::string_view label_, level = normal) noexcept : label(label_) {}
-        void tic() noexcept { tic_timepoint = clock::now(); }
+        void tic() noexcept {
+            tic_timepoint = clock::now();
+            running       = true;
+        }
         void toc() noexcept {
             auto now       = clock::now();
             last_interval  = std::chrono::duration<double>(now - tic_timepoint).count();
             measured_time += last_interval;
             count++;
+            running = false;
         }
         void reset() {
             measured_time = 0.0;
             last_interval = 0.0;
             count         = 0;
+            running       = false;
+            tic_timepoint = clock::now();
+            lap_timepoint = tic_timepoint;
         }
         void                      set_label(std::string_view label_) noexcept { label = label_; }
         [[nodiscard]] std::string get_label() const noexcept { return label; }
-        [[nodiscard]] double      get_time() const { return measured_time; }
+        [[nodiscard]] double      get_time() const {
+            if(!running) return measured_time;
+            return measured_time + std::chrono::duration<double>(clock::now() - tic_timepoint).count();
+        }
         [[nodiscard]] double      get_last_interval() const { return last_interval; }
         [[nodiscard]] size_t      get_tic_count() const { return count; }
+        [[nodiscard]] double      get_lap() const { return std::chrono::duration<double>(clock::now() - lap_timepoint).count(); }
+        double                    restart_lap() {
+            auto now = clock::now();
+            auto lap = std::chrono::duration<double>(now - lap_timepoint).count();
+            lap_timepoint = now;
+            return lap;
+        }
+        ur &operator+=(double seconds) noexcept {
+            measured_time += seconds;
+            return *this;
+        }
         [[nodiscard]] token       tic_token(double add_time = 0) noexcept { return token(*this, add_time); }
         [[nodiscard]] token       tic_token(std::string_view prefix, double add_time = 0) noexcept { return token(*this, prefix, add_time); }
     };

@@ -24,6 +24,7 @@ TEST_CASE("identity operator converges") {
     grit::gdplusk_config<double>    cfg;
     cfg.nev       = 1;
     cfg.ncv       = 3;
+    cfg.b         = 1;
     cfg.ritz      = grit::OptRitz::SR;
     cfg.max_iters = 10;
     cfg.set_initial_guess(V);
@@ -32,6 +33,6 @@ TEST_CASE("identity operator converges") {
     solver.run();
 
     auto result = solver.result();
-    REQUIRE(result.stopReason() == grit::StopReason::converged);
+    REQUIRE(grit::has_flag(result.stopReason(), grit::StopReason::converged));
     REQUIRE(std::abs(result.eigVal()(0) - 1.0) < 1e-12);
 }

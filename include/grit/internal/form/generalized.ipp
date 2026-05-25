@@ -7,10 +7,7 @@ namespace grit::form {
     template<typename Scalar>
     generalized<Scalar>::generalized(Eigen::Index nev, Eigen::Index ncv, OptRitz ritz, const MatrixType &V, MatVec<Scalar> &A, MatVec<Scalar> &B,
                                      spdlog::level::level_enum logLevel_)
-        : base<Scalar>(nev, ncv, ritz, V, A, logLevel_), B(B) {
-        B.set_iterativeLinearSolverConfig(1000, RealScalar{0.25f}, MatDef::IND);
-        B.set_jcbMaxBlockSize(Eigen::Index{-1});
-    }
+        : base<Scalar>(nev, ncv, ritz, V, A, logLevel_), B(B) {}
 
     template<typename Scalar>
     std::string_view generalized<Scalar>::form_name() const {
@@ -18,9 +15,19 @@ namespace grit::form {
     }
 
     template<typename Scalar>
+    bool generalized<Scalar>::is_generalized_problem() const {
+        return true;
+    }
+
+    template<typename Scalar>
     typename generalized<Scalar>::MatrixType generalized<Scalar>::MultB(const Eigen::Ref<const MatrixType> &X) {
         auto token_matvecs  = status.time_matvecs.tic_token();
         status.num_matvecs += X.cols();
+        return B.MultBX(X);
+    }
+
+    template<typename Scalar>
+    typename generalized<Scalar>::MatrixType generalized<Scalar>::MultB_inner(const Eigen::Ref<const MatrixType> &X) {
         return B.MultBX(X);
     }
 
@@ -36,25 +43,4 @@ namespace grit::form {
         T_evecs = es.eigenvectors();
     }
 
-    template<typename Scalar>
-    void generalized<Scalar>::set_form_jcbMaxBlockSize(Eigen::Index jcbMaxBlockSize) {
-        B.set_jcbMaxBlockSize(jcbMaxBlockSize);
-    }
-    template<typename Scalar>
-    void generalized<Scalar>::set_form_jcbOverlapSize(Eigen::Index jcbOverlapSize) {
-        B.set_jcbOverlapSize(jcbOverlapSize);
-    }
-    template<typename Scalar>
-    void generalized<Scalar>::set_form_jcbNumPasses(Eigen::Index jcbNumPasses) {
-        B.set_jcbNumPasses(jcbNumPasses);
-    }
-    template<typename Scalar>
-    void generalized<Scalar>::set_form_preconditioner_type(Preconditioner preconditioner_type) {
-        B.preconditioner = preconditioner_type;
-    }
-    template<typename Scalar>
-    void generalized<Scalar>::set_form_preconditioner_params(Eigen::Index maxiters, RealScalar initialTol, Eigen::Index jcbMaxBlockSize) {
-        B.set_iterativeLinearSolverConfig(maxiters, initialTol, MatDef::IND);
-        B.set_jcbMaxBlockSize(jcbMaxBlockSize);
-    }
 }

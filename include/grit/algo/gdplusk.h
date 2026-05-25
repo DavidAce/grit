@@ -32,24 +32,37 @@ namespace grit::algo {
         using Form::AQ;
         using Form::AV;
         using Form::b;
+        using Form::block_bm_orthogonalize;
+        using Form::block_bm_orthonormalize;
+        using Form::block_l2_orthogonalize;
         using Form::block_l2_orthonormalize;
         using Form::BQ;
         using Form::BV;
         using Form::eiglog;
+        using Form::get_optimal_rayleigh_ritz_matrix;
+        using Form::get_bm_normalizer_for_the_projected_pencil;
+        using Form::get_refined_ritz_eigenvectors_gen;
+        using Form::get_refined_ritz_eigenvectors_std;
+        using Form::get_sBlock;
+        using Form::is_generalized_problem;
+        using Form::K_prev;
+        using Form::maxPrevBlocks;
         using Form::MultA;
         using Form::MultB;
-        using Form::MultP;
         using Form::N;
         using Form::ncv;
         using Form::nev;
+        using Form::orthonormalize_Z;
         using Form::Q;
         using Form::qBlocks;
         using Form::ritz;
         using Form::S;
         using Form::status;
+        using Form::T1;
+        using Form::T2;
         using Form::T_evals;
         using Form::T_evecs;
-        using Form::use_preconditioner;
+        using Form::use_b_inner_product;
         using Form::V;
 
         gdplusk(const grit::standard::problem<Scalar> &problem, const gdplusk_config<Scalar> &cfg) requires std::is_same_v<Form, grit::form::standard<Scalar>>;
@@ -71,7 +84,7 @@ namespace grit::algo {
         void shift_blocks_right(Eigen::Ref<MatrixType> matrix, Eigen::Index offset_old, Eigen::Index offset_new, Eigen::Index extent);
         void roll_blocks_left(Eigen::Ref<MatrixType> matrix, Eigen::Index offset, Eigen::Index extent);
         void selective_orthonormalize(const Eigen::Ref<const MatrixType> X, Eigen::Ref<MatrixType> Y, RealScalar breakdownTol, VectorIdxT &mask);
-        void make_new_Q_block(fMultP_t fMultP);
+        void make_new_Q_block();
         void initialize_config();
 
         public:
