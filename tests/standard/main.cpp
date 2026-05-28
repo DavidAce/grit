@@ -47,6 +47,78 @@ TEST_CASE("standard gdplusk matches dense eigensolver") {
     require_close(result.eigVal(), exact.eigenvalues().head(2), 1e-10);
 }
 
+TEST_CASE("standard gdplusk converges with an exact zero eigenvalue") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix(4, 4);
+    A_matrix << 1.0, -1.0, 0.0, 0.0,
+        -1.0, 2.0, -1.0, 0.0,
+        0.0, -1.0, 2.0, -1.0,
+        0.0, 0.0, -1.0, 1.0;
+
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    Matrix V = Matrix::Identity(A_matrix.rows(), A_matrix.rows());
+
+    grit::standard::problem<double> problem(A);
+    grit::gdplusk_config<double>    cfg;
+    cfg.nev       = 1;
+    cfg.ncv       = A_matrix.rows();
+    cfg.block_size = 1;
+    cfg.ritz      = grit::OptRitz::SR;
+    cfg.max_iters = 20;
+    cfg.tol       = 1e-12;
+    cfg.set_initial_guess(V);
+
+    grit::standard::gdplusk<double> solver(problem, cfg);
+    solver.run();
+
+    auto result = solver.result();
+    REQUIRE(result.stopReason() == grit::StopReason::converged);
+    REQUIRE(std::abs(result.eigVal()(0)) < 1e-12);
+    REQUIRE(result.rNorms()(0) < 1e-12);
+}
+
+TEST_CASE("standard gdplusk status callback reports initial and final status") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix(5, 5);
+    A_matrix << 4.0, 1.0, 0.0, 0.0, 0.0,
+        1.0, 3.0, 0.5, 0.0, 0.0,
+        0.0, 0.5, 2.0, 0.25, 0.0,
+        0.0, 0.0, 0.25, 5.0, 0.5,
+        0.0, 0.0, 0.0, 0.5, 6.0;
+
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    Matrix V = Matrix::Identity(A_matrix.rows(), A_matrix.rows());
+
+    grit::standard::problem<double> problem(A);
+    grit::gdplusk_config<double>    cfg;
+    cfg.nev       = 1;
+    cfg.ncv       = A_matrix.rows();
+    cfg.block_size         = 1;
+    cfg.ritz      = grit::OptRitz::SR;
+    cfg.max_iters = 20;
+    cfg.set_initial_guess(V);
+
+    std::vector<Eigen::Index> iterations;
+    std::vector<grit::StopReason> stop_reasons;
+    cfg.status_callback = [&](grit::result_view<double> status) {
+        iterations.push_back(status.iter());
+        stop_reasons.push_back(status.stopReason());
+    };
+
+    grit::standard::gdplusk<double> solver(problem, cfg);
+    solver.run();
+
+    REQUIRE(iterations.size() >= 2);
+    REQUIRE(iterations.front() == 0);
+    REQUIRE(iterations.back() + 1 == solver.result().iter());
+    REQUIRE(stop_reasons.front() == grit::StopReason::none);
+    REQUIRE(stop_reasons.back() == grit::StopReason::converged);
+}
+
 TEST_CASE("standard jacobi-davidson correction invokes preconditioner callbacks") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
     using Vector = grit::MatVec<double>::VectorType;
@@ -177,6 +249,8 @@ TEST_CASE("standard auto residual correction does not start Jacobi-Davidson unle
     solver.status.iter                           = 2;
     solver.status.eigVal                         = VectorReal::Constant(1, -1.0);
     solver.status.rNorms                         = VectorReal::Constant(1, 1.0e-2);
+    solver.status.eigVals_history.clear();
+    solver.status.rNorms_history.clear();
     solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, -1.0));
     solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, -1.5));
     solver.status.rNorms_history.emplace_back(VectorReal::Constant(1, 1.0e-2));
@@ -210,6 +284,7 @@ TEST_CASE("standard auto eigenvalue saturation is relative to average eigenvalue
     solver.status.iter               = 2;
     solver.status.op_norm_estimate   = 1.0e6;
     solver.status.eigVal             = VectorReal::Constant(1, 1.01);
+    solver.status.eigVals_history.clear();
     solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, 1.00));
     solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, 1.01));
 
@@ -245,6 +320,8 @@ TEST_CASE("standard auto residual correction honors cheap-Olsen dwell before Jac
     solver.status.iter                          = 2;
     solver.status.eigVal                        = VectorReal::Constant(1, -1.0);
     solver.status.rNorms                        = VectorReal::Constant(1, 1.0e-2);
+    solver.status.eigVals_history.clear();
+    solver.status.rNorms_history.clear();
     solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, -1.0));
     solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, -1.0 + 1.0e-8));
     solver.status.rNorms_history.emplace_back(VectorReal::Constant(1, 1.0e-2));
@@ -259,7 +336,7 @@ TEST_CASE("standard auto residual correction honors cheap-Olsen dwell before Jac
     REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_iters.empty());
 }
 
-TEST_CASE("standard auto residual correction starts Jacobi-Davidson below rnorm threshold before cheap dwell") {
+TEST_CASE("standard auto residual correction starts Jacobi-Davidson below rrnorm threshold before cheap dwell") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
     Matrix A_matrix = Matrix::Identity(4, 4);
@@ -313,15 +390,24 @@ TEST_CASE("standard auto residual correction starts Jacobi-Davidson when histori
 
     solver.residual_correction_type = Correction::AUTO;
     solver.auto_residual_correction.dwell       = solver.auto_min_dwell_iters;
+    solver.auto_sat_eigval_threshold            = 1.0e-3;
+    solver.auto_sat_rnorm_threshold             = 1.0e-2;
     solver.status.iter                          = 2;
+    solver.status.op_norm_estimate              = 1.0;
     solver.status.eigVal                        = VectorReal::Constant(1, -1.0);
     solver.status.rNorms                        = VectorReal::Constant(1, 1.0e-2);
+    solver.status.eigVals_history.clear();
+    solver.status.rNorms_history.clear();
     solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, -1.0));
-    solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, -1.0 + 1.0e-8));
+    solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, -1.0));
     solver.status.rNorms_history.emplace_back(VectorReal::Constant(1, 1.0e-2));
-    solver.status.rNorms_history.emplace_back(VectorReal::Constant(1, 1.0e-2 + 1.0e-8));
+    solver.status.rNorms_history.emplace_back(VectorReal::Constant(1, 1.0e-2));
     solver.status.num_matvecs       = 1;
     solver.status.num_matvecs_inner              = 0;
+
+    auto saturation = solver.get_auto_saturation_status();
+    REQUIRE(saturation.eigval.saturated);
+    REQUIRE(saturation.rnorm.saturated);
 
     solver.update_auto_residual_correction_state();
 

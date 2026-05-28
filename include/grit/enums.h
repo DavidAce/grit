@@ -8,15 +8,15 @@ namespace grit {
     enum class OptRitz { NONE, LR, LM, SR, SM };
 
     enum class StopReason : int {
-        none                   = 0,
-        converged              = 1,
-        ritz_residual_stalled  = 2,
-        subspace_exhausted     = 4,
-        ritz_value_stalled     = 16,
-        max_iters              = 32,
-        max_matvecs            = 64,
-        lanczos_beta_stalled   = 128,
-        invalid_input          = 256,
+        none                  = 0,
+        converged             = 1,
+        ritz_residual_stalled = 2,
+        subspace_exhausted    = 4,
+        ritz_value_stalled    = 16,
+        max_iters             = 32,
+        max_matvecs           = 64,
+        lanczos_beta_stalled  = 128,
+        invalid_input         = 256,
         allow_bitops
     };
 

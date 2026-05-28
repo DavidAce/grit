@@ -24,39 +24,40 @@ namespace grit::algo {
     template<typename Form>
     void gdplusk<Form>::initialize_config() {
         config.nev                    = std::min<Eigen::Index>(std::max<Eigen::Index>(1, config.nev), this->N);
-        config.block_size                      = std::clamp<Eigen::Index>(std::max<Eigen::Index>(config.nev, config.block_size), 1, std::max<Eigen::Index>(1, this->N));
-        const auto max_basis_blocks     = std::max<Eigen::Index>(1, this->N / std::max<Eigen::Index>(1, config.block_size));
-        config.max_extra_ritz_history    = std::clamp<Eigen::Index>(config.max_extra_ritz_history, 0, max_basis_blocks);
+        config.block_size             = std::clamp<Eigen::Index>(std::max<Eigen::Index>(config.nev, config.block_size), 1, std::max<Eigen::Index>(1, this->N));
+        const auto max_basis_blocks   = std::max<Eigen::Index>(1, this->N / std::max<Eigen::Index>(1, config.block_size));
+        config.max_extra_ritz_history = std::clamp<Eigen::Index>(config.max_extra_ritz_history, 0, max_basis_blocks);
         config.max_ritz_residual_history = std::clamp<Eigen::Index>(config.max_ritz_residual_history, 0, max_basis_blocks);
         if(config.ncv < 0) {
             config.max_basis_blocks = std::clamp<Eigen::Index>(config.max_basis_blocks, 1, max_basis_blocks);
-            config.ncv            = config.max_basis_blocks * config.block_size;
+            config.ncv              = config.max_basis_blocks * config.block_size;
         } else {
-            config.ncv            = std::min<Eigen::Index>(std::max<Eigen::Index>(config.nev, config.ncv), this->N);
+            config.ncv              = std::min<Eigen::Index>(std::max<Eigen::Index>(config.nev, config.ncv), this->N);
             config.max_basis_blocks = std::clamp<Eigen::Index>(config.ncv / config.block_size, 1, max_basis_blocks);
-            config.ncv            = config.max_basis_blocks * config.block_size;
+            config.ncv              = config.max_basis_blocks * config.block_size;
         }
-        config.max_retain_blocks         = std::clamp<Eigen::Index>(config.max_retain_blocks, 1, config.max_basis_blocks);
-        this->block_size                        = config.block_size;
-        this->nev                      = config.nev;
-        this->ncv                      = config.ncv;
-        this->ritz                     = config.ritz;
-        this->max_iters                = config.max_iters;
-        this->max_matvecs              = config.max_matvecs;
-        this->tol                   = config.tol;
-        this->tol_rnorm_relative                   = config.tol_rnorm_relative;
+        config.max_retain_blocks            = std::clamp<Eigen::Index>(config.max_retain_blocks, 1, config.max_basis_blocks);
+        this->block_size                    = config.block_size;
+        this->nev                           = config.nev;
+        this->ncv                           = config.ncv;
+        this->ritz                          = config.ritz;
+        this->max_iters                     = config.max_iters;
+        this->max_matvecs                   = config.max_matvecs;
+        this->tol                           = config.tol;
+        this->tol_rnorm_relative            = config.tol_rnorm_relative;
         this->sat_eigval_threshold          = config.sat_eigval_threshold;
-        this->sat_rnorm_threshold          = config.sat_rnorm_threshold;
-        this->inner_tol                = config.inner_tol;
-        this->inner_max_iters          = config.inner_max_iters;
-        this->auto_min_dwell_iters     = std::max<Eigen::Index>(0, config.auto_min_dwell_iters);
-        this->auto_sat_eigval_threshold      = std::max<RealScalar>(RealScalar{0}, config.auto_sat_eigval_threshold);
-        this->auto_sat_rnorm_threshold     = std::max<RealScalar>(RealScalar{0}, config.auto_sat_rnorm_threshold);
+        this->sat_rnorm_threshold           = config.sat_rnorm_threshold;
+        this->inner_tol                     = config.inner_tol;
+        this->inner_max_iters               = config.inner_max_iters;
+        this->auto_min_dwell_iters          = std::max<Eigen::Index>(0, config.auto_min_dwell_iters);
+        this->auto_sat_eigval_threshold     = std::max<RealScalar>(RealScalar{0}, config.auto_sat_eigval_threshold);
+        this->auto_sat_rnorm_threshold      = std::max<RealScalar>(RealScalar{0}, config.auto_sat_rnorm_threshold);
         this->auto_jd_start_rnorm_threshold = std::max<RealScalar>(RealScalar{0}, config.auto_jd_start_rnorm_threshold);
-        this->auto_cheap_probe_interval = std::max<Eigen::Index>(1, config.auto_cheap_probe_interval);
-        this->auto_cheap_probe_factor   = std::max<RealScalar>(RealScalar{0}, config.auto_cheap_probe_factor);
-        max_mBlocks                    = config.max_extra_ritz_history;
-        max_sBlocks                    = config.max_ritz_residual_history;
+        this->auto_cheap_probe_interval     = std::max<Eigen::Index>(1, config.auto_cheap_probe_interval);
+        this->auto_cheap_probe_factor       = std::max<RealScalar>(RealScalar{0}, config.auto_cheap_probe_factor);
+        this->status_callback               = config.status_callback;
+        max_mBlocks                         = config.max_extra_ritz_history;
+        max_sBlocks                         = config.max_ritz_residual_history;
         this->setLogger(config.log_level, std::string("grit|") + std::string(this->form_name()));
     }
 
@@ -306,17 +307,17 @@ namespace grit::algo {
     template<typename Form>
     void gdplusk<Form>::set_maxExtraRitzHistory(Eigen::Index m) {
         config.max_extra_ritz_history = std::clamp<Eigen::Index>(m, 0, N / std::max<Eigen::Index>(1, block_size));
-        max_mBlocks                = config.max_extra_ritz_history;
+        max_mBlocks                   = config.max_extra_ritz_history;
     }
     template<typename Form>
     void gdplusk<Form>::set_maxRitzResidualHistory(Eigen::Index s) {
         config.max_ritz_residual_history = std::clamp<Eigen::Index>(s, 0, N / std::max<Eigen::Index>(1, block_size));
-        max_sBlocks                   = config.max_ritz_residual_history;
+        max_sBlocks                      = config.max_ritz_residual_history;
     }
     template<typename Form>
     void gdplusk<Form>::set_maxBasisBlocks(Eigen::Index bb) {
         config.max_basis_blocks = std::clamp<Eigen::Index>(bb, 1, N / std::max<Eigen::Index>(1, block_size));
-        ncv                   = std::min<Eigen::Index>(N, config.max_basis_blocks * block_size);
+        ncv                     = std::min<Eigen::Index>(N, config.max_basis_blocks * block_size);
     }
     template<typename Form>
     void gdplusk<Form>::set_maxRetainBlocks(Eigen::Index rb) {

@@ -64,12 +64,12 @@ namespace grit::tid {
             if(!running) return measured_time;
             return measured_time + std::chrono::duration<double>(clock::now() - tic_timepoint).count();
         }
-        [[nodiscard]] double      get_last_interval() const { return last_interval; }
-        [[nodiscard]] size_t      get_tic_count() const { return count; }
-        [[nodiscard]] double      get_lap() const { return std::chrono::duration<double>(clock::now() - lap_timepoint).count(); }
-        double                    restart_lap() {
-            auto now = clock::now();
-            auto lap = std::chrono::duration<double>(now - lap_timepoint).count();
+        [[nodiscard]] double get_last_interval() const { return last_interval; }
+        [[nodiscard]] size_t get_tic_count() const { return count; }
+        [[nodiscard]] double get_lap() const { return std::chrono::duration<double>(clock::now() - lap_timepoint).count(); }
+        double               restart_lap() {
+            auto now      = clock::now();
+            auto lap      = std::chrono::duration<double>(now - lap_timepoint).count();
             lap_timepoint = now;
             return lap;
         }
@@ -77,8 +77,8 @@ namespace grit::tid {
             measured_time += seconds;
             return *this;
         }
-        [[nodiscard]] token       tic_token(double add_time = 0) noexcept { return token(*this, add_time); }
-        [[nodiscard]] token       tic_token(std::string_view prefix, double add_time = 0) noexcept { return token(*this, prefix, add_time); }
+        [[nodiscard]] token tic_token(double add_time = 0) noexcept { return token(*this, add_time); }
+        [[nodiscard]] token tic_token(std::string_view prefix, double add_time = 0) noexcept { return token(*this, prefix, add_time); }
     };
 
     inline token::token(ur &t_, double) noexcept : t(&t_) { t->tic(); }

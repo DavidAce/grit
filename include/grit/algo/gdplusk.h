@@ -31,16 +31,16 @@ namespace grit::algo {
         using Form::A;
         using Form::AQ;
         using Form::AV;
-        using Form::block_size;
         using Form::block_bm_orthogonalize;
         using Form::block_bm_orthonormalize;
         using Form::block_l2_orthogonalize;
         using Form::block_l2_orthonormalize;
+        using Form::block_size;
         using Form::BQ;
         using Form::BV;
         using Form::eiglog;
-        using Form::get_optimal_rayleigh_ritz_matrix;
         using Form::get_bm_normalizer_for_the_projected_pencil;
+        using Form::get_optimal_rayleigh_ritz_matrix;
         using Form::get_refined_ritz_eigenvectors_gen;
         using Form::get_refined_ritz_eigenvectors_std;
         using Form::get_sBlock;
