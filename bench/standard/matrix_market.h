@@ -1,7 +1,6 @@
 #pragma once
 
 #include "aliases.h"
-
 #include <filesystem>
 
 namespace bench_standard {

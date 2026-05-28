@@ -117,7 +117,7 @@ namespace bench_standard {
         app.add_option("--matrix-path", opts.matrix_path, "Path to a Matrix Market .mtx file")->check(CLI::ExistingFile);
         app.add_option("--initial-guess", opts.initial_guess, "Path to HDF5 file with /grit/standard/eigvecs initial guess")->check(CLI::ExistingFile);
         app.add_option("--save-eigvec", opts.save_eigvec, "Path to HDF5 file where final eigenvectors are saved");
-        app.add_option("--save-results", opts.save_results, "Path to HDF5 file where benchmark result rows are saved");
+        app.add_option("--save-results", opts.save_results, "Path to HDF5 file where final result rows and solver snapshots are saved");
         app.add_flag("--print-summary", opts.print_summary, "Print the summary from --save-results without running the benchmark");
         app.add_option("--nev", opts.nev, "Number of eigenpairs")->check(CLI::PositiveNumber);
         app.add_option("--ncv", opts.ncv, "Maximum subspace columns, or a comma list like [8,16]. Negative derives ncv from --max-basis-blocks * --block-size")->delimiter(',');
@@ -127,23 +127,24 @@ namespace bench_standard {
         app.add_option("--max-matvecs", opts.max_matvecs, "Maximum matrix-vector products, or a negative value for unlimited");
         app.add_option("--inner-max-iters", opts.inner_max_iters, "Maximum Jacobi-Davidson inner iterations, or a comma list")->delimiter(',');
         app.add_option("--reps", opts.reps, "Number of benchmark repetitions")->check(CLI::PositiveNumber);
-        app.add_option("--tol", opts.tol, "Absolute convergence tolerance, or a comma list")->delimiter(',');
-        app.add_option("--tol-rnorm-relative", opts.tol_rnorm_relative, "Relative residual-norm convergence tolerance");
+        app.add_option("--tol", opts.tol, "Absolute residual-norm convergence tolerance, or relative residual tolerance with --use-relative-rnorm-tolerance")->delimiter(',');
+        app.add_option("--tol-rnorm-relative", opts.tol_rnorm_relative, "Relative-to-initial absolute residual-norm convergence tolerance");
         app.add_option("--sat-eigval-threshold", opts.sat_eigval_threshold, "Stop if eigenvalue-history relative standard deviation is below this tolerance; 0 disables it");
-        app.add_option("--sat-rnorm-threshold", opts.sat_rnorm_threshold, "Stop if residual-history standard deviation is below this fraction of the current residual norm; 0 disables it");
+        app.add_option("--sat-rnorm-threshold", opts.sat_rnorm_threshold,
+                       "Stop if derived relative-residual history standard deviation is below this fraction of the current derived relative residual; 0 disables it");
         app.add_option("--inner-tol", opts.inner_tol, "Jacobi-Davidson inner tolerance, or a comma list")->delimiter(',');
         app.add_option("--auto-min-dwell-iters", opts.auto_min_dwell_iters, "Minimum consecutive cheap-Olsen AUTO steps before JD activation may be scheduled")->check(CLI::NonNegativeNumber);
-        app.add_option("--auto-sat-eigval-threshold", opts.auto_sat_eigval_threshold, "AUTO eigenvalue saturation tolerance scaled by the current operator estimate");
-        app.add_option("--auto-sat-rnorm-threshold", opts.auto_sat_rnorm_threshold, "AUTO residual-norm saturation tolerance scaled by the current residual norm");
-        app.add_option("--auto-jd-start-rnorm-threshold", opts.auto_jd_start_rnorm_threshold, "Residual norm below which AUTO may activate JD; 0 disables it");
+        app.add_option("--auto-sat-eigval-threshold", opts.auto_sat_eigval_threshold, "AUTO eigenvalue-history relative standard deviation tolerance");
+        app.add_option("--auto-sat-rnorm-threshold", opts.auto_sat_rnorm_threshold, "AUTO derived-relative-residual saturation tolerance");
+        app.add_option("--auto-jd-start-rnorm-threshold", opts.auto_jd_start_rnorm_threshold, "Derived relative residual norm below which AUTO may activate JD; 0 disables it");
         app.add_option("--auto-cheap-probe-interval", opts.auto_cheap_probe_interval, "JD steps before AUTO forces a cheap-Olsen probe")->check(CLI::PositiveNumber);
         app.add_option("--auto-cheap-probe-factor", opts.auto_cheap_probe_factor,
-                       "Cheap probe must improve the Ritz value by this factor times max(rnorm^2, roundoff scale)");
+                       "Cheap probe must improve the Ritz value by this factor times max(absolute rnorm^2, roundoff scale)");
         app.add_option("--seed", opts.seed, "Random seed for deterministic initial guess");
         app.add_option("--ritz", opts.ritz, "Ritz target [SR, LR, SM, LM], or a comma list")->type_name("ENUM");
         app.add_option("--log-level", opts.log_level, "Solver log level [trace, debug, info, warn, err, critical, off]")->transform(CLI::CheckedTransformer(log_level_map, CLI::ignore_case))->type_name("ENUM");
         app.add_option("--residual-correction", opts.residual_correction,"Residual correction [none, cheap-olsen, full-olsen, jacobi-davidson, auto], or a comma list")->type_name("ENUM");
-        app.add_option("--refined-rayleigh-ritz", opts.refined_rayleigh_ritz, "Enable refined Rayleigh-Ritz extraction, or use [false,true]")->delimiter(',');
+        app.add_option("--refined-rayleigh-ritz", opts.use_refined_rayleigh_ritz, "Enable refined Rayleigh-Ritz extraction, or use [false,true]")->delimiter(',');
         app.add_flag("--use-relative-rnorm-tolerance", opts.use_relative_rnorm_tolerance, "Enable relative residual-norm tolerance");
         app.add_option("--use-adaptive-inner-tolerance", opts.use_adaptive_inner_tolerance, "Enable adaptive inner tolerance, or use [true,false]")->delimiter(',');
         /* clang-format off */
@@ -156,7 +157,7 @@ namespace bench_standard {
         require_all(opts.inner_max_iters, "--inner-max-iters", [](int value) { return value > 0; }, "must be positive");
         require_all(opts.tol, "--tol", [](double value) { return value > 0.0; }, "must be positive");
         require_all(opts.inner_tol, "--inner-tol", [](double value) { return value > 0.0; }, "must be positive");
-        if(opts.refined_rayleigh_ritz.empty()) throw std::runtime_error("--refined-rayleigh-ritz must not be empty");
+        if(opts.use_refined_rayleigh_ritz.empty()) throw std::runtime_error("--refined-rayleigh-ritz must not be empty");
         if(opts.use_adaptive_inner_tolerance.empty()) throw std::runtime_error("--use-adaptive-inner-tolerance must not be empty");
         if(opts.tol_rnorm_relative < 0.0) throw std::runtime_error("--tol-rnorm-relative must be non-negative");
         if(opts.sat_eigval_threshold < 0.0) throw std::runtime_error("--sat-eigval-threshold must be non-negative");
@@ -178,7 +179,7 @@ namespace bench_standard {
         const auto  ritz_values                = parse_list_as<grit::OptRitz>(cli.ritz, "--ritz", [](std::string item) { return parse_ritz(std::move(item)); });
         const auto  residual_correction_values = parse_list_as<ResidualCorrection>(cli.residual_correction, "--residual-correction",
                                                                                    [](std::string item) { return parse_residual_correction(std::move(item)); });
-        const auto &refined_rayleigh_ritz_values    = cli.refined_rayleigh_ritz;
+        const auto &refined_rayleigh_ritz_values    = cli.use_refined_rayleigh_ritz;
         const auto &adaptive_inner_tolerance_values = cli.use_adaptive_inner_tolerance;
 
         std::vector<Options> cases;
@@ -190,7 +191,7 @@ namespace bench_standard {
                         for(auto inner_tol : inner_tol_values)
                             for(auto ritz : ritz_values)
                                 for(auto residual_correction : residual_correction_values)
-                                    for(auto refined_rayleigh_ritz : refined_rayleigh_ritz_values)
+                                    for(auto use_refined_rayleigh_ritz : refined_rayleigh_ritz_values)
                                         for(auto use_adaptive_inner_tolerance : adaptive_inner_tolerance_values) {
                                             Options opts;
                                             opts.case_id       = case_id++;
@@ -219,7 +220,7 @@ namespace bench_standard {
                                             opts.ritz                         = ritz;
                                             opts.log_level                    = cli.log_level;
                                             opts.residual_correction          = residual_correction;
-                                            opts.refined_rayleigh_ritz        = refined_rayleigh_ritz;
+                                            opts.use_refined_rayleigh_ritz        = use_refined_rayleigh_ritz;
                                             opts.use_relative_rnorm_tolerance = cli.use_relative_rnorm_tolerance;
                                             opts.use_adaptive_inner_tolerance = use_adaptive_inner_tolerance;
                                             cases.push_back(opts);

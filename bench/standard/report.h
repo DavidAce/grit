@@ -3,9 +3,8 @@
 #include "cli_options.h"
 #include "options.h"
 #include "solve_result.h"
-
-#include <grit/config.h>
 #include <cstddef>
+#include <grit/config.h>
 #include <string>
 #include <string_view>
 

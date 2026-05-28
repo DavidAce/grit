@@ -3,7 +3,6 @@
 #include "aliases.h"
 #include "options.h"
 #include "solve_result.h"
-
 #include <filesystem>
 
 namespace bench_standard {

@@ -89,15 +89,15 @@ Use any full or relative path to a compatible Matrix Market file.
 ## AUTO Residual Correction
 
 `--residual-correction=auto` starts with cheap Olsen. Once cheap Olsen has
-dwelled for `--auto-min-dwell-iters` steps and both the eigenvalue and residual
-histories saturate, AUTO switches to Jacobi-Davidson. AUTO also switches to
-Jacobi-Davidson once the residual norm is below
+dwelled for `--auto-min-dwell-iters` steps and both the eigenvalue and derived
+relative-residual histories saturate, AUTO switches to Jacobi-Davidson. AUTO
+also switches to Jacobi-Davidson once the derived relative residual norm is below
 `--auto-jd-start-rnorm-threshold`; set that option to `0` to disable this
-absolute residual trigger.
+relative residual trigger.
 
 While Jacobi-Davidson is active, AUTO periodically forces one cheap-Olsen probe.
 If that probe improves the selected Ritz value by more than
-`--auto-cheap-probe-factor * max(rnorm^2, roundoff scale)`, cheap Olsen
+`--auto-cheap-probe-factor * max(abs_rnorm^2, roundoff scale)`, cheap Olsen
 continues. Otherwise AUTO returns to Jacobi-Davidson.
 
 The main AUTO controls are `--auto-sat-eigval-threshold`,
@@ -108,6 +108,10 @@ The main AUTO controls are `--auto-sat-eigval-threshold`,
 `--auto-sat-eigval-threshold` is relative to the average absolute eigenvalue
 magnitude in the recent history window, so `1e-3` means roughly that the recent
 Ritz values agree to about three significant digits.
+
+`--auto-sat-rnorm-threshold` is applied to derived relative residual norms, not
+to the stored absolute residual norms. `--auto-cheap-probe-factor` deliberately
+uses the stored absolute residual norm squared as the improvement scale.
 
 ## Warm Start
 

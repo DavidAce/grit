@@ -1,5 +1,4 @@
 #include "memory.h"
-
 #include <algorithm>
 #include <cctype>
 #include <format>

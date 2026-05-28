@@ -3,7 +3,6 @@
 #include "matrix_market.h"
 #include "report.h"
 #include "runner.h"
-
 #include <CLI/CLI.hpp>
 #include <cstdio>
 #include <filesystem>
@@ -19,9 +18,7 @@ int main(int argc, char **argv) {
     try {
         auto args = bench_standard::normalized_cli_args(argc, argv);
         app.parse(args);
-    } catch(const CLI::ParseError &e) {
-        return app.exit(e);
-    }
+    } catch(const CLI::ParseError &e) { return app.exit(e); }
 
     try {
         bench_standard::normalize_options(opts);
