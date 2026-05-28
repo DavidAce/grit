@@ -31,7 +31,7 @@ namespace grit::algo {
         using Form::A;
         using Form::AQ;
         using Form::AV;
-        using Form::b;
+        using Form::block_size;
         using Form::block_bm_orthogonalize;
         using Form::block_bm_orthonormalize;
         using Form::block_l2_orthogonalize;

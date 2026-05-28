@@ -36,7 +36,7 @@ TEST_CASE("generalized gdplusk matches dense eigensolver") {
     grit::gdplusk_config<double>       cfg;
     cfg.nev       = 2;
     cfg.ncv       = A_matrix.rows();
-    cfg.b         = 1;
+    cfg.block_size         = 1;
     cfg.ritz      = grit::OptRitz::SR;
     cfg.max_iters = 20;
     cfg.set_initial_guess(V);
@@ -50,7 +50,7 @@ TEST_CASE("generalized gdplusk matches dense eigensolver") {
     require_close(result.eigVal(), exact.eigenvalues().head(2), 1e-10);
 }
 
-TEST_CASE("generalized jacobi-davidson b-only correction supports l2 and h2 projectors") {
+TEST_CASE("generalized jacobi-davidson b-only correction supports l2 and bm projectors") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
     Matrix A_matrix(5, 5);
@@ -71,10 +71,10 @@ TEST_CASE("generalized jacobi-davidson b-only correction supports l2 and h2 proj
     grit::gdplusk_config<double> cfg;
     cfg.nev         = 1;
     cfg.ncv         = A_matrix.rows();
-    cfg.b           = 1;
+    cfg.block_size           = 1;
     cfg.ritz        = grit::OptRitz::SR;
     cfg.max_iters   = 2;
-    cfg.inner_iters = 20;
+    cfg.inner_max_iters = 20;
     cfg.inner_tol   = 1e-8;
     cfg.set_initial_guess(V);
 
@@ -88,7 +88,7 @@ TEST_CASE("generalized jacobi-davidson b-only correction supports l2 and h2 proj
         REQUIRE_NOTHROW(solver.run());
     }
 
-    SECTION("h2 projectors") {
+    SECTION("bm projectors") {
         grit::generalized::problem<double> problem(A, B);
         grit::generalized::gdplusk<double> solver(problem, cfg);
         solver.residual_correction_type = grit::form::base<double>::ResidualCorrectionType::JACOBI_DAVIDSON;

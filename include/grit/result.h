@@ -4,6 +4,7 @@
 #include <complex>
 #include <Eigen/Core>
 #include <utility>
+#include <vector>
 
 namespace grit::form {
     template<typename Scalar>
@@ -31,6 +32,8 @@ namespace grit {
         [[nodiscard]] Eigen::Index      num_jdops_inner() const;
         [[nodiscard]] Eigen::Index      num_matvecs_total() const;
         [[nodiscard]] Eigen::Index      num_precond_total() const;
+        [[nodiscard]] const std::vector<Eigen::Index> &cheap_to_jd_switch_iters() const;
+        [[nodiscard]] const std::vector<Eigen::Index> &jd_to_cheap_switch_iters() const;
 
         private:
         friend class form::base<Scalar>;

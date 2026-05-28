@@ -4,6 +4,14 @@
 #include <grit/internal/precondition/JacobiDavidsonOperator.h>
 #include <stdexcept>
 
+namespace settings {
+#if defined(NDEBUG)
+    static constexpr bool debug_ortho = false;
+#else
+    static constexpr bool debug_ortho = true;
+#endif
+}
+
 namespace grit::form {
     template<typename Scalar>
     void base<Scalar>::OrthMeta::analyze_l2_orthonormality(const Eigen::Ref<const MatrixType> &Y) {
@@ -104,11 +112,11 @@ namespace grit::form {
     base<Scalar>::base(Eigen::Index nev, Eigen::Index ncv, OptRitz ritz, const MatrixType &V, MatVec<Scalar> &A, spdlog::level::level_enum logLevel_)
         : logLevel(logLevel_), nev(nev), ncv(ncv), ritz(ritz), A(A), V(V) {
         setLogger(logLevel, "grit");
-        N    = A.get_size();
-        size = A.get_size();
-        nev  = std::min(nev, N);
-        ncv  = std::min(std::max(nev, ncv), N);
-        b    = std::min(std::max(nev, b), std::max<Eigen::Index>(1, N / 2));
+        N          = A.get_size();
+        size       = A.get_size();
+        nev        = std::min(nev, N);
+        ncv        = std::min(std::max(nev, ncv), N);
+        block_size = std::min(std::max(nev, block_size), std::max<Eigen::Index>(1, N / 2));
         status.rNorms.setOnes(nev);
         status.eigVal.setOnes(nev);
         status.oldVal.setOnes(nev);
@@ -131,9 +139,10 @@ namespace grit::form {
 
     template<typename Scalar>
     typename base<Scalar>::RealScalar base<Scalar>::rNormTol([[maybe_unused]] Eigen::Index n) const {
-        auto tol = abstol;
-        if(reltol > RealScalar{0} && n < status.rNorms_init.size()) tol = std::clamp(reltol * status.rNorms_init(n), tol, RealScalar{0.99f});
-        return tol;
+        auto rnorm_tol = tol;
+        if(tol_rnorm_relative > RealScalar{0} && n < status.rNorms_init.size())
+            rnorm_tol = std::clamp(tol_rnorm_relative * status.rNorms_init(n), rnorm_tol, RealScalar{0.99f});
+        return rnorm_tol;
     }
 
     template<typename Scalar>
@@ -160,19 +169,20 @@ namespace grit::form {
         auto op_norm_estimate = std::max(RealScalar{1}, status.op_norm_estimate);
         if(!std::isfinite(op_norm_estimate)) op_norm_estimate = RealScalar{1};
 
-        if(Q.size() == 0 || Q.norm() == RealScalar{0}) return std::max(op_norm_estimate, A.get_op_norm());
+        auto abs_eigval = std::abs(eigval.value_or(status.eigVal.size() > 0 ? status.eigVal(0) : RealScalar{1}));
+        if(status.eigVal.size() > 0) abs_eigval = std::max(abs_eigval, status.eigVal.cwiseAbs().maxCoeff());
+        if(T_evals.size() > 0) abs_eigval = std::max(abs_eigval, T_evals.cwiseAbs().maxCoeff());
+
+        if(Q.size() == 0 || Q.norm() == RealScalar{0}) return std::max({op_norm_estimate, abs_eigval, A.get_op_norm()});
 
         if(is_generalized_problem()) {
-            auto A_maxeval = T_evals.size() > 0 ? T_evals.cwiseAbs().maxCoeff() : RealScalar{1};
             auto A_maxnorm = AQ.size() == Q.size() ? AQ.norm() / Q.norm() : RealScalar{1};
             auto B_maxnorm = BQ.size() == Q.size() ? BQ.norm() / Q.norm() : RealScalar{1};
-            auto abs_lambda = std::abs(eigval.value_or(status.eigVal.size() > 0 ? status.eigVal(0) : RealScalar{1}));
-            return std::max({op_norm_estimate, A_maxeval, A_maxnorm + abs_lambda * B_maxnorm, A.get_op_norm()});
+            return std::max({op_norm_estimate, A_maxnorm + abs_eigval * B_maxnorm, abs_eigval, A.get_op_norm()});
         }
 
-        auto A_maxeval = T_evals.size() > 0 ? T_evals.cwiseAbs().maxCoeff() : RealScalar{1};
         auto A_maxnorm = AQ.size() == Q.size() ? AQ.norm() / Q.norm() : RealScalar{1};
-        return std::max({op_norm_estimate, A_maxeval, A_maxnorm, A.get_op_norm()});
+        return std::max({op_norm_estimate, A_maxnorm, abs_eigval, A.get_op_norm()});
     }
 
     template<typename Scalar>
@@ -203,11 +213,107 @@ namespace grit::form {
     void base<Scalar>::adjust_residual_correction_type() {
         residual_correction_type_internal = residual_correction_type;
         if(residual_correction_type_internal == ResidualCorrectionType::AUTO) {
-            residual_correction_type_internal = ResidualCorrectionType::NONE;
-            if(inner_tol < RealScalar{1e-1f} || status.num_matvecs_inner > 300) residual_correction_type_internal = ResidualCorrectionType::CHEAP_OLSEN;
-            if(inner_tol < RealScalar{1e-3f} || status.num_matvecs_inner > 1000) residual_correction_type_internal = ResidualCorrectionType::FULL_OLSEN;
-            if(inner_tol < RealScalar{1e-5f} || status.num_matvecs_inner > 2000) residual_correction_type_internal = ResidualCorrectionType::JACOBI_DAVIDSON;
+            if(auto_residual_correction.active == ResidualCorrectionType::JACOBI_DAVIDSON &&
+               auto_residual_correction.jd_steps_since_probe >= auto_cheap_probe_interval) {
+                auto_residual_correction.step_method = ResidualCorrectionType::CHEAP_OLSEN;
+            } else {
+                auto_residual_correction.step_method = auto_residual_correction.active;
+            }
+            residual_correction_type_internal = auto_residual_correction.step_method;
+        } else {
+            auto_residual_correction.step_method = residual_correction_type_internal;
         }
+    }
+
+    template<typename Scalar>
+    typename base<Scalar>::RealScalar base<Scalar>::get_auto_rnorm_scalar(const VectorReal &rnorms) const {
+        if(rnorms.size() == 0) return RealScalar{0};
+        auto rows = std::min<Eigen::Index>(nev, rnorms.size());
+        return rnorms.topRows(rows).maxCoeff();
+    }
+
+    template<typename Scalar>
+    typename base<Scalar>::RealScalar base<Scalar>::get_auto_probe_eigval_improvement() const {
+        if(status.oldVal.size() == 0 || status.eigVal.size() == 0) return RealScalar{0};
+        auto before = status.oldVal(0);
+        auto after  = status.eigVal(0);
+        switch(ritz) {
+            case OptRitz::LR: return after - before;
+            case OptRitz::SM: return std::abs(before) - std::abs(after);
+            case OptRitz::LM: return std::abs(after) - std::abs(before);
+            case OptRitz::NONE: [[fallthrough]];
+            case OptRitz::SR: return before - after;
+        }
+        return RealScalar{0};
+    }
+
+    template<typename Scalar>
+    typename base<Scalar>::AutoSaturationMetric base<Scalar>::get_auto_rnorm_saturation_metric() {
+        AutoSaturationMetric metric;
+        metric.enabled      = auto_sat_rnorm_threshold > RealScalar{0};
+        metric.threshold    = auto_sat_rnorm_threshold;
+        metric.history_size = static_cast<Eigen::Index>(status.rNorms_history.size());
+        if(!metric.enabled) return metric;
+
+        const auto min_history_size = std::min<size_t>(status.max_history_size, size_t{2});
+        metric.enough_history       = status.iter >= static_cast<Eigen::Index>(min_history_size) && status.rNorms_history.size() >= min_history_size;
+        if(!metric.enough_history || status.rNorms.size() == 0) return metric;
+
+        VectorReal stds = get_standard_deviations(status.rNorms_history, false);
+        auto       rows = std::min({nev, status.rNorms.size(), stds.size()});
+        if(rows <= 0) return metric;
+        VectorReal vals  = status.rNorms.topRows(rows);
+        VectorReal scale = vals.cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
+        VectorReal ratio = stds.topRows(rows).cwiseQuotient(scale);
+
+        metric.value     = vals.maxCoeff();
+        metric.stddev    = stds.topRows(rows).maxCoeff();
+        metric.scale     = scale.maxCoeff();
+        metric.ratio     = ratio.maxCoeff();
+        metric.saturated = (ratio.array() < metric.threshold).all();
+        return metric;
+    }
+
+    template<typename Scalar>
+    typename base<Scalar>::AutoSaturationMetric base<Scalar>::get_auto_eigval_saturation_metric() {
+        AutoSaturationMetric metric;
+        metric.enabled      = auto_sat_eigval_threshold > RealScalar{0};
+        metric.threshold    = auto_sat_eigval_threshold;
+        metric.history_size = static_cast<Eigen::Index>(status.eigVals_history.size());
+        if(!metric.enabled) return metric;
+
+        const auto min_history_size = std::min<size_t>(status.max_history_size, size_t{2});
+        metric.enough_history       = status.iter >= static_cast<Eigen::Index>(min_history_size) && status.eigVals_history.size() >= min_history_size;
+        if(!metric.enough_history || status.eigVal.size() == 0) return metric;
+
+        VectorReal stds = get_standard_deviations(status.eigVals_history, false);
+        auto       rows = std::min({nev, status.eigVal.size(), stds.size()});
+        if(rows <= 0) return metric;
+        VectorReal vals  = status.eigVal.topRows(rows).cwiseAbs();
+        VectorReal scale = VectorReal::Zero(rows);
+        for(const auto &history : status.eigVals_history) {
+            if(history.size() < rows) throw std::runtime_error("eigVals_history has unequal size vectors");
+            scale.array() += history.topRows(rows).array().abs();
+        }
+        scale            /= static_cast<RealScalar>(status.eigVals_history.size());
+        scale             = scale.cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
+        VectorReal ratio  = stds.topRows(rows).cwiseQuotient(scale);
+
+        metric.value     = vals.maxCoeff();
+        metric.stddev    = stds.topRows(rows).maxCoeff();
+        metric.scale     = scale.maxCoeff();
+        metric.ratio     = ratio.maxCoeff();
+        metric.saturated = (ratio.array() < metric.threshold).all();
+        return metric;
+    }
+
+    template<typename Scalar>
+    typename base<Scalar>::AutoSaturationStatus base<Scalar>::get_auto_saturation_status() {
+        AutoSaturationStatus status_auto;
+        status_auto.eigval = get_auto_eigval_saturation_metric();
+        status_auto.rnorm  = get_auto_rnorm_saturation_metric();
+        status_auto.ready  = status_auto.eigval.saturated && status_auto.rnorm.saturated;
+        return status_auto;
     }
 
     template<typename Scalar>
@@ -324,7 +430,7 @@ namespace grit::form {
                 IterativeLinearSolverConfig<Scalar> cfg;
                 cfg.result               = {};
                 cfg.matdef               = MatDef::IND;
-                cfg.maxiters             = inner_iters;
+                cfg.maxiters             = inner_max_iters;
                 cfg.tolerance            = inner_tol;
                 cfg.theta                = th;
                 cfg.preconditioner_apply = [this](const Eigen::Ref<const VectorType> &x, Eigen::Ref<VectorType> y, RealScalar theta) -> void {
@@ -358,7 +464,7 @@ namespace grit::form {
                 status.inner_tol_last     = std::max(status.inner_tol_last, cfg.tolerance);
             }
         }
-        status.num_precond += b;
+        status.num_precond += block_size;
         return D;
     }
 
@@ -420,7 +526,7 @@ namespace grit::form {
                 IterativeLinearSolverConfig<Scalar> cfg;
                 cfg.result               = {};
                 cfg.matdef               = MatDef::IND;
-                cfg.maxiters             = inner_iters;
+                cfg.maxiters             = inner_max_iters;
                 cfg.tolerance            = inner_tol;
                 cfg.theta                = th;
                 cfg.preconditioner_apply = [this](const Eigen::Ref<const VectorType> &x, Eigen::Ref<VectorType> y, RealScalar theta) -> void {
@@ -457,7 +563,7 @@ namespace grit::form {
                 status.inner_tol_last     = std::max(status.inner_tol_last, cfg.tolerance);
             }
         }
-        status.num_precond += b;
+        status.num_precond += block_size;
         return D;
     }
 
@@ -517,30 +623,30 @@ namespace grit::form {
         assert(N == A.get_size() && "A must have same dimension");
         nev                         = std::min(nev, N);
         ncv                         = std::min(std::max(nev, ncv), N);
-        b                           = std::min(std::max(nev, b), N / 2);
+        block_size                  = std::min(std::max(nev, block_size), N / 2);
         status.saturation_count_max = ncv;
         Eigen::ColPivHouseholderQR<MatrixType> cpqr;
 
         // Step 0: Construct and orthonormalize the initial block V.
-        // We aim to construct V = [v[0]...v[b-1]], where v are ritz eigenvectors.
-        // If V has fewer than b columns, we pad it with random vectors and orthonormalize with ColPivHouseholderQR.
-        // If V has more than b columns, we discard the overshooting columns after QR.
-        // If after QR we have fewer than b columns, we pad again (this is a very unlikely event)
+        // We aim to construct V = [v[0]...v[block_size-1]], where v are ritz eigenvectors.
+        // If V has fewer than block_size columns, we pad it with random vectors and orthonormalize with ColPivHouseholderQR.
+        // If V has more than block_size columns, we discard the overshooting columns after QR.
+        // If after QR we have fewer than block_size columns, we pad again (this is a very unlikely event)
         assert(V.size() == 0 or N == V.rows());
         for(long i = 0; i < 2; ++i) {
-            if(V.cols() < b) {
+            if(V.cols() < block_size) {
                 // Pad with random vectors
                 auto vc = V.cols();
-                V.conservativeResize(N, b);
-                auto Vrc = V.rightCols(b - vc);
+                V.conservativeResize(N, block_size);
+                auto Vrc = V.rightCols(block_size - vc);
                 for(auto vj : Vrc.colwise()) { vj = Eigen::VectorXf::Random(vj.size()).template cast<Scalar>(); }
             }
             // Orthonormalize V.
-            // Discard columns if there are more than b (this is not expected, but also not an error)
+            // Discard columns if there are more than block_size (this is not expected, but also not an error)
             cpqr.compute(V);
-            auto rank = std::min<Eigen::Index>(cpqr.rank(), b);
+            auto rank = std::min<Eigen::Index>(cpqr.rank(), block_size);
             V         = cpqr.householderQ().setLength(rank) * MatrixType::Identity(N, rank);
-            if(V.cols() == b) break;
+            if(V.cols() == block_size) break;
         }
 
         auto block_orthonormalize = [&] {
@@ -557,7 +663,7 @@ namespace grit::form {
             }
         };
 
-        assert(V.cols() == b);
+        assert(V.cols() == block_size);
         if(status.iter == 0) {
             // Make sure we start with ritz vectors in V, so that the first Lanczos loop produces proper residuals.
             if(is_generalized_problem()) {
@@ -572,12 +678,12 @@ namespace grit::form {
                 Eigen::GeneralizedSelfAdjointEigenSolver<MatrixType> es_seed(T1, T2, Eigen::Ax_lBx);
                 T_evecs       = es_seed.eigenvectors();
                 T_evals       = es_seed.eigenvalues();
-                status.optIdx = get_ritz_indices(ritz, 0, b, T_evals);
+                status.optIdx = get_ritz_indices(ritz, 0, block_size, T_evals);
                 MatrixType Z  = T_evecs(Eigen::placeholders::all, status.optIdx);
                 VectorReal Y  = T_evals(status.optIdx);
-                V             = Q * Z;  // Now V has b columns mixed according to the selected columns in T_evecs
-                AV            = AQ * Z; // Now AV has b columns mixed according to the selected columns in T_evecs
-                BV            = BQ * Z; // Now BV has b columns mixed according to the selected columns in T_evecs
+                V             = Q * Z;  // Now V has block_size columns mixed according to the selected columns in T_evecs
+                AV            = AQ * Z; // Now AV has block_size columns mixed according to the selected columns in T_evecs
+                BV            = BQ * Z; // Now BV has block_size columns mixed according to the selected columns in T_evecs
 
                 RealScalar min_sep =
                     T_evals.size() <= 1 ? RealScalar{1} : (T_evals.tail(T_evals.size() - 1) - T_evals.head(T_evals.size() - 1)).cwiseAbs().minCoeff();
@@ -594,7 +700,7 @@ namespace grit::form {
                 block_orthonormalize();
 
                 std::tie(S, status.rNorms) = get_residuals(Y, AV, BV);
-                status.eigVal              = Y.topRows(nev); // Make sure we only take nev values here. In general, nev <= b
+                status.eigVal              = Y.topRows(nev); // Make sure we only take nev values here. In general, nev <= block_size
             } else {
                 block_orthonormalize();
                 Q  = V;
@@ -604,15 +710,15 @@ namespace grit::form {
                 Eigen::SelfAdjointEigenSolver<MatrixType> es(T);
                 T_evecs                    = es.eigenvectors();
                 T_evals                    = es.eigenvalues();
-                status.optIdx              = get_ritz_indices(ritz, 0, b, T_evals);
+                status.optIdx              = get_ritz_indices(ritz, 0, block_size, T_evals);
                 MatrixType Z               = T_evecs(Eigen::placeholders::all, status.optIdx);
                 VectorReal Y               = T_evals(status.optIdx);
-                V                          = Q * Z; // Now V has b columns mixed according to the selected columns in T_evecs
+                V                          = Q * Z; // Now V has block_size columns mixed according to the selected columns in T_evecs
                 AV                         = AQ * Z;
                 BV                         = V;
                 BQ                         = Q;
                 std::tie(S, status.rNorms) = get_residuals(Y, AV, V);
-                status.eigVal              = Y.topRows(nev); // Make sure we only take nev values here. In general, nev <= b
+                status.eigVal              = Y.topRows(nev); // Make sure we only take nev values here. In general, nev <= block_size
 
                 auto A_max_abs          = T_evals.cwiseAbs().maxCoeff();
                 auto A_min_abs          = T_evals.cwiseAbs().minCoeff();
@@ -620,8 +726,9 @@ namespace grit::form {
                 status.op_norm_estimate = std::max({A_max_abs, AQ.norm() / Q.norm(), RealScalar{1}});
             }
         }
-        status.rNorms_init = status.rNorms;
-        assert(V.cols() == b);
+        status.rNorms_init      = status.rNorms;
+        status.op_norm_estimate = get_op_norm_estimate();
+        assert(V.cols() == block_size);
         assert_allFinite(V);
         last_log_time.tic();
     }
@@ -651,10 +758,10 @@ namespace grit::form {
     template<typename Scalar>
     void base<Scalar>::extractRitzVectors() {
         if(status.stopReason != StopReason::none) return;
-        if(T_evals.size() < b) return;
+        if(T_evals.size() < block_size) return;
 
-        Eigen::Index k     = std::min(maxPrevBlocks * b, T_evals.size());
-        Eigen::Index nritz = std::max({nev, b, k});
+        Eigen::Index k     = std::min(maxPrevBlocks * block_size, T_evals.size());
+        Eigen::Index nritz = std::max({nev, block_size, k});
 
         status.optIdx = get_ritz_indices(ritz, 0, nritz, T_evals);
 
@@ -677,12 +784,12 @@ namespace grit::form {
         K_prev = K;
         K      = V.leftCols(k);
 
-        if(k > b) {
-            V.conservativeResize(Eigen::NoChange, b);
-            AV.conservativeResize(Eigen::NoChange, b);
-            BV.conservativeResize(Eigen::NoChange, b);
-            S.conservativeResize(Eigen::NoChange, b);
-            status.rNorms.conservativeResize(b);
+        if(k > block_size) {
+            V.conservativeResize(Eigen::NoChange, block_size);
+            AV.conservativeResize(Eigen::NoChange, block_size);
+            BV.conservativeResize(Eigen::NoChange, block_size);
+            S.conservativeResize(Eigen::NoChange, block_size);
+            status.rNorms.conservativeResize(block_size);
         }
 
         if(status.rNorms_init.size() != status.rNorms.size()) status.rNorms_init = status.rNorms;
@@ -900,9 +1007,7 @@ namespace grit::form {
         V  = Q * Z_ref;
         AQ = this->AQ * Z_ref;
 
-        if(use_rayleigh_quotients_instead_of_evals) {
-            Y = (V.adjoint() * AQ).diagonal().real();
-        }
+        if(use_rayleigh_quotients_instead_of_evals) { Y = (V.adjoint() * AQ).diagonal().real(); }
 
         std::tie(S, rNorms) = get_residuals(Y, AQ, V);
     }
@@ -939,47 +1044,56 @@ namespace grit::form {
 
         adjust_inner_tolerance(S);
         adjust_residual_correction_type();
+        if(residual_correction_type == ResidualCorrectionType::AUTO) auto_residual_correction.step_time_start = status.time_elapsed.get_time();
     }
 
     template<typename Scalar>
     void base<Scalar>::adjust_inner_tolerance([[maybe_unused]] const Eigen::Ref<const MatrixType> &S) {
         if(!use_adaptive_inner_tolerance) return;
         if(status.num_iters_inner_prev == 0) return;
-        // auto Snorm = S.leftCols(nev).colwise().norm().minCoeff();
 
-        auto set_cfg = [&]() {
-            auto oldtol = std::max(eps, inner_tol);
-            auto oldits = status.num_iters_inner_prev;
+        const auto oldtol = std::max(eps, inner_tol);
+        const auto oldits = status.num_iters_inner_prev;
 
-            inner_tol = oldtol; // std::min<RealScalar>({oldtol, std::sqrt(Snorm)});
-            if(status.iter > 0) {
-                if(oldits < 100l) inner_tol *= std::sqrt(half);
-                if(oldits > inner_iters / 2) inner_tol *= std::sqrt(RealScalar{2});
+        const RealScalar inner_tol_min         = eps;
+        const RealScalar inner_tol_max         = RealScalar{0.75f};
+        const RealScalar inner_tol_decr_factor = RealScalar{0.5f};
+        const RealScalar inner_tol_incr_factor = RealScalar{2};
+        const RealScalar slow_rnorm_ratio      = RealScalar{0.9f};
+        const RealScalar fast_rnorm_ratio      = RealScalar{0.5f};
+
+        const Eigen::Index low_inner_iters  = std::max<Eigen::Index>(1, inner_max_iters / 20);
+        const Eigen::Index high_inner_iters = std::max<Eigen::Index>(low_inner_iters + 1, inner_max_iters / 2);
+
+        bool       has_rnorm_progress = false;
+        RealScalar rnorm_ratio         = RealScalar{1};
+        if(status.rNorms_history.size() >= 2) {
+            const auto &prev = status.rNorms_history[status.rNorms_history.size() - 2];
+            const auto &curr = status.rNorms_history[status.rNorms_history.size() - 1];
+            const auto  rows = std::min(nev, std::min(prev.size(), curr.size()));
+            if(rows > 0) {
+                VectorReal denom    = prev.topRows(rows).cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
+                VectorReal ratio    = curr.topRows(rows).cwiseQuotient(denom);
+                rnorm_ratio         = ratio.maxCoeff();
+                has_rnorm_progress = std::isfinite(rnorm_ratio);
             }
+        }
 
-            inner_tol = std::clamp(inner_tol, eps, RealScalar{0.75f});
-            // RealScalar maxiters = RealScalar{50l} / inner_tol;
-            // inner_iters = std::clamp(safe_cast<long>(maxiters), 50l, 200l);
+        RealScalar next_tol = oldtol;
+        if(status.iter > 0) {
+            if(has_rnorm_progress) {
+                if(rnorm_ratio > slow_rnorm_ratio) {
+                    if(oldits < low_inner_iters) next_tol = oldtol * inner_tol_decr_factor;
+                } else if(rnorm_ratio < fast_rnorm_ratio) {
+                    if(oldits > high_inner_iters) next_tol = oldtol * inner_tol_incr_factor;
+                }
+            } else {
+                if(oldits < low_inner_iters) next_tol = oldtol * inner_tol_decr_factor;
+                if(oldits > high_inner_iters) next_tol = oldtol * inner_tol_incr_factor;
+            }
+        }
 
-            // RealScalar tol_rnorm = std::pow(Snorm, RealScalar{0.382f});
-            // RealScalar tol_rnorm = RealScalar{1e-4f}; // std::pow(Snorm, RealScalar{0.5f});
-            // RealScalar tol_old   = inner_tol;
-            // RealScalar tol_min = RealScalar{0.1f}; // std::sqrt(eps);
-            // RealScalar tol_max = RealScalar{0.1f};
-            // RealScalar tol_min = RealScalar{1e-20f}; // std::sqrt(eps);
-            // RealScalar tol_max = RealScalar{1e-1f};
-
-            // if(status.iter > 0) {
-            //     if(oldits < 50) inner_tol = std::min(inner_tol, oldtol * half);
-            //     if(oldits > inner_iters / 2) inner_tol *= RealScalar{2};
-            // }
-            // inner_tol = std::clamp(tol_rnorm, tol_min, tol_max);
-
-            // inner_tol = RealScalar{1e-2f};
-            if(inner_tol != oldtol and eiglog and oldits > 0) eiglog->info("tol {:.2e} -> {:.2e} oldits {}", oldtol, inner_tol, oldits);
-        };
-
-        set_cfg();
+        inner_tol = std::clamp(next_tol, inner_tol_min, inner_tol_max);
     }
 
     template<typename Scalar>
@@ -1040,29 +1154,148 @@ namespace grit::form {
 
     template<typename Scalar>
     bool base<Scalar>::rNorms_have_saturated() {
-        if(tol_stall_rnorm <= RealScalar{0}) return false;
+        if(sat_rnorm_threshold <= RealScalar{0}) return false;
         const auto min_history_size = std::min<size_t>(status.max_history_size, size_t{2});
         if(status.iter < static_cast<Eigen::Index>(min_history_size)) return false;
         if(status.rNorms_history.size() < static_cast<size_t>(min_history_size)) return false;
 
         VectorReal &vals           = status.rNorms;
         VectorReal  stds           = get_standard_deviations(status.rNorms_history, false);
-        VectorReal  threshold      = tol_stall_rnorm * vals.cwiseMax(VectorReal::Constant(vals.size(), std::numeric_limits<RealScalar>::min()));
+        VectorReal  threshold      = sat_rnorm_threshold * vals.cwiseMax(VectorReal::Constant(vals.size(), std::numeric_limits<RealScalar>::min()));
         VectorIdxT  stds_saturated = (stds.array() < threshold.array()).template cast<Eigen::Index>();
         return stds_saturated.all();
     }
 
     template<typename Scalar>
     bool base<Scalar>::eigVals_have_saturated() {
-        if(tol_stall_evals <= RealScalar{0}) return false;
+        if(sat_eigval_threshold <= RealScalar{0}) return false;
         const auto min_history_size = std::min<size_t>(status.max_history_size, size_t{2});
         if(status.iter < static_cast<Eigen::Index>(min_history_size)) return false;
         if(status.eigVals_history.size() < static_cast<size_t>(min_history_size)) return false;
         VectorReal vals           = status.eigVal.cwiseAbs().array() + eps;
         VectorReal stds           = get_standard_deviations(status.eigVals_history, false);
         VectorReal rels           = stds.cwiseQuotient(vals);
-        VectorIdxT rels_saturated = (rels.array() < tol_stall_evals).template cast<Eigen::Index>();
+        VectorIdxT rels_saturated = (rels.array() < sat_eigval_threshold).template cast<Eigen::Index>();
         return rels_saturated.all();
+    }
+
+    template<typename Scalar>
+    bool base<Scalar>::rNorms_saturated_for_auto_jd_start() {
+        return get_auto_rnorm_saturation_metric().saturated;
+    }
+
+    template<typename Scalar>
+    bool base<Scalar>::eigVals_saturated_for_auto_jd_start() {
+        return get_auto_eigval_saturation_metric().saturated;
+    }
+
+    template<typename Scalar>
+    bool base<Scalar>::auto_jd_start_ready() {
+        return get_auto_saturation_status().ready || (auto_jd_start_rnorm_threshold > RealScalar{0} && status.rNorms.size() > 0 &&
+                                                      get_auto_rnorm_scalar(status.rNorms) <= auto_jd_start_rnorm_threshold);
+    }
+
+    template<typename Scalar>
+    void base<Scalar>::update_auto_residual_correction_state() {
+        if(residual_correction_type != ResidualCorrectionType::AUTO) return;
+
+        auto method_name = [](ResidualCorrectionType method) -> std::string_view {
+            switch(method) {
+                case ResidualCorrectionType::CHEAP_OLSEN: return "CHEAP_OLSEN";
+                case ResidualCorrectionType::JACOBI_DAVIDSON: return "JACOBI_DAVIDSON";
+                case ResidualCorrectionType::NONE: return "NONE";
+                case ResidualCorrectionType::FULL_OLSEN: return "FULL_OLSEN";
+                case ResidualCorrectionType::AUTO: return "AUTO";
+            }
+            return "NONE";
+        };
+
+        auto step_seconds = std::max(0.0, status.time_elapsed.get_time() - auto_residual_correction.step_time_start);
+
+        if(auto_residual_correction.active == ResidualCorrectionType::JACOBI_DAVIDSON &&
+           auto_residual_correction.step_method == ResidualCorrectionType::CHEAP_OLSEN) {
+            auto rnorm             = get_auto_rnorm_scalar(status.rNorms);
+            auto rnorm_squared     = rnorm * rnorm;
+            auto op_norm_estimate  = get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
+            auto probe_scale_floor = eps * op_norm_estimate;
+            auto probe_scale       = std::max(rnorm_squared, probe_scale_floor);
+            auto improvement       = get_auto_probe_eigval_improvement();
+            auto threshold         = auto_cheap_probe_factor * probe_scale;
+            bool keep_cheap        = improvement > threshold;
+
+            if(keep_cheap) {
+                auto_residual_correction.active               = ResidualCorrectionType::CHEAP_OLSEN;
+                auto_residual_correction.dwell                = 0;
+                auto_residual_correction.jd_steps_since_probe = 0;
+                auto_residual_correction.jd_to_cheap_switch_iters.push_back(status.iter);
+            } else {
+                auto_residual_correction.active               = ResidualCorrectionType::JACOBI_DAVIDSON;
+                auto_residual_correction.jd_steps_since_probe = 0;
+            }
+
+            if(eiglog) {
+                eiglog->debug(
+                    "auto residual correction cheap probe: {} -> {} | eigval {:.16e}->{:.16e} improvement {:.6e} threshold {:.6e} factor {:.6e} "
+                    "rnorm {:.6e} rnorm2 {:.6e} scale_floor {:.6e} interval {} decision {} | mv {} outer {} inner {} inner_iters {} jdops {} time {:.6e}s",
+                    method_name(ResidualCorrectionType::JACOBI_DAVIDSON), method_name(ResidualCorrectionType::CHEAP_OLSEN),
+                    status.oldVal.size() > 0 ? status.oldVal(0) : RealScalar{0}, status.eigVal.size() > 0 ? status.eigVal(0) : RealScalar{0}, improvement,
+                    threshold, auto_cheap_probe_factor, rnorm, rnorm_squared, probe_scale_floor, auto_cheap_probe_interval,
+                    keep_cheap ? "keep CHEAP_OLSEN" : "return JACOBI_DAVIDSON", status.num_matvecs + status.num_matvecs_inner, status.num_matvecs,
+                    status.num_matvecs_inner, status.num_iters_inner, status.num_jdops_inner, step_seconds);
+            }
+            return;
+        }
+
+        if(auto_residual_correction.step_method == ResidualCorrectionType::JACOBI_DAVIDSON) {
+            auto_residual_correction.active = ResidualCorrectionType::JACOBI_DAVIDSON;
+            auto_residual_correction.jd_steps_since_probe++;
+            if(eiglog) {
+                eiglog->trace("auto residual correction jd step: steps since cheap probe {}/{}", auto_residual_correction.jd_steps_since_probe,
+                              auto_cheap_probe_interval);
+            }
+            return;
+        }
+
+        auto_residual_correction.active = ResidualCorrectionType::CHEAP_OLSEN;
+        auto_residual_correction.dwell++;
+        auto saturation             = get_auto_saturation_status();
+        auto rnorm                  = get_auto_rnorm_scalar(status.rNorms);
+        bool jd_start_rnorm_enabled = auto_jd_start_rnorm_threshold > RealScalar{0};
+        bool jd_start_rnorm_ready   = jd_start_rnorm_enabled && status.rNorms.size() > 0 && rnorm <= auto_jd_start_rnorm_threshold;
+        bool jd_start_ready         = saturation.ready || jd_start_rnorm_ready;
+        if(eiglog) {
+            eiglog->trace(
+                "auto residual correction start check: cheap dwell {}/{} ready {} | eigval sat {} ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} "
+                "value {:.6e} hist {} enough {} | rnorm sat {} ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} value {:.6e} hist {} "
+                "enough {} | jd start rnorm ready {} threshold {:.6e} value {:.6e}",
+                auto_residual_correction.dwell, auto_min_dwell_iters, jd_start_ready, saturation.eigval.saturated, saturation.eigval.ratio,
+                saturation.eigval.threshold, saturation.eigval.stddev, saturation.eigval.scale, saturation.eigval.value, saturation.eigval.history_size,
+                saturation.eigval.enough_history, saturation.rnorm.saturated, saturation.rnorm.ratio, saturation.rnorm.threshold, saturation.rnorm.stddev,
+                saturation.rnorm.scale, saturation.rnorm.value, saturation.rnorm.history_size, saturation.rnorm.enough_history, jd_start_rnorm_ready,
+                auto_jd_start_rnorm_threshold, rnorm);
+        }
+        if(auto_residual_correction.dwell < auto_min_dwell_iters && !jd_start_rnorm_ready) return;
+
+        if(jd_start_ready) {
+            auto_residual_correction.active               = ResidualCorrectionType::JACOBI_DAVIDSON;
+            auto_residual_correction.dwell                = 0;
+            auto_residual_correction.jd_steps_since_probe = 0;
+            auto_residual_correction.cheap_to_jd_switch_iters.push_back(status.iter);
+
+            if(eiglog) {
+                eiglog->debug(
+                    "auto residual correction switch: {} -> {} | reason {} | eigval ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} value {:.6e} | "
+                    "rnorm ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} value {:.6e} | probe interval {} probe factor {:.6e} | "
+                    "jd start rnorm threshold {:.6e} rnorm {:.6e} | "
+                    "mv {} outer {} inner {} inner_iters {} jdops {} time {:.6e}s",
+                    method_name(ResidualCorrectionType::CHEAP_OLSEN), method_name(ResidualCorrectionType::JACOBI_DAVIDSON),
+                    jd_start_rnorm_ready ? "rnorm threshold" : "saturation", saturation.eigval.ratio, saturation.eigval.threshold, saturation.eigval.stddev,
+                    saturation.eigval.scale, saturation.eigval.value, saturation.rnorm.ratio, saturation.rnorm.threshold, saturation.rnorm.stddev,
+                    saturation.rnorm.scale, saturation.rnorm.value, auto_cheap_probe_interval, auto_cheap_probe_factor, auto_jd_start_rnorm_threshold, rnorm,
+                    status.num_matvecs + status.num_matvecs_inner, status.num_matvecs, status.num_matvecs_inner, status.num_iters_inner, status.num_jdops_inner,
+                    step_seconds);
+            }
+        }
     }
 
     template<typename Scalar>
@@ -1082,12 +1315,16 @@ namespace grit::form {
         denom            = denom.cwiseMax(VectorReal::Constant(denom.size(), std::numeric_limits<RealScalar>::min()));
         status.relDiff   = status.absDiff.cwiseQuotient(denom);
 
+        status.op_norm_estimate = get_op_norm_estimate();
+
         status.rNorms_history.push_back(status.rNorms.topRows(nev));
         status.eigVals_history.push_back(status.eigVal.topRows(nev));
         status.matvecs_history.push_back(status.num_matvecs + status.num_matvecs_inner);
         while(status.rNorms_history.size() > status.max_history_size) status.rNorms_history.pop_front();
         while(status.eigVals_history.size() > status.max_history_size) status.eigVals_history.pop_front();
         while(status.matvecs_history.size() > status.max_history_size) status.matvecs_history.pop_front();
+
+        update_auto_residual_correction_state();
 
         if(eigVals_have_saturated())
             status.saturation_count_eigVal++;
@@ -1126,16 +1363,14 @@ namespace grit::form {
         }
 
         if(max_iters >= 0 && status.iter + 1 >= max_iters) {
-            status.stopMessage.emplace_back(
-                fmt::format("iters ({}) >= maxiter ({}) | mv {} | {:.3e} s", status.iter + 1, max_iters, status.num_matvecs_total,
-                            status.time_elapsed.get_time()));
+            status.stopMessage.emplace_back(fmt::format("iters ({}) >= maxiter ({}) | mv {} | {:.3e} s", status.iter + 1, max_iters, status.num_matvecs_total,
+                                                        status.time_elapsed.get_time()));
             status.stopReason |= StopReason::max_iters;
         }
 
         if(max_matvecs >= 0 && status.num_matvecs_total >= max_matvecs) {
             status.stopMessage.emplace_back(
-                fmt::format("num_matvecs_total ({}) >= max_matvecs ({}) | {:.3e} s", status.num_matvecs_total, max_matvecs,
-                            status.time_elapsed.get_time()));
+                fmt::format("num_matvecs_total ({}) >= max_matvecs ({}) | {:.3e} s", status.num_matvecs_total, max_matvecs, status.time_elapsed.get_time()));
             status.stopReason |= StopReason::max_matvecs;
         }
 
@@ -1145,17 +1380,16 @@ namespace grit::form {
                                                         status.iter + 1, status.num_matvecs_total, status.time_elapsed.get_time()));
             status.stopReason |= StopReason::ritz_value_stalled;
             status.stopReason |= StopReason::ritz_residual_stalled;
-        }
-        else if(status.saturation_count_eigVal >= status.saturation_count_max * 2) {
+        } else if(status.saturation_count_eigVal >= status.saturation_count_max * 2) {
             status.stopMessage.emplace_back(fmt::format("saturation_count eigVal {} >= saturation_count_max ({}) * 2 | it {} | mv {} | {:.3e} s",
-                                                        status.saturation_count_eigVal, status.saturation_count_max, status.iter + 1,
-                                                        status.num_matvecs_total, status.time_elapsed.get_time()));
+                                                        status.saturation_count_eigVal, status.saturation_count_max, status.iter + 1, status.num_matvecs_total,
+                                                        status.time_elapsed.get_time()));
             status.stopReason |= StopReason::ritz_value_stalled;
         } else if(status.saturation_count_eigVal > 2 && status.saturation_count_rNorm >= status.saturation_count_max * 2) {
             // Probably eigVal is stuck in some kind of cycle.
             status.stopMessage.emplace_back(fmt::format("saturation_count rNorm {} >= saturation_count_max ({}) * 2 | it {} | mv {} | {:.3e} s",
-                                                        status.saturation_count_rNorm, status.saturation_count_max, status.iter + 1,
-                                                        status.num_matvecs_total, status.time_elapsed.get_time()));
+                                                        status.saturation_count_rNorm, status.saturation_count_max, status.iter + 1, status.num_matvecs_total,
+                                                        status.time_elapsed.get_time()));
             status.stopReason |= StopReason::ritz_residual_stalled;
         }
     }
@@ -1188,9 +1422,8 @@ namespace grit::form {
         std::string innerMsg;
         if(status.num_matvecs_inner > 0 || status.num_jdops_inner > 0 || status.num_precond_inner > 0) {
             innerMsg = fmt::format("[inner: ({}) mv {:5} jd {:5} pc {:5} err {:.2e} tol {:.2e} mv {:.1e}s jd {:.1e}s pc {:.1e}s] ", rCorrMsg,
-                                   status.num_matvecs_inner, status.num_jdops_inner, status.num_precond_inner, status.inner_error_last,
-                                   status.inner_tol_last, status.time_matvecs_inner.get_time(), status.time_jdops_inner.get_time(),
-                                   status.time_precond_inner.get_time());
+                                   status.num_matvecs_inner, status.num_jdops_inner, status.num_precond_inner, status.inner_error_last, status.inner_tol_last,
+                                   status.time_matvecs_inner.get_time(), status.time_jdops_inner.get_time(), status.time_precond_inner.get_time());
         }
 
         RealScalar orthError = RealScalar{0};
@@ -1207,22 +1440,23 @@ namespace grit::form {
             evMsg          = fmt::format(" {} / {}", format_vector(VAV, "{:.16f}"), format_vector(VBV, "{:.16f}"));
         }
 
-        bool                      log_long_time    = last_log_time.get_lap() > 10.0;
-        bool                      log_every_ten_it = (status.iter + 1) % 10 == 0;
-        spdlog::level::level_enum loglevel         = spdlog::level::debug;
-        if(log_every_ten_it || log_long_time) loglevel = spdlog::level::info;
+        auto op_norm_estimate              = get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
+        bool log_long_time                 = last_log_time.get_lap() > 10.0;
+        bool log_every_ten_it              = status.iter > 0 && status.iter % 10 == 0;
+        spdlog::level::level_enum loglevel = spdlog::level::trace;
+        if(log_every_ten_it || log_long_time) loglevel = spdlog::level::debug;
         if(!eiglog->should_log(loglevel)) return;
         [[maybe_unused]] auto lap = last_log_time.restart_lap();
 
         eiglog->log(loglevel,
                     "it {:3} mv {:3} pc {:3} t {:.1e}s dim {} {}eigVal {}{} "
                     "oErr {:.3e} rNorms {} rNormTol {} tol {:.2e} (rel {:.2e}) "
-                    "({:9.2e}/mv) sat {}:{}/{} col {:2} b {} ritz {} "
+                    "({:9.2e}/mv) sat {}:{}/{} col {:2} block_size {} ritz {} "
                     "op norm {:.2e} cond {:.2e} sens {:.2e}{}",
-                    status.iter + 1, status.num_matvecs, status.num_precond, status.time_elapsed.get_time(), N, innerMsg,
+                    status.iter, status.num_matvecs, status.num_precond, status.time_elapsed.get_time(), N, innerMsg,
                     format_vector(VectorReal(status.eigVal), "{:.16f}"), evMsg, orthError, format_vector(VectorReal(status.rNorms)),
-                    format_vector(rNormTols(), "{:.3e}"), abstol, reltol, get_rNorms_log10_change_per_matvec(), status.saturation_count_eigVal,
-                    status.saturation_count_rNorm, status.saturation_count_max, Q.cols(), b, enum2sv(ritz), status.op_norm_estimate, status.condition,
+                    format_vector(rNormTols(), "{:.3e}"), tol, tol_rnorm_relative, get_rNorms_log10_change_per_matvec(), status.saturation_count_eigVal,
+                    status.saturation_count_rNorm, status.saturation_count_max, Q.cols(), block_size, enum2sv(ritz), op_norm_estimate, status.condition,
                     status.sensitivity, msg_rnorm_gap);
     }
 
@@ -1233,33 +1467,34 @@ namespace grit::form {
 
     template<typename Scalar>
     void base<Scalar>::clear_result() {
-        status  = Status{};
-        qBlocks = 0;
-        T       = MatrixType{};
-        Aproj   = MatrixType{};
-        Bproj   = MatrixType{};
-        W       = MatrixType{};
-        Q       = MatrixType{};
-        AQ      = MatrixType{};
-        BQ      = MatrixType{};
-        V       = MatrixType{};
-        AV      = MatrixType{};
-        BV      = MatrixType{};
-        V_prev  = MatrixType{};
-        K       = MatrixType{};
-        K_prev  = MatrixType{};
-        S       = MatrixType{};
-        S1      = MatrixType{};
-        S2      = MatrixType{};
-        D       = MatrixType{};
-        M       = MatrixType{};
-        AM      = MatrixType{};
-        BM      = MatrixType{};
-        T_evals = VectorReal{};
-        T1      = MatrixType{};
-        T2      = MatrixType{};
-        T_evecs = MatrixType{};
-        hhqr    = Eigen::HouseholderQR<MatrixType>{};
+        status                   = Status{};
+        qBlocks                  = 0;
+        T                        = MatrixType{};
+        Aproj                    = MatrixType{};
+        Bproj                    = MatrixType{};
+        W                        = MatrixType{};
+        Q                        = MatrixType{};
+        AQ                       = MatrixType{};
+        BQ                       = MatrixType{};
+        V                        = MatrixType{};
+        AV                       = MatrixType{};
+        BV                       = MatrixType{};
+        V_prev                   = MatrixType{};
+        K                        = MatrixType{};
+        K_prev                   = MatrixType{};
+        S                        = MatrixType{};
+        S1                       = MatrixType{};
+        S2                       = MatrixType{};
+        D                        = MatrixType{};
+        M                        = MatrixType{};
+        AM                       = MatrixType{};
+        BM                       = MatrixType{};
+        T_evals                  = VectorReal{};
+        T1                       = MatrixType{};
+        T2                       = MatrixType{};
+        T_evecs                  = MatrixType{};
+        hhqr                     = Eigen::HouseholderQR<MatrixType>{};
+        auto_residual_correction = AutoResidualCorrectionState{};
     }
 
     template<typename Scalar>
@@ -1309,8 +1544,8 @@ namespace grit::form {
         RealScalar finalTol  = std::max({t_abs, normTol, maskTol}) * RealScalar{10};
 
         if(orthError > finalTol && eiglog)
-            eiglog->warn("{}:{}: {}: matrix is not L2-orthonormal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
-                         location.function_name(), orthError, finalTol);
+            eiglog->warn("{}:{}: {}: matrix is not L2-orthonormal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(), location.function_name(),
+                         orthError, finalTol);
         if(orthError > RealScalar{1000} * finalTol)
             throw std::runtime_error(fmt::format("{}:{}: {}: matrix is not L2-orthonormal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
                                                  location.function_name(), orthError, finalTol));
@@ -1334,8 +1569,8 @@ namespace grit::form {
             eiglog->warn("{}:{}: {}: matrices are not L2-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
                          location.function_name(), orthError, finalTol);
         if(orthError > RealScalar{1000} * finalTol)
-            throw std::runtime_error(fmt::format("{}:{}: {}: matrices are not L2-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(),
-                                                 location.line(), location.function_name(), orthError, finalTol));
+            throw std::runtime_error(fmt::format("{}:{}: {}: matrices are not L2-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
+                                                 location.function_name(), orthError, finalTol));
     }
 
     template<typename Scalar>
@@ -1343,8 +1578,8 @@ namespace grit::form {
                                              const std::source_location &location) {
         if(X.cols() == 0) return;
         if(X.cols() != B_X.cols() || X.rows() != B_X.rows())
-            throw std::runtime_error(fmt::format("{}:{}: {}: X and B_X have incompatible dimensions", location.file_name(), location.line(),
-                                                 location.function_name()));
+            throw std::runtime_error(
+                fmt::format("{}:{}: {}: X and B_X have incompatible dimensions", location.file_name(), location.line(), location.function_name()));
 
         MatrixType G1        = X.adjoint() * B_X;
         MatrixType G2        = B_X.adjoint() * X;
@@ -1356,21 +1591,21 @@ namespace grit::form {
         RealScalar symmError = (Gram_symm - I).norm();
         RealScalar skewError = Gram_skew.norm();
 
-        RealScalar xnorm   = X.norm();
-        RealScalar bxnorm  = B_X.norm();
-        RealScalar bnorm   = std::isfinite(status.op_norm_estimate) ? status.op_norm_estimate : RealScalar{1};
-        RealScalar t_abs   = orthTol * static_cast<RealScalar>(X.cols()) * (xnorm + bxnorm);
-        RealScalar bmTol   = orthTol * static_cast<RealScalar>(X.cols()) * bnorm;
-        RealScalar maskTol = std::isfinite(m.maskTol) ? m.maskTol : orthTol;
+        RealScalar xnorm    = X.norm();
+        RealScalar bxnorm   = B_X.norm();
+        RealScalar bnorm    = std::isfinite(status.op_norm_estimate) ? status.op_norm_estimate : RealScalar{1};
+        RealScalar t_abs    = orthTol * static_cast<RealScalar>(X.cols()) * (xnorm + bxnorm);
+        RealScalar bmTol    = orthTol * static_cast<RealScalar>(X.cols()) * bnorm;
+        RealScalar maskTol  = std::isfinite(m.maskTol) ? m.maskTol : orthTol;
         RealScalar finalTol = std::max({t_abs, orthTol, bmTol, maskTol}) * RealScalar{10};
 
         RealScalar error = std::max({orthError, symmError, skewError});
         if(error > finalTol && eiglog)
-            eiglog->warn("{}:{}: {}: matrix is not B-orthonormal: error {:.5e} > tol {:.5e} | orth {:.5e} symm {:.5e} skew {:.5e}",
-                         location.file_name(), location.line(), location.function_name(), error, finalTol, orthError, symmError, skewError);
+            eiglog->warn("{}:{}: {}: matrix is not B-orthonormal: error {:.5e} > tol {:.5e} | orth {:.5e} symm {:.5e} skew {:.5e}", location.file_name(),
+                         location.line(), location.function_name(), error, finalTol, orthError, symmError, skewError);
         if(error > RealScalar{1000} * finalTol)
-            throw std::runtime_error(fmt::format("{}:{}: {}: matrix is not B-orthonormal: error {:.5e} > tol {:.5e}", location.file_name(),
-                                                 location.line(), location.function_name(), error, finalTol));
+            throw std::runtime_error(fmt::format("{}:{}: {}: matrix is not B-orthonormal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
+                                                 location.function_name(), error, finalTol));
     }
 
     template<typename Scalar>
@@ -1389,11 +1624,11 @@ namespace grit::form {
         RealScalar finalTol  = std::max({t_abs, orthTol, bmTol, maskTol}) * RealScalar{10};
 
         if(orthError > finalTol && eiglog)
-            eiglog->warn("{}:{}: {}: matrices are not B-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
-                         location.function_name(), orthError, finalTol);
+            eiglog->warn("{}:{}: {}: matrices are not B-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(), location.function_name(),
+                         orthError, finalTol);
         if(orthError > RealScalar{1000} * finalTol)
-            throw std::runtime_error(fmt::format("{}:{}: {}: matrices are not B-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(),
-                                                 location.line(), location.function_name(), orthError, finalTol));
+            throw std::runtime_error(fmt::format("{}:{}: {}: matrices are not B-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
+                                                 location.function_name(), orthError, finalTol));
     }
 
     template<typename Scalar>
@@ -1443,8 +1678,10 @@ namespace grit::form {
             bool orth_converged = m.orthError < m.orthTol;
             if(orth_converged || Y.cols() == 0) break;
         }
-        if(eiglog && eiglog->should_log(spdlog::level::trace))
-            eiglog->trace("rep {} orthError after l2 orthogonalization: {:.3e} | orthTol {:.3e}", rep, m.orthError, m.orthTol);
+        if constexpr(settings::debug_ortho) {
+            if(eiglog && eiglog->should_log(spdlog::level::trace))
+                eiglog->trace("rep {} orthError after l2 orthogonalization: {:.3e} | orthTol {:.3e}", rep, m.orthError, m.orthTol);
+        }
         assert_l2_orthogonal(X, Y, m);
         AY = MultA(Y);
     }
@@ -1513,8 +1750,8 @@ namespace grit::form {
         if(std::isnan(m.orthTol)) m.orthTol = orthTol * static_cast<RealScalar>(X.cols());
         m.orthTol = std::max(m.orthTol, eps * std::sqrt(status.op_norm_estimate));
         if(!std::isfinite(m.orthTol))
-            throw std::runtime_error(fmt::format("block_bm_orthogonalize: invalid orthTol {:.3e} | op_norm_estimate {:.3e}", m.orthTol,
-                                                 status.op_norm_estimate));
+            throw std::runtime_error(
+                fmt::format("block_bm_orthogonalize: invalid orthTol {:.3e} | op_norm_estimate {:.3e}", m.orthTol, status.op_norm_estimate));
 
         bool has_refreshed_by = false;
         if(m.refresh_by || Y.size() != BY.size()) {
@@ -1549,8 +1786,8 @@ namespace grit::form {
         if(std::isfinite(m.orthTol) && std::max(m.symmError, m.skewError) < m.orthTol) {
             if(has_refreshed_by || m.refresh_by || Y.size() != AY.size()) AY = MultA(Y);
             if(eiglog && eiglog->should_log(spdlog::level::trace))
-                eiglog->trace("block_bm_orthogonalize: no need: orthError {:.4e} symmError {:.4e} skewError {:.4e} Eyy {:.4e} orthTol {:.4e}",
-                              m.orthError, m.symmError, m.skewError, Eyy, m.orthTol);
+                eiglog->trace("block_bm_orthogonalize: no need: orthError {:.4e} symmError {:.4e} skewError {:.4e} Eyy {:.4e} orthTol {:.4e}", m.orthError,
+                              m.symmError, m.skewError, Eyy, m.orthTol);
             return;
         }
         m.refresh_by = false;
@@ -1578,8 +1815,8 @@ namespace grit::form {
             }
         }
         if(eiglog && eiglog->should_log(spdlog::level::trace))
-            eiglog->trace("rep {} orthError after bm orthogonalization: {:.3e} | symm {:.3e} | skew {:.3e} | orthTol {:.3e}", rep, m.orthError,
-                          m.symmError, m.skewError, m.orthTol);
+            eiglog->trace("rep {} orthError after bm orthogonalization: {:.3e} | symm {:.3e} | skew {:.3e} | orthTol {:.3e}", rep, m.orthError, m.symmError,
+                          m.skewError, m.orthTol);
 
         AY = MultA(Y);
         assert_bm_orthogonal(X, BY, m);
@@ -1625,8 +1862,7 @@ namespace grit::form {
             auto       yj   = Y.col(j);
             RealScalar norm = yj.norm();
             if(norm < m.maskTol) {
-                if(eiglog && eiglog->should_log(spdlog::level::trace))
-                    eiglog->trace("masking Y col {} | norm {:.3e} | maskTol {:.3e}", j, norm, m.maskTol);
+                if(eiglog && eiglog->should_log(spdlog::level::trace)) eiglog->trace("masking Y col {} | norm {:.3e} | maskTol {:.3e}", j, norm, m.maskTol);
                 m.mask(j) = 0;
                 yj.setZero();
             }
@@ -1645,8 +1881,7 @@ namespace grit::form {
             auto       yj   = Y.col(j);
             RealScalar norm = yj.norm();
             if(norm < m.maskTol) {
-                if(eiglog && eiglog->should_log(spdlog::level::trace))
-                    eiglog->trace("masking Y col {} | norm {:.3e} | maskTol {:.3e}", j, norm, m.maskTol);
+                if(eiglog && eiglog->should_log(spdlog::level::trace)) eiglog->trace("masking Y col {} | norm {:.3e} | maskTol {:.3e}", j, norm, m.maskTol);
                 m.mask(j) = 0;
                 yj.setZero();
             }
@@ -1703,7 +1938,7 @@ namespace grit::form {
             }
         };
 
-        m.mask = VectorIdxT::Ones(Y.cols());
+        m.mask       = VectorIdxT::Ones(Y.cols());
         m.proj_sum_b = VectorReal::Zero(Y.cols());
         m.scale_log  = VectorReal::Zero(Y.cols());
         if(std::isnan(m.maskTol)) m.maskTol = normTol * static_cast<RealScalar>(Y.cols());
@@ -1722,8 +1957,7 @@ namespace grit::form {
             RealScalar norm   = std::sqrt(std::max<RealScalar>(0, normSq));
             m.Rdiag(j)        = norm;
             if(norm < m.maskTol) {
-                if(eiglog && eiglog->should_log(spdlog::level::trace))
-                    eiglog->trace("masking Y col {} | bm norm {:.3e} | maskTol {:.3e}", j, norm, m.maskTol);
+                if(eiglog && eiglog->should_log(spdlog::level::trace)) eiglog->trace("masking Y col {} | bm norm {:.3e} | maskTol {:.3e}", j, norm, m.maskTol);
                 m.mask(j) = 0;
                 yj.setZero();
                 byj.setZero();
@@ -1738,8 +1972,8 @@ namespace grit::form {
 
         Eigen::Index maxReps = 2;
         for(Eigen::Index rep = 0; rep < maxReps; ++rep) {
-            VectorReal  normSqs = VectorReal::Zero(Y.cols());
-            VectorIdxT  have    = VectorIdxT::Zero(Y.cols());
+            VectorReal normSqs = VectorReal::Zero(Y.cols());
+            VectorIdxT have    = VectorIdxT::Zero(Y.cols());
 
             for(Eigen::Index j = 0; j < Y.cols(); ++j) {
                 if(m.mask(j) == 0) continue;
@@ -1777,9 +2011,9 @@ namespace grit::form {
                     continue;
                 }
 
-                yj  /= norm;
-                byj /= norm;
-                normSqs(j) = std::max<RealScalar>(0, std::real(yj.dot(byj)));
+                yj         /= norm;
+                byj        /= norm;
+                normSqs(j)  = std::max<RealScalar>(0, std::real(yj.dot(byj)));
             }
 
             m.analyze_bm_orthonormality(Y, BY);
@@ -1790,8 +2024,8 @@ namespace grit::form {
                 return;
             }
             if(eiglog && eiglog->should_log(spdlog::level::trace))
-                eiglog->trace("block_bm_orthonormalize: dgks rep {} | orthError {:.4e} symmError {:.4e} skewError {:.4e}", rep, m.orthError,
-                              m.symmError, m.skewError);
+                eiglog->trace("block_bm_orthonormalize: dgks rep {} | orthError {:.4e} symmError {:.4e} skewError {:.4e}", rep, m.orthError, m.symmError,
+                              m.skewError);
             if(m.orthError < m.orthTol) break;
         }
 

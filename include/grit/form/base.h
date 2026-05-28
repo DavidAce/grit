@@ -125,6 +125,34 @@ namespace grit::form {
             OptRitz                   ritz_internal           = OptRitz::NONE;
         };
 
+        struct AutoResidualCorrectionState {
+            ResidualCorrectionType    active               = ResidualCorrectionType::CHEAP_OLSEN;
+            ResidualCorrectionType    step_method          = ResidualCorrectionType::CHEAP_OLSEN;
+            Eigen::Index              dwell                = 0;
+            Eigen::Index              jd_steps_since_probe = 0;
+            double                    step_time_start      = 0.0;
+            std::vector<Eigen::Index> cheap_to_jd_switch_iters;
+            std::vector<Eigen::Index> jd_to_cheap_switch_iters;
+        };
+
+        struct AutoSaturationMetric {
+            bool         enabled        = false;
+            bool         enough_history = false;
+            bool         saturated      = false;
+            Eigen::Index history_size   = 0;
+            RealScalar   value          = RealScalar{0};
+            RealScalar   stddev         = std::numeric_limits<RealScalar>::infinity();
+            RealScalar   scale          = RealScalar{1};
+            RealScalar   ratio          = std::numeric_limits<RealScalar>::infinity();
+            RealScalar   threshold      = RealScalar{0};
+        };
+
+        struct AutoSaturationStatus {
+            AutoSaturationMetric eigval;
+            AutoSaturationMetric rnorm;
+            bool                 ready = false;
+        };
+
         protected:
         spdlog::level::level_enum logLevel = spdlog::level::warn;
         Logger::LoggerHandle      eiglog;
@@ -143,20 +171,20 @@ namespace grit::form {
         Status       status = {};
         Eigen::Index N;
         Eigen::Index size;
-        Eigen::Index nev = 1;
-        Eigen::Index ncv = 8;
-        Eigen::Index b   = 2;
+        Eigen::Index nev        = 1; /*!< Number of requested eigenpairs. */
+        Eigen::Index ncv        = 8; /*!< Maximum search-space columns. */
+        Eigen::Index block_size = 2; /*!< Number of vectors in each solver block. */
 
-        bool                             use_refined_rayleigh_ritz        = false;
-        bool                             use_rayleigh_quotients_instead_of_evals = false;
-        bool                             use_relative_rnorm_tolerance     = false;
-        bool                             use_adaptive_inner_tolerance     = true;
-        bool                             use_b_inner_product              = false;
-        bool                             use_jd_b_only                    = false;
-        bool                             use_krylov_schur_gdplusk_restart = false;
-        bool                             dev_append_extra_blocks_to_basis = false;
-        bool                             dev_skipjcb                      = false;
-        int                              chebyshev_filter_degree          = 0;
+        bool                             use_refined_rayleigh_ritz              = false; /*!< Use refined Rayleigh-Ritz extraction. */
+        bool                             use_rayleigh_quotients_instead_of_evals = false; /*!< Replace projected eigenvalues with Rayleigh quotient estimates. */
+        bool                             use_relative_rnorm_tolerance           = false; /*!< Enable tol_rnorm_relative convergence. */
+        bool                             use_adaptive_inner_tolerance           = true;  /*!< Adapt inner_tol from previous inner-solver work. */
+        bool                             use_b_inner_product                    = false; /*!< Use the B-metric inner product in generalized problems. */
+        bool                             use_jd_b_only                          = false; /*!< Use the B-only generalized JD correction path. */
+        bool                             use_krylov_schur_gdplusk_restart       = false; /*!< Use Krylov-Schur-style GD+k restart retention. */
+        bool                             dev_append_extra_blocks_to_basis       = false; /*!< Development option to retain extra candidate blocks. */
+        bool                             dev_skipjcb                            = false; /*!< Development option to skip Jacobi-Davidson correction blocks. */
+        int                              chebyshev_filter_degree                = 0;     /*!< Degree of the optional Chebyshev filter. */
         ResidualCorrectionType           residual_correction_type         = ResidualCorrectionType::NONE;
         ResidualCorrectionType           residual_correction_type_internal = ResidualCorrectionType::NONE;
         OptRitz                          ritz;
@@ -176,23 +204,30 @@ namespace grit::form {
         MatrixType                       T1, T2, T_evecs;
         Eigen::HouseholderQR<MatrixType> hhqr;
 
-        RealScalar   abstol                            = eps * 10000;
-        RealScalar   reltol                            = 0;
+        RealScalar   tol                                = eps * 10000; /*!< Absolute residual-norm convergence tolerance. */
+        RealScalar   tol_rnorm_relative                 = 0;           /*!< Relative residual-norm convergence tolerance; zero disables it. */
         RealScalar   skewTol                           = std::sqrt(eps) * 10000;
         RealScalar   normTol                           = eps * 10;
         RealScalar   orthTol                           = eps * 100;
         RealScalar   quotTolB                          = RealScalar{1e-10f};
-        Eigen::Index max_iters                         = 100l;
-        Eigen::Index max_matvecs                       = -1l;
-        RealScalar   tol_stall_evals                   = RealScalar{0};
-        RealScalar   tol_stall_rnorm                   = RealScalar{0};
+        Eigen::Index max_iters                         = 100l;         /*!< Maximum outer solver iterations; negative means unlimited. */
+        Eigen::Index max_matvecs                       = -1l;          /*!< Maximum total matrix-vector products; negative means unlimited. */
+        RealScalar   sat_eigval_threshold              = RealScalar{0}; /*!< Eigenvalue saturation threshold for stopping; zero disables this stop. */
+        RealScalar   sat_rnorm_threshold               = RealScalar{0}; /*!< Residual-norm saturation threshold for stopping; zero disables this stop. */
         RealScalar   rnormRelDiffTol                   = std::numeric_limits<RealScalar>::epsilon();
         RealScalar   absDiffTol                        = std::numeric_limits<RealScalar>::epsilon() * 10000;
         RealScalar   relDiffTol                        = std::numeric_limits<RealScalar>::epsilon() * 10000;
-        RealScalar   inner_tol                         = RealScalar{0.1f};
-        Eigen::Index inner_iters                       = 1000;
+        RealScalar   inner_tol                         = RealScalar{0.1f};  /*!< Target residual reduction for the inner correction solver. */
+        Eigen::Index inner_max_iters                   = 1000;              /*!< Maximum iterations for the inner correction solver. */
+        Eigen::Index auto_min_dwell_iters              = 10;                /*!< Minimum consecutive cheap-Olsen AUTO steps before JD activation may occur. */
+        RealScalar   auto_sat_eigval_threshold         = RealScalar{1e-5f}; /*!< Eigenvalue saturation threshold for AUTO JD activation. */
+        RealScalar   auto_sat_rnorm_threshold          = RealScalar{1e-2f}; /*!< Residual-norm saturation threshold for AUTO JD activation. */
+        RealScalar   auto_jd_start_rnorm_threshold     = RealScalar{1e-5f}; /*!< Residual norm below which AUTO may activate JD; zero disables it. */
+        Eigen::Index auto_cheap_probe_interval         = 5;                 /*!< JD steps before AUTO forces a cheap-Olsen probe. */
+        RealScalar   auto_cheap_probe_factor           = RealScalar{1.0f};  /*!< Cheap probe must improve the Ritz value by this factor times max(rnorm^2, roundoff scale). */
         Eigen::Index maxPrevBlocks                     = 1;
         std::string  tag;
+        AutoResidualCorrectionState auto_residual_correction;
 
         static std::string_view       ResidualCorrectionToString(ResidualCorrectionType rct);
         static ResidualCorrectionType StringToResidualCorrection(std::string_view rct);
@@ -249,6 +284,12 @@ namespace grit::form {
         void run();
 
         void                   adjust_residual_correction_type();
+        void                   update_auto_residual_correction_state();
+        RealScalar             get_auto_rnorm_scalar(const VectorReal &rnorms) const;
+        RealScalar             get_auto_probe_eigval_improvement() const;
+        AutoSaturationMetric   get_auto_eigval_saturation_metric();
+        AutoSaturationMetric   get_auto_rnorm_saturation_metric();
+        AutoSaturationStatus   get_auto_saturation_status();
         MatrixType             cheap_Olsen_correction(const MatrixType &V, const MatrixType &S);
         MatrixType             full_Olsen_correction(const MatrixType &V, const MatrixType &S);
         MatrixType             jacobi_davidson_l2_correction(const MatrixType &V, const MatrixType &S, const VectorReal &evals);
@@ -270,6 +311,9 @@ namespace grit::form {
         VectorReal get_slopes(const std::deque<VectorReal> &v, bool apply_log10);
         bool       rNorms_have_saturated();
         bool       eigVals_have_saturated();
+        bool       rNorms_saturated_for_auto_jd_start();
+        bool       eigVals_saturated_for_auto_jd_start();
+        bool       auto_jd_start_ready();
         void       block_l2_orthogonalize(const MatrixType &X, const MatrixType &AX, MatrixType &Y, MatrixType &AY, OrthMeta &m);
         void       block_l2_orthogonalize(const MatrixType &X, const MatrixType &AX, const MatrixType &BX, MatrixType &Y, MatrixType &AY, MatrixType &BY,
                                           OrthMeta &m);

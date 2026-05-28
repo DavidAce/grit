@@ -24,7 +24,7 @@ TEST_CASE("identity operator converges") {
     grit::gdplusk_config<double>    cfg;
     cfg.nev       = 1;
     cfg.ncv       = 3;
-    cfg.b         = 1;
+    cfg.block_size         = 1;
     cfg.ritz      = grit::OptRitz::SR;
     cfg.max_iters = 10;
     cfg.set_initial_guess(V);

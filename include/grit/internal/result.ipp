@@ -56,4 +56,14 @@ namespace grit {
     Eigen::Index result_view<Scalar_>::num_precond_total() const {
         return source->status.num_precond_total;
     }
+
+    template<typename Scalar_>
+    const std::vector<Eigen::Index> &result_view<Scalar_>::cheap_to_jd_switch_iters() const {
+        return source->auto_residual_correction.cheap_to_jd_switch_iters;
+    }
+
+    template<typename Scalar_>
+    const std::vector<Eigen::Index> &result_view<Scalar_>::jd_to_cheap_switch_iters() const {
+        return source->auto_residual_correction.jd_to_cheap_switch_iters;
+    }
 }
