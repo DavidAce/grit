@@ -25,12 +25,19 @@ int main(int argc, char **argv) {
 
     try {
         bench_standard::normalize_options(opts);
-        const std::filesystem::path matrix_path = opts.matrix;
+        if(opts.print_summary) {
+            if(opts.save_results.empty()) throw std::runtime_error("--print-summary requires --save-results=<file>");
+            bench_standard::print_results_summary_hdf5(opts.save_results);
+            return 0;
+        }
+
+        const std::filesystem::path matrix_path = opts.matrix_path;
         auto                        matrix      = bench_standard::read_matrix_market(matrix_path);
         auto                        cases       = bench_standard::expand_sweep(opts, matrix.rows());
         bench_standard::validate_hdf5_options(opts, cases.size());
+        if(!opts.save_results.empty()) bench_standard::initialize_results_hdf5(opts.save_results);
 
-        std::println("matrix: {} ({})", opts.matrix, matrix_path.string());
+        std::println("matrix: {} ({})", opts.matrix_path, matrix_path.string());
         std::println("shape: {} x {} | nonzeros: {} | nev: {}", matrix.rows(), matrix.cols(), matrix.nonZeros(), opts.nev);
         bench_standard::print_sweep_config(opts, cases.size());
         bench_standard::print_result_header();
@@ -39,9 +46,12 @@ int main(int argc, char **argv) {
             for(int rep = 1; rep <= opts.reps; ++rep) {
                 const auto result = bench_standard::solve_once(matrix, case_opts, rep);
                 bench_standard::print_result_row(result);
-                if(!case_opts.save_eigvec.empty()) bench_standard::save_eigvecs_hdf5(case_opts.save_eigvec, case_opts, result);
+                if(!case_opts.save_eigvec.empty()) bench_standard::save_eigvecs_hdf5(case_opts.save_eigvec, result);
+                if(!case_opts.save_results.empty()) bench_standard::append_result_hdf5(case_opts.save_results, result);
             }
         }
+
+        if(!opts.save_results.empty()) bench_standard::print_results_summary_hdf5(opts.save_results);
     } catch(const std::exception &ex) {
         std::println(stderr, "grit-bench-standard: {}", ex.what());
         return 1;

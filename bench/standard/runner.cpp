@@ -1,8 +1,6 @@
 #include "runner.h"
-
 #include "hdf5_io.h"
 #include "memory.h"
-
 #include <chrono>
 #include <format>
 #include <random>
@@ -23,9 +21,7 @@ namespace bench_standard {
             if(opts.initial_guess.empty()) return random_initial_guess(rows, opts.block_size, opts.seed + static_cast<unsigned int>(rep - 1));
 
             auto guess = load_initial_guess_hdf5(opts.initial_guess);
-            if(guess.rows() != rows) {
-                throw std::runtime_error(std::format("Initial guess rows ({}) do not match matrix rows ({})", guess.rows(), rows));
-            }
+            if(guess.rows() != rows) { throw std::runtime_error(std::format("Initial guess rows ({}) do not match matrix rows ({})", guess.rows(), rows)); }
             if(guess.cols() < opts.nev) {
                 throw std::runtime_error(std::format("Initial guess columns ({}) must be at least nev ({})", guess.cols(), opts.nev));
             }
@@ -33,29 +29,35 @@ namespace bench_standard {
         }
 
         void apply_solver_options(Solver &solver, const Options &opts) {
-            solver.residual_correction_type      = opts.residual_correction;
-            solver.use_refined_rayleigh_ritz     = opts.refined_rayleigh_ritz;
-            solver.use_relative_rnorm_tolerance  = opts.relative_rnorm_tolerance;
-            solver.use_adaptive_inner_tolerance  = opts.adaptive_inner_tolerance;
+            solver.residual_correction_type     = opts.residual_correction;
+            solver.use_refined_rayleigh_ritz    = opts.refined_rayleigh_ritz;
+            solver.use_relative_rnorm_tolerance = opts.use_relative_rnorm_tolerance;
+            solver.use_adaptive_inner_tolerance = opts.use_adaptive_inner_tolerance;
         }
     }
 
     grit::gdplusk_config<Scalar> make_solver_config(const Options &opts) {
         grit::gdplusk_config<Scalar> cfg;
-        cfg.nev         = opts.nev;
-        cfg.ncv         = opts.ncv;
-        cfg.b           = opts.block_size;
-        cfg.maxBasisBlocks = opts.max_basis_blocks;
-        cfg.ritz        = opts.ritz;
-        cfg.max_iters   = opts.max_iters;
-        cfg.max_matvecs = opts.max_matvecs;
-        cfg.inner_iters = opts.inner_iters;
-        cfg.abstol      = opts.tol;
-        cfg.reltol      = opts.relative_rnorm_tolerance ? (opts.reltol > 0.0 ? opts.reltol : opts.tol) : 0.0;
-        cfg.tol_stall_evals  = opts.tol_stall_evals;
-        cfg.tol_stall_rnorm = opts.tol_stall_rnorm;
-        cfg.inner_tol   = opts.inner_tol;
-        cfg.logLevel    = opts.log_level;
+        cfg.nev                      = opts.nev;
+        cfg.ncv                      = opts.ncv;
+        cfg.block_size                        = opts.block_size;
+        cfg.max_basis_blocks           = opts.max_basis_blocks;
+        cfg.ritz                     = opts.ritz;
+        cfg.max_iters                = opts.max_iters;
+        cfg.max_matvecs              = opts.max_matvecs;
+        cfg.inner_max_iters          = opts.inner_max_iters;
+        cfg.tol                   = opts.tol;
+        cfg.tol_rnorm_relative                   = opts.use_relative_rnorm_tolerance ? (opts.tol_rnorm_relative > 0.0 ? opts.tol_rnorm_relative : opts.tol) : 0.0;
+        cfg.sat_eigval_threshold          = opts.sat_eigval_threshold;
+        cfg.sat_rnorm_threshold          = opts.sat_rnorm_threshold;
+        cfg.inner_tol                = opts.inner_tol;
+        cfg.auto_min_dwell_iters     = opts.auto_min_dwell_iters;
+        cfg.auto_sat_eigval_threshold      = opts.auto_sat_eigval_threshold;
+        cfg.auto_sat_rnorm_threshold     = opts.auto_sat_rnorm_threshold;
+        cfg.auto_jd_start_rnorm_threshold = opts.auto_jd_start_rnorm_threshold;
+        cfg.auto_cheap_probe_interval = opts.auto_cheap_probe_interval;
+        cfg.auto_cheap_probe_factor   = opts.auto_cheap_probe_factor;
+        cfg.log_level                 = opts.log_level;
         return cfg;
     }
 
@@ -74,19 +76,13 @@ namespace bench_standard {
         solver.run();
         const auto time_stop = std::chrono::steady_clock::now();
 
-        const auto result = solver.result();
+        const auto  result = solver.result();
         SolveResult solve_result{
-            .case_id                  = opts.case_id,
+            .options                  = opts,
             .rep                      = rep,
-            .ncv                      = opts.ncv,
-            .block_size               = opts.block_size,
-            .inner_iters              = static_cast<int>(solver.inner_iters),
-            .tol                      = opts.tol,
+            .rep_seed                 = opts.seed + static_cast<unsigned int>(rep - 1),
+            .inner_iters              = static_cast<int>(solver.inner_max_iters),
             .inner_tol                = solver.inner_tol,
-            .ritz                     = opts.ritz,
-            .residual_correction      = opts.residual_correction,
-            .refined_rayleigh_ritz    = opts.refined_rayleigh_ritz,
-            .adaptive_inner_tolerance = opts.adaptive_inner_tolerance,
             .stop_reason              = grit::enum2s(result.stopReason()),
             .eigenvalue               = result.eigVal().size() > 0 ? result.eigVal()(0) : 0.0,
             .residual                 = result.rNorms().size() > 0 ? result.rNorms()(0) : 0.0,
@@ -95,6 +91,9 @@ namespace bench_standard {
             .outer_matvecs            = result.num_matvecs(),
             .inner_matvecs            = result.num_matvecs_inner(),
             .jdops_inner              = result.num_jdops_inner(),
+            .first_cheap_to_jd_iter   = result.cheap_to_jd_switch_iters().empty() ? Eigen::Index{-1} : result.cheap_to_jd_switch_iters().front(),
+            .cheap_to_jd_switch_iters = result.cheap_to_jd_switch_iters(),
+            .jd_to_cheap_switch_iters = result.jd_to_cheap_switch_iters(),
             .seconds                  = std::chrono::duration<double>(time_stop - time_start).count(),
             .vmrss_mib                = mem_usage_in_mib("VmRSS"),
             .vmhwm_mib                = mem_usage_in_mib("VmHWM"),
