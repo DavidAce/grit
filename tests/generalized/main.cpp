@@ -32,22 +32,20 @@ TEST_CASE("generalized gdplusk matches dense eigensolver") {
 
     Matrix V = Matrix::Identity(A_matrix.rows(), A_matrix.rows());
 
-    grit::generalized::problem<double> problem(A, B);
-    grit::gdplusk_config<double>       cfg;
-    cfg.nev       = 2;
-    cfg.ncv       = A_matrix.rows();
-    cfg.block_size         = 1;
-    cfg.ritz      = grit::OptRitz::SR;
-    cfg.max_iters = 20;
-    cfg.set_initial_guess(V);
-
-    grit::generalized::gdplusk<double> solver(problem, cfg);
+    grit::generalized::gdplusk<double> solver(A, B);
+    solver.config.nev              = 2;
+    solver.config.ncv              = A_matrix.rows();
+    solver.config.block_size       = 1;
+    solver.config.max_basis_blocks = A_matrix.rows();
+    solver.config.ritz             = grit::OptRitz::SR;
+    solver.config.max_iters        = 20;
+    solver.set_initial_guess(V);
     solver.run();
 
     Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> exact(A_matrix, B_matrix);
-    auto                                             result = solver.result();
-    REQUIRE(result.stopReason() == grit::StopReason::converged);
-    require_close(result.eigVal(), exact.eigenvalues().head(2), 1e-10);
+    auto view = grit::solver_view<double>(solver);
+    REQUIRE(view.stopReason() == grit::StopReason::converged);
+    require_close(view.eigVal(), exact.eigenvalues().head(2), 1e-10);
 }
 
 TEST_CASE("generalized jacobi-davidson b-only correction supports l2 and bm projectors") {
@@ -68,32 +66,36 @@ TEST_CASE("generalized jacobi-davidson b-only correction supports l2 and bm proj
 
     Matrix V = Matrix::Identity(A_matrix.rows(), A_matrix.rows());
 
-    grit::gdplusk_config<double> cfg;
-    cfg.nev         = 1;
-    cfg.ncv         = A_matrix.rows();
-    cfg.block_size           = 1;
-    cfg.ritz        = grit::OptRitz::SR;
-    cfg.max_iters   = 2;
-    cfg.inner_max_iters = 20;
-    cfg.inner_tol   = 1e-8;
-    cfg.set_initial_guess(V);
+    grit::generalized::gdplusk<double>::Config cfg;
+    cfg.nev              = 1;
+    cfg.ncv              = A_matrix.rows();
+    cfg.block_size       = 1;
+    cfg.max_basis_blocks = A_matrix.rows();
+    cfg.ritz             = grit::OptRitz::SR;
+    cfg.max_iters        = 2;
+    cfg.inner_max_iters  = 20;
+    cfg.inner_tol        = 1e-8;
 
     SECTION("l2 projectors") {
-        grit::generalized::problem<double> problem(A, B);
-        grit::generalized::gdplusk<double> solver(problem, cfg);
-        solver.residual_correction_type = grit::form::base<double>::ResidualCorrectionType::JACOBI_DAVIDSON;
-        solver.use_jd_b_only            = true;
-        solver.use_b_inner_product      = false;
+        auto                             section_cfg = cfg;
+        section_cfg.residual_correction_type        = grit::ResidualCorrectionType::JACOBI_DAVIDSON;
+        section_cfg.use_jd_b_only                   = true;
+        section_cfg.use_b_inner_product             = false;
+        grit::generalized::gdplusk<double> solver(A, B);
+        solver.config = section_cfg;
+        solver.set_initial_guess(V);
 
         REQUIRE_NOTHROW(solver.run());
     }
 
     SECTION("bm projectors") {
-        grit::generalized::problem<double> problem(A, B);
-        grit::generalized::gdplusk<double> solver(problem, cfg);
-        solver.residual_correction_type = grit::form::base<double>::ResidualCorrectionType::JACOBI_DAVIDSON;
-        solver.use_jd_b_only            = true;
-        solver.use_b_inner_product      = true;
+        auto                             section_cfg = cfg;
+        section_cfg.residual_correction_type        = grit::ResidualCorrectionType::JACOBI_DAVIDSON;
+        section_cfg.use_jd_b_only                   = true;
+        section_cfg.use_b_inner_product             = true;
+        grit::generalized::gdplusk<double> solver(A, B);
+        solver.config = section_cfg;
+        solver.set_initial_guess(V);
 
         REQUIRE_NOTHROW(solver.run());
     }

@@ -13,7 +13,7 @@ namespace {
     }
 }
 
-TEST_CASE("matvec raw callback applies operator") {
+TEST_CASE("matvec ptr callback applies operator") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
     Matrix A_matrix(3, 3);
@@ -21,14 +21,14 @@ TEST_CASE("matvec raw callback applies operator") {
         0.1, 2.0, 0.2,
         0.0, 0.2, 3.0;
 
-    auto A = grit::matvec<double>(A_matrix.rows(), grit::raw, [&](const double *X, double *Y, Eigen::Index rows, Eigen::Index cols) {
+    auto A = grit::matvec<double>(A_matrix.rows(), grit::ptr, [&](const double *X, double *Y, Eigen::Index rows, Eigen::Index cols) {
         Eigen::Map<const Matrix> X_map(X, rows, cols);
         Eigen::Map<Matrix>       Y_map(Y, rows, cols);
         Y_map.noalias() = A_matrix * X_map;
     });
 
     Matrix X = Matrix::Identity(3, 2);
-    Matrix Y = A.MultAX(X);
+    Matrix Y = A.mult(X);
     require_close(Y.col(0), (A_matrix * X).col(0), 1e-12);
     require_close(Y.col(1), (A_matrix * X).col(1), 1e-12);
 }
@@ -42,14 +42,14 @@ TEST_CASE("preconditioner callbacks are invoked") {
     int calc_count = 0;
     int prec_count = 0;
     A.set_preconditioner_update([&](double) { calc_count++; });
-    A.set_preconditioner_apply([&](const Eigen::Ref<const grit::MatVec<double>::VectorType> &x, Eigen::Ref<grit::MatVec<double>::VectorType> y, double) {
+    A.set_preconditioner_apply([&](const Eigen::Ref<const grit::Matvec<double>::VectorType> &x, Eigen::Ref<grit::Matvec<double>::VectorType> y, double) {
         prec_count++;
         y = x;
     });
 
     A.preconditioner_update(0.0);
-    grit::MatVec<double>::VectorType x = grit::MatVec<double>::VectorType::Ones(3);
-    grit::MatVec<double>::VectorType y = grit::MatVec<double>::VectorType::Zero(3);
+    grit::Matvec<double>::VectorType x = grit::Matvec<double>::VectorType::Ones(3);
+    grit::Matvec<double>::VectorType y = grit::Matvec<double>::VectorType::Zero(3);
     A.preconditioner_apply(x, y, 0.0);
 
     REQUIRE(calc_count == 1);

@@ -3,16 +3,14 @@
 #include "../algo/gdplusk.h"
 #include "../algo/lanczos.h"
 #include "../algo/lobpcg.h"
-#include "../form/standard.h"
-#include "../prob/standard.h"
 
 namespace grit::standard {
     template<typename Scalar>
-    using gdplusk = algo::gdplusk<form::standard<Scalar>>;
+    using gdplusk = algo::gdplusk<Scalar, grit::Form::STANDARD>;
 
     template<typename Scalar>
-    using lanczos = algo::lanczos<form::standard<Scalar>>;
+    using lanczos = algo::lanczos<Scalar, grit::Form::STANDARD>;
 
     template<typename Scalar>
-    using lobpcg = algo::lobpcg<form::standard<Scalar>>;
+    using lobpcg = algo::lobpcg<Scalar, grit::Form::STANDARD>;
 }

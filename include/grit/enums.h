@@ -5,7 +5,11 @@
 #include <type_traits>
 
 namespace grit {
+    enum class Form { STANDARD, GENERALIZED };
+
     enum class OptRitz { NONE, LR, LM, SR, SM };
+
+    enum class ResidualCorrectionType { NONE, CHEAP_OLSEN, FULL_OLSEN, JACOBI_DAVIDSON, AUTO };
 
     enum class StopReason : int {
         none                  = 0,

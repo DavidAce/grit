@@ -1,31 +1,27 @@
 #include <grit/grit.h>
-#include <grit/internal/MatVec.ipp>
-#include <grit/internal/config.ipp>
-#include <grit/internal/result.ipp>
-#include <grit/internal/prob/standard.ipp>
-#include <grit/internal/prob/generalized.ipp>
+#include <grit/internal/Matvec.ipp>
+#include <grit/internal/solver_view.ipp>
 #include <grit/internal/form/base.ipp>
-#include <grit/internal/form/standard.ipp>
-#include <grit/internal/form/generalized.ipp>
+#include <grit/internal/form/base_orth.ipp>
+#include <grit/internal/form/base_ritz.ipp>
 #include <grit/internal/algo/gdplusk.ipp>
+#include <grit/internal/algo/gdplusk_correction.ipp>
 #include <grit/internal/algo/lanczos.ipp>
 #include <grit/internal/algo/lobpcg.ipp>
 
 using Scalar = @SCALAR@;
 
-template class grit::MatVec<Scalar>;
-template grit::MatVec<Scalar> grit::matvec<Scalar>(Eigen::Index, typename grit::MatVec<Scalar>::MultAXFunc);
-template grit::MatVec<Scalar> grit::matvec<Scalar>(Eigen::Index, grit::raw_t, typename grit::MatVec<Scalar>::RawMultAXFunc);
-template class grit::gdplusk_config<Scalar>;
-template class grit::result_view<Scalar>;
-template class grit::standard::problem<Scalar>;
-template class grit::generalized::problem<Scalar>;
-template class grit::form::base<Scalar>;
-template class grit::form::standard<Scalar>;
-template class grit::form::generalized<Scalar>;
-template class grit::algo::gdplusk<grit::form::standard<Scalar>>;
-template class grit::algo::gdplusk<grit::form::generalized<Scalar>>;
-template class grit::algo::lanczos<grit::form::standard<Scalar>>;
-template class grit::algo::lanczos<grit::form::generalized<Scalar>>;
-template class grit::algo::lobpcg<grit::form::standard<Scalar>>;
-template class grit::algo::lobpcg<grit::form::generalized<Scalar>>;
+template class grit::Matvec<Scalar>;
+template grit::Matvec<Scalar> grit::matvec<Scalar>(Eigen::Index, typename grit::Matvec<Scalar>::MultFunc);
+template grit::Matvec<Scalar> grit::matvec<Scalar>(Eigen::Index, grit::ptr_t, typename grit::Matvec<Scalar>::PtrMultFunc);
+template class grit::solver_view<Scalar>;
+template grit::solver_view<Scalar>::solver_view(const grit::form::base<Scalar, grit::Form::STANDARD> &);
+template grit::solver_view<Scalar>::solver_view(const grit::form::base<Scalar, grit::Form::GENERALIZED> &);
+template class grit::form::base<Scalar, grit::Form::STANDARD>;
+template class grit::form::base<Scalar, grit::Form::GENERALIZED>;
+template class grit::algo::gdplusk<Scalar, grit::Form::STANDARD>;
+template class grit::algo::gdplusk<Scalar, grit::Form::GENERALIZED>;
+template class grit::algo::lanczos<Scalar, grit::Form::STANDARD>;
+template class grit::algo::lanczos<Scalar, grit::Form::GENERALIZED>;
+template class grit::algo::lobpcg<Scalar, grit::Form::STANDARD>;
+template class grit::algo::lobpcg<Scalar, grit::Form::GENERALIZED>;

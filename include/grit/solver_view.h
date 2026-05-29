@@ -4,24 +4,28 @@
 #include <complex>
 #include <Eigen/Core>
 #include <string_view>
+#include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace grit::form {
-    template<typename Scalar>
+    template<typename Scalar, grit::Form form>
     class base;
 }
 
 namespace grit {
     template<typename Scalar_>
-    class result_view {
+    class solver_view {
         public:
         using Scalar     = Scalar_;
         using RealScalar = decltype(std::real(std::declval<Scalar>()));
         using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
         using VectorReal = Eigen::Matrix<RealScalar, Eigen::Dynamic, 1>;
 
-        result_view() = default;
+        solver_view() = default;
+        template<grit::Form form>
+        explicit solver_view(const form::base<Scalar, form> &source_);
 
         [[nodiscard]] const VectorReal                &eigVal() const;
         [[nodiscard]] const MatrixType                &eigVecs() const;
@@ -56,10 +60,6 @@ namespace grit {
         [[nodiscard]] const std::vector<Eigen::Index> &jd_to_cheap_switch_iters() const;
 
         private:
-        friend class form::base<Scalar>;
-
-        explicit result_view(const form::base<Scalar> &source_);
-
-        const form::base<Scalar> *source = nullptr;
+        std::variant<const form::base<Scalar, grit::Form::STANDARD> *, const form::base<Scalar, grit::Form::GENERALIZED> *> source = nullptr;
     };
 }

@@ -34,17 +34,17 @@ int main() {
         return H * X;
     });
     Eigen::MatrixXd V = Eigen::MatrixXd::Random(H.rows(), 2);
-    grit::standard::problem<double> problem(A);
-    grit::gdplusk_config<double> cfg;
-    cfg.nev = 2;
-    cfg.ncv = H.rows();
-    cfg.ritz = grit::OptRitz::SR;
-    cfg.set_initial_guess(V);
-
-    grit::standard::gdplusk<double> solver(problem, cfg);
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev = 2;
+    solver.config.ncv = H.rows();
+    solver.config.block_size = 1;
+    solver.config.max_basis_blocks = H.rows();
+    solver.config.ritz = grit::OptRitz::SR;
+    solver.set_initial_guess(V);
     solver.run();
 
-    std::cout << solver.result().eigVal().transpose() << '\n';
+    auto view = grit::solver_view<double>(solver);
+    std::cout << view.eigVal().transpose() << '\n';
 }
 ```
 

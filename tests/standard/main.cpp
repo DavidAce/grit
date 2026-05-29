@@ -29,22 +29,20 @@ TEST_CASE("standard gdplusk matches dense eigensolver") {
 
     Matrix V = Matrix::Identity(A_matrix.rows(), A_matrix.rows());
 
-    grit::standard::problem<double> problem(A);
-    grit::gdplusk_config<double>    cfg;
-    cfg.nev       = 2;
-    cfg.ncv       = A_matrix.rows();
-    cfg.block_size         = 1;
-    cfg.ritz      = grit::OptRitz::SR;
-    cfg.max_iters = 20;
-    cfg.set_initial_guess(V);
-
-    grit::standard::gdplusk<double> solver(problem, cfg);
+    auto solver = grit::standard::gdplusk<double>(A);
+    solver.config.nev              = 2;
+    solver.config.ncv              = A_matrix.rows();
+    solver.config.block_size       = 1;
+    solver.config.max_basis_blocks = A_matrix.rows();
+    solver.config.ritz             = grit::OptRitz::SR;
+    solver.config.max_iters        = 20;
+    solver.set_initial_guess(V);
     solver.run();
 
     Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
-    auto                                  result = solver.result();
-    REQUIRE(result.stopReason() == grit::StopReason::converged);
-    require_close(result.eigVal(), exact.eigenvalues().head(2), 1e-10);
+    auto view = grit::solver_view<double>(solver);
+    REQUIRE(view.stopReason() == grit::StopReason::converged);
+    require_close(view.eigVal(), exact.eigenvalues().head(2), 1e-10);
 }
 
 TEST_CASE("standard gdplusk converges with an exact zero eigenvalue") {
@@ -60,26 +58,24 @@ TEST_CASE("standard gdplusk converges with an exact zero eigenvalue") {
 
     Matrix V = Matrix::Identity(A_matrix.rows(), A_matrix.rows());
 
-    grit::standard::problem<double> problem(A);
-    grit::gdplusk_config<double>    cfg;
-    cfg.nev       = 1;
-    cfg.ncv       = A_matrix.rows();
-    cfg.block_size = 1;
-    cfg.ritz      = grit::OptRitz::SR;
-    cfg.max_iters = 20;
-    cfg.tol       = 1e-12;
-    cfg.set_initial_guess(V);
-
-    grit::standard::gdplusk<double> solver(problem, cfg);
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev              = 1;
+    solver.config.ncv              = A_matrix.rows();
+    solver.config.block_size       = 1;
+    solver.config.max_basis_blocks = A_matrix.rows();
+    solver.config.ritz             = grit::OptRitz::SR;
+    solver.config.max_iters        = 20;
+    solver.config.tol              = 1e-12;
+    solver.set_initial_guess(V);
     solver.run();
 
-    auto result = solver.result();
-    REQUIRE(result.stopReason() == grit::StopReason::converged);
-    REQUIRE(std::abs(result.eigVal()(0)) < 1e-12);
-    REQUIRE(result.rNorms()(0) < 1e-12);
+    auto view = grit::solver_view<double>(solver);
+    REQUIRE(view.stopReason() == grit::StopReason::converged);
+    REQUIRE(std::abs(view.eigVal()(0)) < 1e-12);
+    REQUIRE(view.rNorms()(0) < 1e-12);
 }
 
-TEST_CASE("standard gdplusk status callback reports initial and final status") {
+TEST_CASE("standard gdplusk user callback reports initial and final view") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
     Matrix A_matrix(5, 5);
@@ -93,35 +89,33 @@ TEST_CASE("standard gdplusk status callback reports initial and final status") {
 
     Matrix V = Matrix::Identity(A_matrix.rows(), A_matrix.rows());
 
-    grit::standard::problem<double> problem(A);
-    grit::gdplusk_config<double>    cfg;
-    cfg.nev       = 1;
-    cfg.ncv       = A_matrix.rows();
-    cfg.block_size         = 1;
-    cfg.ritz      = grit::OptRitz::SR;
-    cfg.max_iters = 20;
-    cfg.set_initial_guess(V);
-
     std::vector<Eigen::Index> iterations;
     std::vector<grit::StopReason> stop_reasons;
-    cfg.status_callback = [&](grit::result_view<double> status) {
-        iterations.push_back(status.iter());
-        stop_reasons.push_back(status.stopReason());
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev              = 1;
+    solver.config.ncv              = A_matrix.rows();
+    solver.config.block_size       = 1;
+    solver.config.max_basis_blocks = A_matrix.rows();
+    solver.config.ritz             = grit::OptRitz::SR;
+    solver.config.max_iters        = 20;
+    solver.config.user_callback    = [&](const auto &solver_ref) {
+        auto view = grit::solver_view<double>(solver_ref);
+        iterations.push_back(view.iter());
+        stop_reasons.push_back(view.stopReason());
     };
-
-    grit::standard::gdplusk<double> solver(problem, cfg);
+    solver.set_initial_guess(V);
     solver.run();
 
     REQUIRE(iterations.size() >= 2);
     REQUIRE(iterations.front() == 0);
-    REQUIRE(iterations.back() + 1 == solver.result().iter());
+    REQUIRE(iterations.back() + 1 == grit::solver_view<double>(solver).iter());
     REQUIRE(stop_reasons.front() == grit::StopReason::none);
     REQUIRE(stop_reasons.back() == grit::StopReason::converged);
 }
 
 TEST_CASE("standard jacobi-davidson correction invokes preconditioner callbacks") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
-    using Vector = grit::MatVec<double>::VectorType;
+    using Vector = grit::Matvec<double>::VectorType;
 
     Matrix A_matrix(5, 5);
     A_matrix << 4.0, 1.0, 0.0, 0.0, 0.0,
@@ -147,19 +141,17 @@ TEST_CASE("standard jacobi-davidson correction invokes preconditioner callbacks"
         0.2, 0.4, 0.5,
         0.5, 0.3, 0.4;
 
-    grit::standard::problem<double> problem(A);
-    grit::gdplusk_config<double>    cfg;
-    cfg.nev         = 1;
-    cfg.ncv         = 3;
-    cfg.block_size           = 1;
-    cfg.ritz        = grit::OptRitz::SR;
-    cfg.max_iters   = 5;
-    cfg.inner_max_iters = 20;
-    cfg.inner_tol   = 1e-8;
-    cfg.set_initial_guess(V);
-
-    grit::standard::gdplusk<double> solver(problem, cfg);
-    solver.residual_correction_type = grit::form::base<double>::ResidualCorrectionType::JACOBI_DAVIDSON;
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev                      = 1;
+    solver.config.ncv                      = 3;
+    solver.config.block_size               = 1;
+    solver.config.max_basis_blocks         = 3;
+    solver.config.ritz                     = grit::OptRitz::SR;
+    solver.config.max_iters                = 5;
+    solver.config.inner_max_iters          = 20;
+    solver.config.inner_tol                = 1e-8;
+    solver.config.residual_correction_type = grit::ResidualCorrectionType::JACOBI_DAVIDSON;
+    solver.set_initial_guess(V);
     solver.run();
 
     REQUIRE(update_count > 0);
@@ -185,19 +177,17 @@ TEST_CASE("standard jacobi-davidson correction defaults to identity precondition
         0.2, 0.4, 0.5,
         0.5, 0.3, 0.4;
 
-    grit::standard::problem<double> problem(A);
-    grit::gdplusk_config<double>    cfg;
-    cfg.nev         = 1;
-    cfg.ncv         = 3;
-    cfg.block_size           = 1;
-    cfg.ritz        = grit::OptRitz::SR;
-    cfg.max_iters   = 2;
-    cfg.inner_max_iters = 20;
-    cfg.inner_tol   = 1e-8;
-    cfg.set_initial_guess(V);
-
-    grit::standard::gdplusk<double> solver(problem, cfg);
-    solver.residual_correction_type = grit::form::base<double>::ResidualCorrectionType::JACOBI_DAVIDSON;
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev                      = 1;
+    solver.config.ncv                      = 3;
+    solver.config.block_size               = 1;
+    solver.config.max_basis_blocks         = 3;
+    solver.config.ritz                     = grit::OptRitz::SR;
+    solver.config.max_iters                = 2;
+    solver.config.inner_max_iters          = 20;
+    solver.config.inner_tol                = 1e-8;
+    solver.config.residual_correction_type = grit::ResidualCorrectionType::JACOBI_DAVIDSON;
+    solver.set_initial_guess(V);
 
     REQUIRE_NOTHROW(solver.run());
 }
@@ -208,16 +198,14 @@ TEST_CASE("standard auto residual correction starts with cheap Olsen") {
     Matrix A_matrix = Matrix::Identity(4, 4);
     auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
 
-    grit::standard::problem<double> problem(A);
-    grit::gdplusk_config<double>    cfg;
-    cfg.nev = 1;
-    cfg.ncv = 4;
-    cfg.block_size   = 1;
-
-    grit::standard::gdplusk<double> solver(problem, cfg);
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev              = 1;
+    solver.config.ncv              = 4;
+    solver.config.block_size       = 1;
+    solver.config.max_basis_blocks = 4;
     using Correction = grit::form::base<double>::ResidualCorrectionType;
 
-    solver.residual_correction_type = Correction::AUTO;
+    solver.config.residual_correction_type = Correction::AUTO;
     solver.adjust_residual_correction_type();
 
     REQUIRE(solver.residual_correction_type_internal == Correction::CHEAP_OLSEN);
@@ -231,21 +219,19 @@ TEST_CASE("standard auto residual correction does not start Jacobi-Davidson unle
     Matrix A_matrix = Matrix::Identity(4, 4);
     auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
 
-    grit::standard::problem<double> problem(A);
-    grit::gdplusk_config<double>    cfg;
-    cfg.nev = 1;
-    cfg.ncv = 4;
-    cfg.block_size   = 1;
-
-    grit::standard::gdplusk<double> solver(problem, cfg);
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev              = 1;
+    solver.config.ncv              = 4;
+    solver.config.block_size       = 1;
+    solver.config.max_basis_blocks = 4;
     using Base       = grit::form::base<double>;
     using Correction = Base::ResidualCorrectionType;
     using VectorReal = Base::VectorReal;
 
-    solver.residual_correction_type              = Correction::AUTO;
+    solver.config.residual_correction_type       = Correction::AUTO;
     solver.auto_residual_correction.active       = Correction::CHEAP_OLSEN;
     solver.auto_residual_correction.step_method  = Correction::CHEAP_OLSEN;
-    solver.auto_residual_correction.dwell        = solver.auto_min_dwell_iters;
+    solver.auto_residual_correction.dwell        = solver.config.auto_min_dwell_iters;
     solver.status.iter                           = 2;
     solver.status.eigVal                         = VectorReal::Constant(1, -1.0);
     solver.status.rNorms                         = VectorReal::Constant(1, 1.0e-2);
@@ -270,17 +256,15 @@ TEST_CASE("standard auto eigenvalue saturation is relative to average eigenvalue
     Matrix A_matrix = Matrix::Identity(4, 4);
     auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
 
-    grit::standard::problem<double> problem(A);
-    grit::gdplusk_config<double>    cfg;
-    cfg.nev = 1;
-    cfg.ncv = 4;
-    cfg.block_size = 1;
-
-    grit::standard::gdplusk<double> solver(problem, cfg);
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev              = 1;
+    solver.config.ncv              = 4;
+    solver.config.block_size       = 1;
+    solver.config.max_basis_blocks = 4;
     using Base       = grit::form::base<double>;
     using VectorReal = Base::VectorReal;
 
-    solver.auto_sat_eigval_threshold = 1.0e-3;
+    solver.config.auto_sat_eigval_threshold = 1.0e-3;
     solver.status.iter               = 2;
     solver.status.op_norm_estimate   = 1.0e6;
     solver.status.eigVal             = VectorReal::Constant(1, 1.01);
@@ -288,12 +272,12 @@ TEST_CASE("standard auto eigenvalue saturation is relative to average eigenvalue
     solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, 1.00));
     solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, 1.01));
 
-    auto metric = solver.get_auto_eigval_saturation_metric();
+    auto info = solver.get_auto_eigval_saturation_info();
 
-    REQUIRE(metric.enough_history);
-    REQUIRE(metric.scale == Approx(1.005));
-    REQUIRE(metric.ratio > solver.auto_sat_eigval_threshold);
-    REQUIRE_FALSE(metric.saturated);
+    REQUIRE(info.enough_history);
+    REQUIRE(info.scale == Approx(1.005));
+    REQUIRE(info.ratio > solver.config.auto_sat_eigval_threshold);
+    REQUIRE_FALSE(info.saturated);
 }
 
 TEST_CASE("standard auto residual correction honors cheap-Olsen dwell before Jacobi-Davidson") {
@@ -302,18 +286,16 @@ TEST_CASE("standard auto residual correction honors cheap-Olsen dwell before Jac
     Matrix A_matrix = Matrix::Identity(4, 4);
     auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
 
-    grit::standard::problem<double> problem(A);
-    grit::gdplusk_config<double>    cfg;
-    cfg.nev = 1;
-    cfg.ncv = 4;
-    cfg.block_size = 1;
-
-    grit::standard::gdplusk<double> solver(problem, cfg);
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev              = 1;
+    solver.config.ncv              = 4;
+    solver.config.block_size       = 1;
+    solver.config.max_basis_blocks = 4;
     using Base       = grit::form::base<double>;
     using Correction = Base::ResidualCorrectionType;
     using VectorReal = Base::VectorReal;
 
-    solver.residual_correction_type             = Correction::AUTO;
+    solver.config.residual_correction_type      = Correction::AUTO;
     solver.auto_residual_correction.active      = Correction::CHEAP_OLSEN;
     solver.auto_residual_correction.step_method = Correction::CHEAP_OLSEN;
     solver.auto_residual_correction.dwell       = 0;
@@ -342,22 +324,20 @@ TEST_CASE("standard auto residual correction starts Jacobi-Davidson below rrnorm
     Matrix A_matrix = Matrix::Identity(4, 4);
     auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
 
-    grit::standard::problem<double> problem(A);
-    grit::gdplusk_config<double>    cfg;
-    cfg.nev = 1;
-    cfg.ncv = 4;
-    cfg.block_size = 1;
-
-    grit::standard::gdplusk<double> solver(problem, cfg);
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev              = 1;
+    solver.config.ncv              = 4;
+    solver.config.block_size       = 1;
+    solver.config.max_basis_blocks = 4;
     using Base       = grit::form::base<double>;
     using Correction = Base::ResidualCorrectionType;
     using VectorReal = Base::VectorReal;
 
-    solver.residual_correction_type             = Correction::AUTO;
+    solver.config.residual_correction_type      = Correction::AUTO;
     solver.auto_residual_correction.active      = Correction::CHEAP_OLSEN;
     solver.auto_residual_correction.step_method = Correction::CHEAP_OLSEN;
     solver.auto_residual_correction.dwell       = 0;
-    solver.auto_jd_start_rnorm_threshold        = 1.0e-5;
+    solver.config.auto_jd_start_rnorm_threshold = 1.0e-5;
     solver.status.iter                          = 2;
     solver.status.eigVal                        = VectorReal::Constant(1, -1.0);
     solver.status.rNorms                        = VectorReal::Constant(1, 1.0e-6);
@@ -377,21 +357,19 @@ TEST_CASE("standard auto residual correction starts Jacobi-Davidson when histori
     Matrix A_matrix = Matrix::Identity(4, 4);
     auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
 
-    grit::standard::problem<double> problem(A);
-    grit::gdplusk_config<double>    cfg;
-    cfg.nev = 1;
-    cfg.ncv = 4;
-    cfg.block_size   = 1;
-
-    grit::standard::gdplusk<double> solver(problem, cfg);
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev              = 1;
+    solver.config.ncv              = 4;
+    solver.config.block_size       = 1;
+    solver.config.max_basis_blocks = 4;
     using Base       = grit::form::base<double>;
     using Correction = Base::ResidualCorrectionType;
     using VectorReal = Base::VectorReal;
 
-    solver.residual_correction_type = Correction::AUTO;
-    solver.auto_residual_correction.dwell       = solver.auto_min_dwell_iters;
-    solver.auto_sat_eigval_threshold            = 1.0e-3;
-    solver.auto_sat_rnorm_threshold             = 1.0e-2;
+    solver.config.residual_correction_type      = Correction::AUTO;
+    solver.auto_residual_correction.dwell       = solver.config.auto_min_dwell_iters;
+    solver.config.auto_sat_eigval_threshold     = 1.0e-3;
+    solver.config.auto_sat_rnorm_threshold      = 1.0e-2;
     solver.status.iter                          = 2;
     solver.status.op_norm_estimate              = 1.0;
     solver.status.eigVal                        = VectorReal::Constant(1, -1.0);
@@ -422,18 +400,16 @@ TEST_CASE("standard auto residual correction schedules cheap probe after interva
     Matrix A_matrix = Matrix::Identity(4, 4);
     auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
 
-    grit::standard::problem<double> problem(A);
-    grit::gdplusk_config<double>    cfg;
-    cfg.nev = 1;
-    cfg.ncv = 4;
-    cfg.block_size   = 1;
-
-    grit::standard::gdplusk<double> solver(problem, cfg);
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev              = 1;
+    solver.config.ncv              = 4;
+    solver.config.block_size       = 1;
+    solver.config.max_basis_blocks = 4;
     using Correction = grit::form::base<double>::ResidualCorrectionType;
 
-    solver.residual_correction_type = Correction::AUTO;
+    solver.config.residual_correction_type = Correction::AUTO;
     solver.auto_residual_correction.active               = Correction::JACOBI_DAVIDSON;
-    solver.auto_residual_correction.jd_steps_since_probe = solver.auto_cheap_probe_interval;
+    solver.auto_residual_correction.jd_steps_since_probe = solver.config.auto_cheap_probe_interval;
 
     solver.adjust_residual_correction_type();
 
@@ -447,18 +423,16 @@ TEST_CASE("standard auto residual correction keeps cheap Olsen after useful prob
     Matrix A_matrix = Matrix::Identity(4, 4);
     auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
 
-    grit::standard::problem<double> problem(A);
-    grit::gdplusk_config<double>    cfg;
-    cfg.nev = 1;
-    cfg.ncv = 4;
-    cfg.block_size   = 1;
-
-    grit::standard::gdplusk<double> solver(problem, cfg);
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev              = 1;
+    solver.config.ncv              = 4;
+    solver.config.block_size       = 1;
+    solver.config.max_basis_blocks = 4;
     using Base       = grit::form::base<double>;
     using Correction = Base::ResidualCorrectionType;
     using VectorReal = Base::VectorReal;
 
-    solver.residual_correction_type = Correction::AUTO;
+    solver.config.residual_correction_type = Correction::AUTO;
     solver.status.oldVal                        = VectorReal::Constant(1, -1.0);
     solver.status.eigVal                        = VectorReal::Constant(1, -1.2);
     solver.status.rNorms                        = VectorReal::Constant(1, 0.1);
@@ -480,21 +454,19 @@ TEST_CASE("standard auto residual correction returns to Jacobi-Davidson after we
     Matrix A_matrix = Matrix::Identity(4, 4);
     auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
 
-    grit::standard::problem<double> problem(A);
-    grit::gdplusk_config<double>    cfg;
-    cfg.nev = 1;
-    cfg.ncv = 4;
-    cfg.block_size   = 1;
-
-    grit::standard::gdplusk<double> solver(problem, cfg);
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev              = 1;
+    solver.config.ncv              = 4;
+    solver.config.block_size       = 1;
+    solver.config.max_basis_blocks = 4;
     using Base       = grit::form::base<double>;
     using Correction = Base::ResidualCorrectionType;
     using VectorReal = Base::VectorReal;
 
-    solver.residual_correction_type              = Correction::AUTO;
+    solver.config.residual_correction_type       = Correction::AUTO;
     solver.auto_residual_correction.active       = Correction::JACOBI_DAVIDSON;
     solver.auto_residual_correction.step_method  = Correction::CHEAP_OLSEN;
-    solver.auto_residual_correction.jd_steps_since_probe = solver.auto_cheap_probe_interval;
+    solver.auto_residual_correction.jd_steps_since_probe = solver.config.auto_cheap_probe_interval;
     solver.status.oldVal                         = VectorReal::Constant(1, -1.0);
     solver.status.eigVal                         = VectorReal::Constant(1, -1.005);
     solver.status.rNorms                         = VectorReal::Constant(1, 0.1);
@@ -515,21 +487,19 @@ TEST_CASE("standard auto residual correction cheap probe uses roundoff floor") {
     Matrix A_matrix = Matrix::Identity(4, 4);
     auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
 
-    grit::standard::problem<double> problem(A);
-    grit::gdplusk_config<double>    cfg;
-    cfg.nev = 1;
-    cfg.ncv = 4;
-    cfg.block_size = 1;
-
-    grit::standard::gdplusk<double> solver(problem, cfg);
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev              = 1;
+    solver.config.ncv              = 4;
+    solver.config.block_size       = 1;
+    solver.config.max_basis_blocks = 4;
     using Base       = grit::form::base<double>;
     using Correction = Base::ResidualCorrectionType;
     using VectorReal = Base::VectorReal;
 
-    solver.residual_correction_type                       = Correction::AUTO;
+    solver.config.residual_correction_type                = Correction::AUTO;
     solver.auto_residual_correction.active                = Correction::JACOBI_DAVIDSON;
     solver.auto_residual_correction.step_method           = Correction::CHEAP_OLSEN;
-    solver.auto_residual_correction.jd_steps_since_probe  = solver.auto_cheap_probe_interval;
+    solver.auto_residual_correction.jd_steps_since_probe  = solver.config.auto_cheap_probe_interval;
     solver.status.oldVal                                  = VectorReal::Constant(1, 0.0);
     solver.status.eigVal                                  = VectorReal::Constant(1, -1.0e-18);
     solver.status.rNorms                                  = VectorReal::Constant(1, 0.0);

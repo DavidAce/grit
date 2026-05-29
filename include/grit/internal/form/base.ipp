@@ -1,7 +1,6 @@
 #pragma once
 
 #include <grit/form/base.h>
-#include <grit/internal/precondition/JacobiDavidsonOperator.h>
 #include <stdexcept>
 
 namespace settings {
@@ -13,75 +12,8 @@ namespace settings {
 }
 
 namespace grit::form {
-    template<typename Scalar>
-    void base<Scalar>::OrthMeta::analyze_l2_orthonormality(const Eigen::Ref<const MatrixType> &Y) {
-        if(Y.cols() == 0) return;
-        MatrixType I = MatrixType::Identity(Y.cols(), Y.cols());
-        Gram         = Y.adjoint() * Y;
-        Gram_symm    = Gram;
-        Gram_skew    = Gram;
-        orthError    = (Gram - I).norm();
-        symmError    = orthError;
-        skewError    = orthError;
-        Rdiag        = Gram_symm.diagonal().cwiseAbs().cwiseSqrt();
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::OrthMeta::analyze_b_orthonormality(const Eigen::Ref<const MatrixType> &Y, const Eigen::Ref<const MatrixType> &B_Y) {
-        analyze_bm_orthonormality(Y, B_Y);
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::OrthMeta::analyze_bm_orthonormality(const Eigen::Ref<const MatrixType> &Y, const Eigen::Ref<const MatrixType> &B_Y) {
-        if(Y.cols() != B_Y.cols() || Y.rows() != B_Y.rows()) return;
-        MatrixType I  = MatrixType::Identity(Y.cols(), Y.cols());
-        MatrixType G1 = Y.adjoint() * B_Y;
-        MatrixType G2 = B_Y.adjoint() * Y;
-        Gram          = G1;
-        Gram_symm     = (G1 + G2) * half;
-        Gram_skew     = (G1 - G2) * half;
-        orthError     = (Gram - I).norm();
-        symmError     = (Gram_symm - I).norm();
-        skewError     = Gram_skew.norm();
-        skewError_fwd = skewError;
-        Rdiag         = Gram_symm.diagonal().cwiseAbs().cwiseSqrt();
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::OrthMeta::analyze_l2_orthogonality(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &Y) {
-        if(Y.cols() == 0) return;
-        Gram      = X.adjoint() * Y;
-        Gram_symm = Gram;
-        Gram_skew = Gram;
-        orthError = Gram.norm();
-        symmError = orthError;
-        skewError = orthError;
-        Rdiag     = Gram_symm.diagonal().cwiseAbs().cwiseSqrt();
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::OrthMeta::analyze_bm_orthogonality(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &B_X,
-                                                          const Eigen::Ref<const MatrixType> &Y, const Eigen::Ref<const MatrixType> &B_Y) {
-        if(Y.cols() != B_Y.cols() || Y.rows() != B_Y.rows()) return;
-        if(X.cols() != B_X.cols() || X.rows() != B_X.rows()) return;
-        if(Y.rows() != X.rows()) return;
-
-        MatrixType G1 = X.adjoint() * B_Y;
-        MatrixType G2 = B_X.adjoint() * Y;
-        MatrixType I  = MatrixType::Identity(G1.rows(), G1.cols());
-
-        Gram      = G1;
-        Gram_symm = (G1 + G2) * half;
-        Gram_skew = (G1 - G2) * half;
-
-        orthError = (Gram - I).norm();
-        symmError = (Gram_symm - I).norm();
-        skewError = Gram_skew.norm();
-        Rdiag     = Gram_symm.diagonal().cwiseAbs().cwiseSqrt();
-    }
-
-    template<typename Scalar>
-    std::string_view base<Scalar>::ResidualCorrectionToString(ResidualCorrectionType rct) {
+    template<typename Scalar, grit::Form form_>
+    std::string_view base<Scalar, form_>::ResidualCorrectionToString(ResidualCorrectionType rct) {
         switch(rct) {
             case ResidualCorrectionType::NONE: return "NONE";
             case ResidualCorrectionType::CHEAP_OLSEN: return "CHEAP_OLSEN";
@@ -92,8 +24,8 @@ namespace grit::form {
         return "NONE";
     }
 
-    template<typename Scalar>
-    typename base<Scalar>::ResidualCorrectionType base<Scalar>::StringToResidualCorrection(std::string_view rct) {
+    template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::ResidualCorrectionType base<Scalar, form_>::StringToResidualCorrection(std::string_view rct) {
         if(rct == "NONE") return ResidualCorrectionType::NONE;
         if(rct == "CHEAP_OLSEN") return ResidualCorrectionType::CHEAP_OLSEN;
         if(rct == "FULL_OLSEN") return ResidualCorrectionType::FULL_OLSEN;
@@ -102,78 +34,108 @@ namespace grit::form {
         return ResidualCorrectionType::NONE;
     }
 
-    template<typename Scalar>
-    void base<Scalar>::setLogger(spdlog::level::level_enum level, const std::string &name) {
+    template<typename Scalar, grit::Form form_>
+    void base<Scalar, form_>::bind_config(BaseConfig &config) {
+        cfg_ptr = &config;
+    }
+
+    template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::BaseConfig &base<Scalar, form_>::cfg() {
+        return *cfg_ptr;
+    }
+
+    template<typename Scalar, grit::Form form_>
+    const typename base<Scalar, form_>::BaseConfig &base<Scalar, form_>::cfg() const {
+        return *cfg_ptr;
+    }
+
+    template<typename Scalar, grit::Form form_>
+    void base<Scalar, form_>::setLogger(spdlog::level::level_enum level, const std::string &name) {
         eiglog = Logger::getLogger(name.empty() ? "grit" : name);
         eiglog->set_level(level);
     }
 
-    template<typename Scalar>
-    base<Scalar>::base(Eigen::Index nev, Eigen::Index ncv, OptRitz ritz, const MatrixType &V, MatVec<Scalar> &A, spdlog::level::level_enum logLevel_)
-        : logLevel(logLevel_), nev(nev), ncv(ncv), ritz(ritz), A(A), V(V) {
-        setLogger(logLevel, "grit");
-        N          = A.get_size();
-        size       = A.get_size();
-        nev        = std::min(nev, N);
-        ncv        = std::min(std::max(nev, ncv), N);
-        block_size = std::min(std::max(nev, block_size), std::max<Eigen::Index>(1, N / 2));
-        status.rNorms.setOnes(nev);
-        status.eigVal.setOnes(nev);
-        status.oldVal.setOnes(nev);
-        status.absDiff.setOnes(nev);
-        status.relDiff.setOnes(nev);
+    template<typename Scalar, grit::Form form_>
+    base<Scalar, form_>::base(const MatrixType &V, Matvec<Scalar> &A) requires(form_ == grit::Form::STANDARD) : A(A), V(V) {
+        setLogger(cfg().log_level, "grit");
+        N    = A.get_size();
+        size = A.get_size();
+        status.rNorms.setOnes(cfg().nev);
+        status.eigVal.setOnes(cfg().nev);
+        status.oldVal.setOnes(cfg().nev);
+        status.absDiff.setOnes(cfg().nev);
+        status.relDiff.setOnes(cfg().nev);
     }
 
-    template<typename Scalar>
-    typename base<Scalar>::MatrixType base<Scalar>::get_residuals(const Eigen::Ref<const VectorReal> &Y, const Eigen::Ref<const MatrixType> &AV,
+    template<typename Scalar, grit::Form form_>
+    base<Scalar, form_>::base(const MatrixType &V, Matvec<Scalar> &A, Matvec<Scalar> &B) requires(form_ == grit::Form::GENERALIZED) : A(A), B(B), V(V) {
+        setLogger(cfg().log_level, "grit");
+        N    = A.get_size();
+        size = A.get_size();
+        status.rNorms.setOnes(cfg().nev);
+        status.eigVal.setOnes(cfg().nev);
+        status.oldVal.setOnes(cfg().nev);
+        status.absDiff.setOnes(cfg().nev);
+        status.relDiff.setOnes(cfg().nev);
+    }
+
+    template<typename Scalar, grit::Form form_>
+    std::string_view base<Scalar, form_>::form_name() const {
+        if constexpr(form_ == grit::Form::GENERALIZED) return "GENERALIZED";
+        else return "STANDARD";
+    }
+
+    template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::MatrixType base<Scalar, form_>::get_residuals(const Eigen::Ref<const VectorReal> &Y, const Eigen::Ref<const MatrixType> &AV,
                                                                   const Eigen::Ref<const MatrixType> &BV, VectorReal &rNorms) {
         MatrixType S = AV - BV * Y.asDiagonal();
         rNorms       = S.colwise().norm().transpose();
         return S;
     }
 
-    template<typename Scalar>
-    typename base<Scalar>::RealScalar base<Scalar>::rNormTol([[maybe_unused]] Eigen::Index n) const {
-        if(use_relative_rnorm_tolerance) {
+    template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::RealScalar base<Scalar, form_>::rNormTol([[maybe_unused]] Eigen::Index n) const {
+        if(cfg().use_relative_rnorm_tolerance) {
             auto scale     = relative_rNormScale(n);
-            auto rnorm_tol = tol * scale;
-            if(tol_rnorm_relative > RealScalar{0} && n < status.rNorms_init.size()) rnorm_tol = std::max(rnorm_tol, tol_rnorm_relative * status.rNorms_init(n));
+            auto rnorm_tol = cfg().tol * scale;
+            if(cfg().tol_rnorm_relative > RealScalar{0} && n < status.rNorms_init.size())
+                rnorm_tol = std::max(rnorm_tol, cfg().tol_rnorm_relative * status.rNorms_init(n));
             return rnorm_tol;
         }
-        return tol;
+        return cfg().tol;
     }
 
-    template<typename Scalar>
-    typename base<Scalar>::VectorReal base<Scalar>::rNormTols() const {
-        VectorReal tols(nev);
-        for(Eigen::Index n = 0; n < nev; ++n) tols(n) = rNormTol(n);
+    template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::rNormTols() const {
+        VectorReal tols(cfg().nev);
+        for(Eigen::Index n = 0; n < cfg().nev; ++n) tols(n) = rNormTol(n);
         return tols;
     }
 
-    template<typename Scalar>
-    typename base<Scalar>::RealScalar base<Scalar>::relative_rNormScale(Eigen::Index n) const {
+    template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::RealScalar base<Scalar, form_>::relative_rNormScale(Eigen::Index n) const {
         auto op_norm = get_op_norm_estimate(status.eigVal.size() > n ? std::optional<RealScalar>{status.eigVal(n)} : std::nullopt);
         auto v_norm  = V.cols() > n ? V.col(n).norm() : RealScalar{1};
         if(!std::isfinite(v_norm) || v_norm <= RealScalar{0}) v_norm = RealScalar{1};
         return std::max(op_norm * v_norm, std::numeric_limits<RealScalar>::min());
     }
 
-    template<typename Scalar>
-    typename base<Scalar>::VectorReal base<Scalar>::relative_rNormScales() const {
-        VectorReal scales(nev);
-        for(Eigen::Index n = 0; n < nev; ++n) scales(n) = relative_rNormScale(n);
+    template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::relative_rNormScales() const {
+        VectorReal scales(cfg().nev);
+        for(Eigen::Index n = 0; n < cfg().nev; ++n) scales(n) = relative_rNormScale(n);
         return scales;
     }
 
-    template<typename Scalar>
-    typename base<Scalar>::VectorReal base<Scalar>::relative_rNorms(const VectorReal &rNorms) const {
-        auto rows = std::min<Eigen::Index>(nev, rNorms.size());
+    template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::relative_rNorms(const VectorReal &rNorms) const {
+        auto rows = std::min<Eigen::Index>(cfg().nev, rNorms.size());
         if(rows <= 0) return {};
         return rNorms.topRows(rows).cwiseQuotient(relative_rNormScales().topRows(rows));
     }
 
-    template<typename Scalar>
-    typename base<Scalar>::RealScalar base<Scalar>::get_rNorms_log10_change_per_matvec() {
+    template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::RealScalar base<Scalar, form_>::get_rNorms_log10_change_per_matvec() {
         if(status.rNorms_history.size() < 2ul) return RealScalar{0};
         auto size = status.rNorms_history.size();
         assert(size == status.matvecs_history.size());
@@ -184,8 +146,8 @@ namespace grit::form {
         return std::log10(rNorm_change.minCoeff()) / static_cast<RealScalar>(sum_matvecs);
     }
 
-    template<typename Scalar>
-    typename base<Scalar>::RealScalar base<Scalar>::get_op_norm_estimate(std::optional<RealScalar> eigval) const {
+    template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::RealScalar base<Scalar, form_>::get_op_norm_estimate(std::optional<RealScalar> eigval) const {
         auto op_norm_estimate = std::max(RealScalar{1}, status.op_norm_estimate);
         if(!std::isfinite(op_norm_estimate)) op_norm_estimate = RealScalar{1};
 
@@ -195,25 +157,46 @@ namespace grit::form {
 
         if(Q.size() == 0 || Q.norm() == RealScalar{0}) return std::max({op_norm_estimate, abs_eigval, A.get_op_norm()});
 
-        if(is_generalized_problem()) {
+        if constexpr(form_ == grit::Form::GENERALIZED) {
             auto A_maxnorm = AQ.size() == Q.size() ? AQ.norm() / Q.norm() : RealScalar{1};
             auto B_maxnorm = BQ.size() == Q.size() ? BQ.norm() / Q.norm() : RealScalar{1};
             return std::max({op_norm_estimate, A_maxnorm + abs_eigval * B_maxnorm, abs_eigval, A.get_op_norm()});
+        } else {
+            auto A_maxnorm = AQ.size() == Q.size() ? AQ.norm() / Q.norm() : RealScalar{1};
+            return std::max({op_norm_estimate, A_maxnorm, abs_eigval, A.get_op_norm()});
         }
-
-        auto A_maxnorm = AQ.size() == Q.size() ? AQ.norm() / Q.norm() : RealScalar{1};
-        return std::max({op_norm_estimate, A_maxnorm, abs_eigval, A.get_op_norm()});
     }
 
-    template<typename Scalar>
-    typename base<Scalar>::MatrixType base<Scalar>::MultA(const Eigen::Ref<const MatrixType> &X) {
+    template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::MatrixType base<Scalar, form_>::MultA(const Eigen::Ref<const MatrixType> &X) {
         auto token_matvecs  = status.time_matvecs.tic_token();
         status.num_matvecs += X.cols();
-        return A.MultAX(X);
+        return A.mult(X);
     }
 
-    template<typename Scalar>
-    typename base<Scalar>::MatrixType base<Scalar>::MultP(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const VectorReal> &evals) {
+    template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::MatrixType base<Scalar, form_>::MultA_inner(const Eigen::Ref<const MatrixType> &X) {
+        auto token_matvecs        = status.time_matvecs_inner.tic_token();
+        status.num_matvecs_inner += X.cols();
+        return A.mult(X);
+    }
+
+    template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::MatrixType base<Scalar, form_>::MultB(const Eigen::Ref<const MatrixType> &X) requires(form_ == grit::Form::GENERALIZED) {
+        auto token_matvecs  = status.time_matvecs.tic_token();
+        status.num_matvecs += X.cols();
+        return B->get().mult(X);
+    }
+
+    template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::MatrixType base<Scalar, form_>::MultB_inner(const Eigen::Ref<const MatrixType> &X) requires(form_ == grit::Form::GENERALIZED) {
+        auto token_matvecs        = status.time_matvecs_inner.tic_token();
+        status.num_matvecs_inner += X.cols();
+        return B->get().mult(X);
+    }
+
+    template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::MatrixType base<Scalar, form_>::MultP(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const VectorReal> &evals) {
         if(!A.has_preconditioner_apply()) return X;
 
         auto       token_precond = status.time_precond.tic_token();
@@ -229,428 +212,30 @@ namespace grit::form {
         return Y;
     }
 
-    template<typename Scalar>
-    void base<Scalar>::adjust_residual_correction_type() {
-        residual_correction_type_internal = residual_correction_type;
-        if(residual_correction_type_internal == ResidualCorrectionType::AUTO) {
-            if(auto_residual_correction.active == ResidualCorrectionType::JACOBI_DAVIDSON &&
-               auto_residual_correction.jd_steps_since_probe >= auto_cheap_probe_interval) {
-                auto_residual_correction.step_method = ResidualCorrectionType::CHEAP_OLSEN;
-            } else {
-                auto_residual_correction.step_method = auto_residual_correction.active;
-            }
-            residual_correction_type_internal = auto_residual_correction.step_method;
+    template<typename Scalar, grit::Form form_>
+    void base<Scalar, form_>::diagonalizeT() {
+        T1 = Q.adjoint() * AQ;
+        T1 = (T1 + T1.adjoint()) * half;
+        if constexpr(form_ == grit::Form::GENERALIZED) {
+            T2 = Q.adjoint() * BQ;
+            T2 = (T2 + T2.adjoint()) * half;
+            Eigen::GeneralizedSelfAdjointEigenSolver<MatrixType> es(T1, T2);
+            if(es.info() != Eigen::Success) throw std::runtime_error("diagonalizeT: generalized eigensolver failed");
+            T_evals = es.eigenvalues();
+            T_evecs = es.eigenvectors();
         } else {
-            auto_residual_correction.step_method = residual_correction_type_internal;
+            T2 = MatrixType::Identity(T1.rows(), T1.cols());
+            Eigen::SelfAdjointEigenSolver<MatrixType> es(T1);
+            if(es.info() != Eigen::Success) throw std::runtime_error("diagonalizeT: eigensolver failed");
+            T_evals = es.eigenvalues();
+            T_evecs = es.eigenvectors();
         }
     }
 
-    template<typename Scalar>
-    typename base<Scalar>::RealScalar base<Scalar>::get_auto_rnorm_scalar(const VectorReal &rnorms) const {
-        if(rnorms.size() == 0) return RealScalar{0};
-        auto rows = std::min<Eigen::Index>(nev, rnorms.size());
-        return rnorms.topRows(rows).maxCoeff();
-    }
-
-    template<typename Scalar>
-    typename base<Scalar>::RealScalar base<Scalar>::get_auto_probe_eigval_improvement() const {
-        if(status.oldVal.size() == 0 || status.eigVal.size() == 0) return RealScalar{0};
-        auto before = status.oldVal(0);
-        auto after  = status.eigVal(0);
-        switch(ritz) {
-            case OptRitz::LR: return after - before;
-            case OptRitz::SM: return std::abs(before) - std::abs(after);
-            case OptRitz::LM: return std::abs(after) - std::abs(before);
-            case OptRitz::NONE: [[fallthrough]];
-            case OptRitz::SR: return before - after;
-        }
-        return RealScalar{0};
-    }
-
-    template<typename Scalar>
-    typename base<Scalar>::AutoSaturationMetric base<Scalar>::get_auto_rnorm_saturation_metric() {
-        AutoSaturationMetric metric;
-        metric.enabled      = auto_sat_rnorm_threshold > RealScalar{0};
-        metric.threshold    = auto_sat_rnorm_threshold;
-        metric.history_size = static_cast<Eigen::Index>(status.rNorms_history.size());
-        if(!metric.enabled) return metric;
-
-        const auto min_history_size = std::min<size_t>(status.max_history_size, size_t{2});
-        metric.enough_history       = status.iter >= static_cast<Eigen::Index>(min_history_size) && status.rNorms_history.size() >= min_history_size;
-        if(!metric.enough_history || status.rNorms.size() == 0) return metric;
-
-        auto rows = std::min<Eigen::Index>(nev, status.rNorms.size());
-        if(rows <= 0) return metric;
-        VectorReal             scales = relative_rNormScales().topRows(rows);
-        std::deque<VectorReal> relative_history;
-        for(const auto &history : status.rNorms_history) {
-            if(history.size() < rows) throw std::runtime_error("rNorms_history has unequal size vectors");
-            relative_history.emplace_back(history.topRows(rows).cwiseQuotient(scales));
-        }
-        VectorReal stds  = get_standard_deviations(relative_history, false);
-        VectorReal vals  = status.rNorms.topRows(rows).cwiseQuotient(scales);
-        VectorReal scale = vals.cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
-        VectorReal ratio = stds.topRows(rows).cwiseQuotient(scale);
-
-        metric.value     = vals.maxCoeff();
-        metric.stddev    = stds.topRows(rows).maxCoeff();
-        metric.scale     = scale.maxCoeff();
-        metric.ratio     = ratio.maxCoeff();
-        metric.saturated = (ratio.array() < metric.threshold).all();
-        return metric;
-    }
-
-    template<typename Scalar>
-    typename base<Scalar>::AutoSaturationMetric base<Scalar>::get_auto_eigval_saturation_metric() {
-        AutoSaturationMetric metric;
-        metric.enabled      = auto_sat_eigval_threshold > RealScalar{0};
-        metric.threshold    = auto_sat_eigval_threshold;
-        metric.history_size = static_cast<Eigen::Index>(status.eigVals_history.size());
-        if(!metric.enabled) return metric;
-
-        const auto min_history_size = std::min<size_t>(status.max_history_size, size_t{2});
-        metric.enough_history       = status.iter >= static_cast<Eigen::Index>(min_history_size) && status.eigVals_history.size() >= min_history_size;
-        if(!metric.enough_history || status.eigVal.size() == 0) return metric;
-
-        VectorReal stds = get_standard_deviations(status.eigVals_history, false);
-        auto       rows = std::min({nev, status.eigVal.size(), stds.size()});
-        if(rows <= 0) return metric;
-        VectorReal vals  = status.eigVal.topRows(rows).cwiseAbs();
-        VectorReal scale = VectorReal::Zero(rows);
-        for(const auto &history : status.eigVals_history) {
-            if(history.size() < rows) throw std::runtime_error("eigVals_history has unequal size vectors");
-            scale.array() += history.topRows(rows).array().abs();
-        }
-        scale            /= static_cast<RealScalar>(status.eigVals_history.size());
-        scale             = scale.cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
-        VectorReal ratio  = stds.topRows(rows).cwiseQuotient(scale);
-
-        metric.value     = vals.maxCoeff();
-        metric.stddev    = stds.topRows(rows).maxCoeff();
-        metric.scale     = scale.maxCoeff();
-        metric.ratio     = ratio.maxCoeff();
-        metric.saturated = (ratio.array() < metric.threshold).all();
-        return metric;
-    }
-
-    template<typename Scalar>
-    typename base<Scalar>::AutoSaturationStatus base<Scalar>::get_auto_saturation_status() {
-        AutoSaturationStatus status_auto;
-        status_auto.eigval = get_auto_eigval_saturation_metric();
-        status_auto.rnorm  = get_auto_rnorm_saturation_metric();
-        status_auto.ready  = status_auto.eigval.saturated && status_auto.rnorm.saturated;
-        return status_auto;
-    }
-
-    template<typename Scalar>
-    typename base<Scalar>::MatrixType base<Scalar>::cheap_Olsen_correction(const MatrixType &V, const MatrixType &S) {
-        MatrixType D(S.rows(), S.cols());
-
-        assert(V.allFinite());
-        assert(S.allFinite());
-        for(long i = 0; i < S.cols(); ++i) {
-            auto d           = D.col(i);
-            auto v           = V.col(i);
-            auto s           = S.col(i);
-            auto numerator   = Scalar{1};
-            auto denominator = Scalar{1};
-
-            if(use_b_inner_product && BV.rows() == V.rows() && BV.cols() > i) {
-                auto bv     = BV.col(i);
-                numerator   = bv.dot(s);
-                denominator = bv.dot(v);
-            } else {
-                numerator   = v.dot(s);
-                denominator = v.dot(v);
-            }
-
-            auto delta  = std::abs(denominator) > eps * 100 ? numerator / denominator : RealScalar{0};
-            d.noalias() = s - delta * v;
-        }
-        return D;
-    }
-
-    template<typename Scalar>
-    typename base<Scalar>::MatrixType base<Scalar>::full_Olsen_correction(const MatrixType &V, const MatrixType &S) {
-        MatrixType MV;
-        MatrixType MS;
-        MatrixType coeffs;
-        auto       Y = T_evals(status.optIdx);
-
-        if(use_b_inner_product && BV.rows() == V.rows() && BV.cols() == V.cols()) {
-            MV.noalias() = A.has_preconditioner_apply() ? MultP(V, Y) : V;
-            MS.noalias() = A.has_preconditioner_apply() ? MultP(S, Y) : S;
-
-            MatrixType G       = BV.adjoint() * MV;
-            MatrixType VT_B_MS = BV.adjoint() * MS;
-            coeffs             = G.ldlt().solve(VT_B_MS);
-        } else {
-            MV.noalias() = A.has_preconditioner_apply() ? MultP(V, Y) : V;
-            MS.noalias() = A.has_preconditioner_apply() ? MultP(S, Y) : S;
-
-            MatrixType G     = V.adjoint() * MV;
-            MatrixType VT_MS = V.adjoint() * MS;
-            coeffs           = G.ldlt().solve(VT_MS);
-        }
-        return MS - MV * coeffs;
-    }
-
-    template<typename Scalar>
-    typename base<Scalar>::MatrixType base<Scalar>::jacobi_davidson_l2_correction(const MatrixType &V, const MatrixType &S, const VectorReal &evals) {
-        assert(V.rows() == S.rows());
-        assert(V.cols() == S.cols());
-        assert(!use_b_inner_product);
-
-        auto MatrixOp = [this](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
-            auto token_matvecs_inner  = status.time_matvecs_inner.tic_token();
-            status.num_matvecs_inner += X.cols();
-            if(is_generalized_problem()) return MultB_inner(X);
-            return A.MultAX(X);
-        };
-
-        auto ProjectOpL = [&V](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
-            thread_local MatrixType T;
-            T.resize(V.cols(), X.cols());
-            Y.resize(X.rows(), X.cols());
-            T.noalias() = V.adjoint() * X;
-            Y.noalias() = X - V * T;
-        };
-        auto ProjectOpL_tmp = [ProjectOpL](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
-            MatrixType Y(X.rows(), X.cols());
-            ProjectOpL(X, Y);
-            return Y;
-        };
-
-        auto ProjectOpR = [&V](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
-            thread_local MatrixType T;
-            T.resize(V.cols(), X.cols());
-            Y.resize(X.rows(), X.cols());
-            T.noalias() = V.adjoint() * X;
-            Y.noalias() = X - V * T;
-        };
-        auto ProjectOpR_tmp = [ProjectOpR](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
-            MatrixType Y(X.rows(), X.cols());
-            ProjectOpR(X, Y);
-            return Y;
-        };
-
-        MatrixType RHS = -ProjectOpL_tmp(S);
-
-        if(D.size() != RHS.size()) D.setZero(RHS.rows(), RHS.cols());
-
-        for(Eigen::Index i = 0; i < S.cols(); ++i) {
-            auto              d   = D.col(i);
-            RealScalar        th  = evals(i);
-            const VectorType &rhs = RHS.col(i);
-
-            if(i > 0) {
-                const VectorType &s  = S.col(i);
-                const VectorType &v  = V.col(i);
-                auto              ev = evals.middleRows(i, 1);
-                D.col(i).noalias()   = MultP(s, ev);
-                D.col(i).noalias()   = cheap_Olsen_correction(v, D.col(i));
-            } else {
-                auto token_precond = status.time_precond_inner.tic_token();
-                A.preconditioner_update(th);
-
-                IterativeLinearSolverConfig<Scalar> cfg;
-                cfg.result               = {};
-                cfg.matdef               = MatDef::IND;
-                cfg.maxiters             = inner_max_iters;
-                cfg.tolerance            = inner_tol;
-                cfg.theta                = th;
-                cfg.preconditioner_apply = [this](const Eigen::Ref<const VectorType> &x, Eigen::Ref<VectorType> y, RealScalar theta) -> void {
-                    A.preconditioner_apply(x, y, theta);
-                };
-
-                auto ResidualOp = [this, th](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> HX) -> void {
-                    auto token_matvecs_inner = status.time_matvecs_inner.tic_token();
-                    HX.resize(X.rows(), X.cols());
-                    if(use_jd_b_only) {
-                        HX.noalias()              = MultB_inner(X);
-                        status.num_matvecs_inner += X.cols();
-                    } else if(is_generalized_problem()) {
-                        HX.noalias()              = A.MultAX(X) - th * MultB_inner(X);
-                        status.num_matvecs_inner += 2 * X.cols();
-                    } else {
-                        HX.noalias()              = A.MultAX(X) - th * X;
-                        status.num_matvecs_inner += X.cols();
-                    }
-                };
-
-                auto JDop = internal::precondition::JacobiDavidsonOperator<Scalar>(rhs.rows(), ResidualOp, ProjectOpL, ProjectOpR, MatrixOp);
-
-                d.noalias() = internal::precondition::JacobiDavidsonSolver(JDop, rhs, cfg);
-                d.noalias() = ProjectOpR_tmp(d);
-
-                status.num_iters_inner   += cfg.result.iters;
-                status.num_jdops_inner   += cfg.result.matvecs;
-                status.num_precond_inner += cfg.result.precond;
-                status.inner_error_last   = std::max(status.inner_error_last, cfg.result.error);
-                status.inner_tol_last     = std::max(status.inner_tol_last, cfg.tolerance);
-            }
-        }
-        status.num_precond += block_size;
-        return D;
-    }
-
-    template<typename Scalar>
-    typename base<Scalar>::MatrixType base<Scalar>::jacobi_davidson_bm_correction(const MatrixType &V, const MatrixType &BV, const MatrixType &S,
-                                                                                  const VectorReal &evals) {
-        assert(is_generalized_problem());
-        assert(use_b_inner_product);
-        assert(V.rows() == S.rows());
-        assert(V.cols() == S.cols());
-        assert(BV.size() == V.size());
-
-        auto ProjectOpL = [&V, &BV](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
-            thread_local MatrixType T;
-            T.resize(V.cols(), X.cols());
-            Y.resize(X.rows(), X.cols());
-            T.noalias()  = V.adjoint() * X;
-            Y.noalias()  = X;
-            Y.noalias() -= BV * T;
-        };
-        auto ProjectOpL_tmp = [ProjectOpL](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
-            MatrixType Y(X.rows(), X.cols());
-            ProjectOpL(X, Y);
-            return Y;
-        };
-
-        auto ProjectOpR = [&V, &BV](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
-            thread_local MatrixType T;
-            T.resize(BV.cols(), X.cols());
-            Y.resize(X.rows(), X.cols());
-            T.noalias()  = BV.adjoint() * X;
-            Y.noalias()  = X;
-            Y.noalias() -= V * T;
-        };
-        auto ProjectOpR_tmp = [ProjectOpR](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
-            MatrixType Y(X.rows(), X.cols());
-            ProjectOpR(X, Y);
-            return Y;
-        };
-
-        MatrixType RHS = -ProjectOpL_tmp(S);
-
-        MatrixType D(S.rows(), S.cols());
-
-        for(Eigen::Index i = 0; i < S.cols(); ++i) {
-            auto              d   = D.col(i);
-            const RealScalar &th  = evals(i);
-            const VectorType &rhs = RHS.col(i);
-            if(i >= nev) {
-                const VectorType &s  = S.col(i);
-                const VectorType &v  = V.col(i);
-                auto              ev = evals.middleRows(i, 1);
-                D.col(i).noalias()   = MultP(s, ev);
-                D.col(i).noalias()   = cheap_Olsen_correction(v, D.col(i));
-            } else {
-                auto token_precond = status.time_precond_inner.tic_token();
-                A.preconditioner_update(th);
-
-                IterativeLinearSolverConfig<Scalar> cfg;
-                cfg.result               = {};
-                cfg.matdef               = MatDef::IND;
-                cfg.maxiters             = inner_max_iters;
-                cfg.tolerance            = inner_tol;
-                cfg.theta                = th;
-                cfg.preconditioner_apply = [this](const Eigen::Ref<const VectorType> &x, Eigen::Ref<VectorType> y, RealScalar theta) -> void {
-                    A.preconditioner_apply(x, y, theta);
-                };
-
-                auto MatrixOp = [this](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
-                    auto token_matvecs_inner  = status.time_matvecs_inner.tic_token();
-                    status.num_matvecs_inner += X.cols();
-                    return MultB_inner(X);
-                };
-
-                auto ResidualOp = [this, th](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> HX) -> void {
-                    auto token_matvecs_inner = status.time_matvecs_inner.tic_token();
-                    HX.resize(X.rows(), X.cols());
-                    if(use_jd_b_only) {
-                        HX.noalias()              = MultB_inner(X);
-                        status.num_matvecs_inner += X.cols();
-                    } else {
-                        HX.noalias()              = A.MultAX(X) - th * MultB_inner(X);
-                        status.num_matvecs_inner += 2 * X.cols();
-                    }
-                };
-
-                auto JDop = internal::precondition::JacobiDavidsonOperator<Scalar>(rhs.rows(), ResidualOp, ProjectOpL, ProjectOpR, MatrixOp);
-
-                d.noalias() = internal::precondition::JacobiDavidsonSolver(JDop, rhs, cfg);
-                d.noalias() = ProjectOpR_tmp(d);
-
-                status.num_iters_inner   += cfg.result.iters;
-                status.num_jdops_inner   += cfg.result.matvecs;
-                status.num_precond_inner += cfg.result.precond;
-                status.inner_error_last   = std::max(status.inner_error_last, cfg.result.error);
-                status.inner_tol_last     = std::max(status.inner_tol_last, cfg.tolerance);
-            }
-        }
-        status.num_precond += block_size;
-        return D;
-    }
-
-    template<typename Scalar>
-    typename base<Scalar>::MatrixType base<Scalar>::get_sBlock(const MatrixType &S_in) {
-        MatrixType S = S_in;
-        assert(S.allFinite());
-        assert(S.cols() > 0);
-        auto Y = T_evals(status.optIdx);
-
-        switch(residual_correction_type_internal) {
-            case ResidualCorrectionType::NONE:
-                if(A.has_preconditioner_apply()) { S = MultP(S, Y); }
-                break;
-            case ResidualCorrectionType::AUTO: [[fallthrough]];
-            case ResidualCorrectionType::CHEAP_OLSEN:
-                if(A.has_preconditioner_apply()) { S = MultP(S, Y); }
-                S.noalias() = cheap_Olsen_correction(V, S);
-                break;
-            case ResidualCorrectionType::FULL_OLSEN: S.noalias() = full_Olsen_correction(V, S); break;
-            case ResidualCorrectionType::JACOBI_DAVIDSON:
-                if(use_jd_b_only && !is_generalized_problem()) throw std::runtime_error("use_jd_b_only requires a generalized eigenvalue problem");
-                if(use_b_inner_product) {
-                    S.noalias() = jacobi_davidson_bm_correction(V, BV, S, Y);
-                } else {
-                    S.noalias() = jacobi_davidson_l2_correction(V, S, Y);
-                }
-                break;
-        }
-        assert_allFinite(S);
-        return S;
-    }
-
-    template<typename Scalar>
-    std::vector<Eigen::Index> base<Scalar>::get_ritz_indices(OptRitz ritz, Eigen::Index offset, Eigen::Index num, const VectorReal &evals) const {
-        std::vector<Eigen::Index> indices;
-        switch(ritz) {
-            case OptRitz::SR: indices = getIndices(evals, offset, num, std::less<RealScalar>()); break;
-            case OptRitz::LR: indices = getIndices(evals, offset, num, std::greater<RealScalar>()); break;
-            case OptRitz::SM: {
-                VectorReal abs_evals = evals.cwiseAbs();
-                indices              = getIndices(abs_evals, offset, num, std::less<RealScalar>());
-                break;
-            }
-            case OptRitz::LM: {
-                VectorReal abs_evals = evals.cwiseAbs();
-                indices              = getIndices(abs_evals, offset, num, std::greater<RealScalar>());
-                break;
-            }
-            case OptRitz::NONE: indices = getIndices(evals, offset, num, std::less<RealScalar>()); break;
-        }
-        return indices;
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::init() {
+    template<typename Scalar, grit::Form form_>
+    void base<Scalar, form_>::init() {
         assert(N == A.get_size() && "A must have same dimension");
-        nev                         = std::min(nev, N);
-        ncv                         = std::min(std::max(nev, ncv), N);
-        block_size                  = std::min(std::max(nev, block_size), N / 2);
-        status.saturation_count_max = ncv;
+        status.saturation_count_max = cfg().ncv;
         Eigen::ColPivHouseholderQR<MatrixType> cpqr;
 
         // Step 0: Construct and orthonormalize the initial block V.
@@ -660,26 +245,26 @@ namespace grit::form {
         // If after QR we have fewer than block_size columns, we pad again (this is a very unlikely event)
         assert(V.size() == 0 or N == V.rows());
         for(long i = 0; i < 2; ++i) {
-            if(V.cols() < block_size) {
+            if(V.cols() < cfg().block_size) {
                 // Pad with random vectors
                 auto vc = V.cols();
-                V.conservativeResize(N, block_size);
-                auto Vrc = V.rightCols(block_size - vc);
+                V.conservativeResize(N, cfg().block_size);
+                auto Vrc = V.rightCols(cfg().block_size - vc);
                 for(auto vj : Vrc.colwise()) { vj = Eigen::VectorXf::Random(vj.size()).template cast<Scalar>(); }
             }
             // Orthonormalize V.
             // Discard columns if there are more than block_size (this is not expected, but also not an error)
             cpqr.compute(V);
-            auto rank = std::min<Eigen::Index>(cpqr.rank(), block_size);
+            auto rank = std::min<Eigen::Index>(cpqr.rank(), cfg().block_size);
             V         = cpqr.householderQ().setLength(rank) * MatrixType::Identity(N, rank);
-            if(V.cols() == block_size) break;
+            if(V.cols() == cfg().block_size) break;
         }
 
         auto block_orthonormalize = [&] {
             auto m       = OrthMeta();
             m.maskPolicy = MaskPolicy::COMPRESS;
-            if(is_generalized_problem()) {
-                if(use_b_inner_product) {
+            if constexpr(form_ == grit::Form::GENERALIZED) {
+                if(cfg().use_b_inner_product) {
                     block_bm_orthonormalize(V, AV, BV, m);
                 } else {
                     block_l2_orthonormalize(V, AV, BV, m);
@@ -689,10 +274,10 @@ namespace grit::form {
             }
         };
 
-        assert(V.cols() == block_size);
+        assert(V.cols() == cfg().block_size);
         if(status.iter == 0) {
             // Make sure we start with ritz vectors in V, so that the first Lanczos loop produces proper residuals.
-            if(is_generalized_problem()) {
+            if constexpr(form_ == grit::Form::GENERALIZED) {
                 block_orthonormalize();
                 Q             = V;
                 AQ            = AV;
@@ -704,7 +289,7 @@ namespace grit::form {
                 Eigen::GeneralizedSelfAdjointEigenSolver<MatrixType> es_seed(T1, T2, Eigen::Ax_lBx);
                 T_evecs       = es_seed.eigenvectors();
                 T_evals       = es_seed.eigenvalues();
-                status.optIdx = get_ritz_indices(ritz, 0, block_size, T_evals);
+                status.optIdx = get_ritz_indices(cfg().ritz, 0, cfg().block_size, T_evals);
                 MatrixType Z  = T_evecs(Eigen::placeholders::all, status.optIdx);
                 VectorReal Y  = T_evals(status.optIdx);
                 V             = Q * Z;  // Now V has block_size columns mixed according to the selected columns in T_evecs
@@ -713,7 +298,7 @@ namespace grit::form {
 
                 RealScalar min_sep =
                     T_evals.size() <= 1 ? RealScalar{1} : (T_evals.tail(T_evals.size() - 1) - T_evals.head(T_evals.size() - 1)).cwiseAbs().minCoeff();
-                auto select1       = get_ritz_indices(ritz, 0, 1, T_evals);
+                auto select1       = get_ritz_indices(cfg().ritz, 0, 1, T_evals);
                 auto A_max_abs     = std::max({T1.cwiseAbs().maxCoeff(), AV.norm() / V.norm(), RealScalar{1}});
                 auto B_max_abs     = std::max({T2.cwiseAbs().maxCoeff(), BV.norm() / V.norm(), RealScalar{1}});
                 status.sensitivity = (A_max_abs + T_evals(select1).cwiseAbs().coeff(0) * B_max_abs) / min_sep;
@@ -726,17 +311,17 @@ namespace grit::form {
                 block_orthonormalize();
 
                 S             = get_residuals(Y, AV, BV, status.rNorms);
-                status.eigVal = Y.topRows(nev); // Make sure we only take nev values here. In general, nev <= block_size
+                status.eigVal = Y.topRows(cfg().nev); // Make sure we only take nev values here. In general, nev <= block_size
             } else {
                 block_orthonormalize();
                 Q  = V;
-                AQ = MultA(V);
+                AQ = AV;
                 T  = Q.adjoint() * AQ;
                 T  = RealScalar{0.5f} * (T.adjoint() + T); // Symmetrize
                 Eigen::SelfAdjointEigenSolver<MatrixType> es(T);
                 T_evecs       = es.eigenvectors();
                 T_evals       = es.eigenvalues();
-                status.optIdx = get_ritz_indices(ritz, 0, block_size, T_evals);
+                status.optIdx = get_ritz_indices(cfg().ritz, 0, cfg().block_size, T_evals);
                 MatrixType Z  = T_evecs(Eigen::placeholders::all, status.optIdx);
                 VectorReal Y  = T_evals(status.optIdx);
                 V             = Q * Z; // Now V has block_size columns mixed according to the selected columns in T_evecs
@@ -744,7 +329,7 @@ namespace grit::form {
                 BV            = V;
                 BQ            = Q;
                 S             = get_residuals(Y, AV, V, status.rNorms);
-                status.eigVal = Y.topRows(nev); // Make sure we only take nev values here. In general, nev <= block_size
+                status.eigVal = Y.topRows(cfg().nev); // Make sure we only take nev values here. In general, nev <= block_size
 
                 auto A_max_abs          = T_evals.cwiseAbs().maxCoeff();
                 auto A_min_abs          = T_evals.cwiseAbs().minCoeff();
@@ -754,303 +339,13 @@ namespace grit::form {
         }
         status.rNorms_init      = status.rNorms;
         status.op_norm_estimate = get_op_norm_estimate();
-        assert(V.cols() == block_size);
+        assert(V.cols() == cfg().block_size);
         assert_allFinite(V);
         last_log_time.tic();
     }
 
-    template<typename Scalar>
-    void base<Scalar>::extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &S, VectorReal &rNorms) {
-        MatrixType Z = T_evecs(Eigen::placeholders::all, optIdx);
-        VectorReal Y = T_evals(optIdx);
-
-        V  = Q * Z;
-        AV = AQ * Z;
-        S  = get_residuals(Y, AV, V, rNorms);
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV, MatrixType &S,
-                                          VectorReal &rNorms) {
-        MatrixType Z = T_evecs(Eigen::placeholders::all, optIdx);
-        VectorReal Y = T_evals(optIdx);
-
-        V.noalias()  = Q * Z;
-        AV.noalias() = AQ * Z;
-        BV.noalias() = BQ * Z;
-        S            = get_residuals(Y, AV, BV, rNorms);
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::extractRitzVectors() {
-        if(status.stopReason != StopReason::none) return;
-        if(T_evals.size() < block_size) return;
-
-        Eigen::Index k     = std::min(maxPrevBlocks * block_size, T_evals.size());
-        Eigen::Index nritz = std::max({nev, block_size, k});
-
-        status.optIdx = get_ritz_indices(ritz, 0, nritz, T_evals);
-
-        if(use_refined_rayleigh_ritz) {
-            if(is_generalized_problem()) {
-                refinedRitzVectors(status.optIdx, V, AV, BV, S, status.rNorms);
-            } else {
-                refinedRitzVectors(status.optIdx, V, AV, S, status.rNorms);
-                BV = V;
-            }
-        } else {
-            if(is_generalized_problem()) {
-                extractRitzVectors(status.optIdx, V, AV, BV, S, status.rNorms);
-            } else {
-                extractRitzVectors(status.optIdx, V, AV, S, status.rNorms);
-                BV = V;
-            }
-        }
-
-        K_prev = K;
-        K      = V.leftCols(k);
-
-        if(k > block_size) {
-            V.conservativeResize(Eigen::NoChange, block_size);
-            AV.conservativeResize(Eigen::NoChange, block_size);
-            BV.conservativeResize(Eigen::NoChange, block_size);
-            S.conservativeResize(Eigen::NoChange, block_size);
-            status.rNorms.conservativeResize(block_size);
-        }
-
-        if(status.rNorms_init.size() != status.rNorms.size()) status.rNorms_init = status.rNorms;
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::orthonormalize_Z(Eigen::Ref<MatrixType> Z, const Eigen::Ref<const MatrixType> &T2) {
-        if(!use_b_inner_product) {
-            hhqr.compute(Z);
-            Z = hhqr.householderQ() * MatrixType::Identity(Z.rows(), Z.cols());
-        } else {
-            MatrixType G    = Z.adjoint() * T2 * Z;
-            G               = (G + G.adjoint()).eval() * half;
-            auto       es   = Eigen::SelfAdjointEigenSolver<MatrixType>(G);
-            VectorReal D    = es.eigenvalues();
-            MatrixType U    = es.eigenvectors();
-            RealScalar cut  = 100 * eps * static_cast<RealScalar>(D.size()) * D.cwiseAbs().maxCoeff();
-            RealScalar cut2 = cut * cut;
-            for(Eigen::Index j = 0; j < D.size(); ++j) {
-                if(D(j) < cut2) { D(j) = std::max(D(j), cut2); }
-            }
-            Z *= U * D.cwiseInverse().cwiseSqrt().asDiagonal() * U.adjoint();
-        }
-    }
-
-    template<typename Scalar>
-    typename base<Scalar>::MatrixType base<Scalar>::get_refined_ritz_eigenvectors_std(const Eigen::Ref<const MatrixType> &Z,
-                                                                                      const Eigen::Ref<const VectorReal> &Y, const MatrixType &Q,
-                                                                                      const MatrixType &AQ) {
-        assert(!use_b_inner_product);
-        assert(Z.cols() == Y.size());
-        Eigen::JacobiSVD<MatrixType, Eigen::ComputeThinV> svd;
-        MatrixType                                        Z_ref(Z.rows(), Z.cols());
-        MatrixType                                        T2Z_ref = MatrixType::Zero(Z.rows(), Z.cols());
-        for(Eigen::Index j = 0; j < Y.size(); ++j) {
-            const auto &theta = Y(j);
-            MatrixType  M     = AQ - theta * Q;
-            svd.compute(M);
-
-            Eigen::Index min_idx;
-            svd.singularValues().minCoeff(&min_idx);
-
-            if(svd.info() == Eigen::Success) {
-                Z_ref.col(j) = svd.matrixV().col(min_idx);
-            } else {
-                Z_ref.col(j)            = Z.col(j);
-                RealScalar refinedRnorm = svd.singularValues()(min_idx);
-                if(eiglog) eiglog->warn("refinement failed on ritz vector {} | refined rnorm={:.5e} | info {} ", j, refinedRnorm, static_cast<int>(svd.info()));
-            }
-        }
-        return Z_ref;
-    }
-
-    template<typename Scalar>
-    typename base<Scalar>::MatrixType base<Scalar>::get_refined_ritz_eigenvectors_gen(const Eigen::Ref<const MatrixType> &Z,
-                                                                                      const Eigen::Ref<const VectorReal> &Y, const MatrixType &AQ,
-                                                                                      const MatrixType &BQ) {
-        assert(is_generalized_problem());
-        assert(Z.cols() == Y.size());
-        Eigen::JacobiSVD<MatrixType, Eigen::ComputeThinV> svd;
-        MatrixType                                        Z_ref(Z.rows(), Z.cols());
-        MatrixType                                        T2Z_ref = MatrixType::Zero(Z.rows(), Z.cols());
-        for(Eigen::Index j = 0; j < Y.size(); ++j) {
-            const auto &theta = Y(j);
-            MatrixType  M     = AQ - theta * BQ;
-
-            svd.compute(M);
-
-            if(svd.info() == Eigen::Success) {
-                Eigen::Index min_idx;
-                svd.singularValues().minCoeff(&min_idx);
-
-                auto zj   = Z_ref.col(j);
-                auto t2zj = T2Z_ref.col(j);
-                zj        = svd.matrixV().col(min_idx);
-
-                if(use_b_inner_product) {
-                    t2zj = T2 * zj;
-                } else {
-                    t2zj = zj;
-                }
-
-                if(j > 0) {
-                    auto Z_prev   = Z_ref.leftCols(j);
-                    auto T2Z_prev = T2Z_ref.leftCols(j);
-
-                    MatrixType Gxx = Z_prev.adjoint() * T2Z_prev;
-                    Gxx            = (Gxx + Gxx.adjoint()).eval() * half;
-
-                    MatrixType Gxy = Z_prev.adjoint() * t2zj;
-                    MatrixType W   = Gxx.ldlt().solve(Gxy);
-
-                    zj.noalias()   -= Z_prev * W;
-                    t2zj.noalias() -= T2Z_prev * W;
-                }
-
-                RealScalar norm = std::sqrt(std::max<RealScalar>(0, std::real(zj.dot(t2zj))));
-                if(norm < normTol) {
-                    zj.setZero();
-                    t2zj.setZero();
-                    continue;
-                }
-                zj   /= norm;
-                t2zj /= norm;
-
-            } else {
-                Z_ref.col(j) = Z.col(j);
-                if(eiglog) eiglog->warn("refinement failed on ritz vector {} | info {} ", j, static_cast<int>(svd.info()));
-            }
-        }
-        return Z_ref;
-    }
-
-    template<typename Scalar>
-    std::pair<typename base<Scalar>::MatrixType, typename base<Scalar>::MatrixType>
-        base<Scalar>::get_bm_normalizer_for_the_projected_pencil(const MatrixType &T2) {
-        MatrixType T2h = (T2 + T2.adjoint()) / RealScalar{2};
-
-        auto es = Eigen::SelfAdjointEigenSolver<MatrixType>(T2h, Eigen::ComputeEigenvectors);
-        if(es.info() != Eigen::Success) throw std::runtime_error("get_bm_normalizer_for_the_projected_pencil: eigensolver failed");
-
-        auto U = es.eigenvectors();
-        auto D = es.eigenvalues();
-
-        const RealScalar Dmax = std::max<RealScalar>(RealScalar{1}, D.cwiseAbs().maxCoeff());
-        const RealScalar tau  = RealScalar{10} * eps * Dmax;
-
-        if(D.minCoeff() <= RealScalar{0} && eiglog) eiglog->warn("Projected T2 is numerically indefinite: min eval {:.3e}", D.minCoeff());
-
-        for(Eigen::Index k = 0; k < D.size(); ++k) D(k) = std::max(D(k), tau);
-
-        return {U * D.cwiseInverse().cwiseSqrt().asDiagonal() * U.adjoint(), U * D.cwiseSqrt().asDiagonal() * U.adjoint()};
-    }
-
-    template<typename Scalar>
-    typename base<Scalar>::MatrixType base<Scalar>::get_optimal_rayleigh_ritz_matrix(const MatrixType &Z_rr, const MatrixType &Z_ref, const MatrixType &T1,
-                                                                                     const MatrixType &T2) {
-        assert(Z_rr.size() > 0);
-        assert(Z_rr.rows() == Z_ref.rows());
-        assert(Z_rr.cols() == Z_ref.cols());
-        assert(Z_rr.rows() == T1.rows());
-        assert(Z_rr.rows() == T2.rows());
-        MatrixType Z(Z_rr.rows(), Z_rr.cols());
-
-        MatrixType T1h = (T1.adjoint() + T1) * half;
-        MatrixType T2h = (T2.adjoint() + T2) * half;
-
-        MatrixType I = MatrixType::Identity(2, 2);
-        for(Eigen::Index k = 0; k < Z.cols(); ++k) {
-            using M2Type = Eigen::Matrix<Scalar, 2, 2>;
-            M2Type     A2(2, 2), B2(2, 2);
-            VectorType z0 = Z_rr.col(k);
-            VectorType z1 = Z_ref.col(k);
-            A2(0, 0)      = z0.adjoint() * T1h * z0;
-            A2(1, 0)      = z1.adjoint() * T1h * z0;
-            A2(0, 1)      = z0.adjoint() * T1h * z1;
-            A2(1, 1)      = z1.adjoint() * T1h * z1;
-
-            B2(0, 0) = z0.adjoint() * T2h * z0;
-            B2(1, 0) = z1.adjoint() * T2h * z0;
-            B2(0, 1) = z0.adjoint() * T2h * z1;
-            B2(1, 1) = z1.adjoint() * T2h * z1;
-
-            RealScalar tau  = 10 * eps * std::max(RealScalar{1}, std::real(B2.trace()) * half);
-            B2             += I * tau;
-
-            A2 = (A2.adjoint() + A2) * half;
-            B2 = (B2.adjoint() + B2) * half;
-
-            auto ges = Eigen::GeneralizedSelfAdjointEigenSolver<M2Type>(A2, B2, Eigen::Ax_lBx);
-            if(ges.info() == Eigen::Success) {
-                auto select1 = get_ritz_indices(ritz, 0, 1, ges.eigenvalues());
-                auto v       = ges.eigenvectors().col(select1.at(0));
-                Z.col(k)     = z0 * v(0) + z1 * v(1);
-            } else {
-                if(eiglog) eiglog->warn("generalized refined Rayleigh-Ritz 2x2 solve failed");
-                Z.col(k) = z0;
-            }
-        }
-
-        orthonormalize_Z(Z, T2h);
-
-        return Z;
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AQ, MatrixType &BQ, MatrixType &S,
-                                          VectorReal &rNorms) {
-        assert(is_generalized_problem());
-        VectorReal Y     = T_evals(optIdx);
-        MatrixType Z_rr  = T_evecs(Eigen::placeholders::all, optIdx);
-        MatrixType Z_ref = get_refined_ritz_eigenvectors_gen(Z_rr, Y, AQ, BQ);
-        MatrixType Z_opt = get_optimal_rayleigh_ritz_matrix(Z_rr, Z_ref, T1, T2);
-
-        V.noalias()  = Q * Z_opt;
-        AQ.noalias() = this->AQ * Z_opt;
-        BQ.noalias() = this->BQ * Z_opt;
-
-        if(use_rayleigh_quotients_instead_of_evals) {
-            VectorReal rq1  = (V.adjoint() * AQ).diagonal().real();
-            VectorReal rq2  = (V.adjoint() * BQ).diagonal().real();
-            T_evals(optIdx) = rq1.cwiseQuotient(rq2);
-            Y               = T_evals(optIdx);
-        }
-
-        S = get_residuals(Y, AQ, BQ, rNorms);
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AQ, MatrixType &S, VectorReal &rNorms) {
-        MatrixType Z     = T_evecs(Eigen::placeholders::all, optIdx);
-        VectorReal Y     = T_evals(optIdx);
-        MatrixType Z_ref = get_refined_ritz_eigenvectors_std(Z, Y, Q, this->AQ);
-
-        V  = Q * Z_ref;
-        AQ = this->AQ * Z_ref;
-
-        if(use_rayleigh_quotients_instead_of_evals) { Y = (V.adjoint() * AQ).diagonal().real(); }
-
-        S = get_residuals(Y, AQ, V, rNorms);
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::refinedRitzVectors() {
-        if(!use_refined_rayleigh_ritz) return;
-        if(status.rNorms.size() == 0) throw std::runtime_error("refineRitzVectors() called before extractRitzVectors()");
-        if(is_generalized_problem()) {
-            refinedRitzVectors(status.optIdx, V, AV, BV, S, status.rNorms);
-        } else {
-            refinedRitzVectors(status.optIdx, V, AV, S, status.rNorms);
-        }
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::preamble() {
+    template<typename Scalar, grit::Form form_>
+    void base<Scalar, form_>::preamble() {
         status.num_iters_inner_prev = status.num_iters_inner;
         status.num_matvecs          = 0;
         status.num_precond          = 0;
@@ -1067,66 +362,10 @@ namespace grit::form {
         status.time_matvecs_inner.reset();
         status.time_precond_inner.reset();
         status.time_jdops_inner.reset();
-
-        adjust_inner_tolerance(S);
-        adjust_residual_correction_type();
-        if(residual_correction_type == ResidualCorrectionType::AUTO) auto_residual_correction.step_time_start = status.time_elapsed.get_time();
     }
 
-    template<typename Scalar>
-    void base<Scalar>::adjust_inner_tolerance([[maybe_unused]] const Eigen::Ref<const MatrixType> &S) {
-        if(!use_adaptive_inner_tolerance) return;
-        if(status.num_iters_inner_prev == 0) return;
-
-        const auto oldtol = std::max(eps, inner_tol);
-        const auto oldits = status.num_iters_inner_prev;
-
-        const RealScalar inner_tol_min         = eps;
-        const RealScalar inner_tol_max         = RealScalar{0.75f};
-        const RealScalar inner_tol_decr_factor = RealScalar{0.5f};
-        const RealScalar inner_tol_incr_factor = RealScalar{2};
-        const RealScalar slow_rnorm_ratio      = RealScalar{0.9f};
-        const RealScalar fast_rnorm_ratio      = RealScalar{0.5f};
-
-        const Eigen::Index low_inner_iters  = std::max<Eigen::Index>(1, inner_max_iters / 20);
-        const Eigen::Index high_inner_iters = std::max<Eigen::Index>(low_inner_iters + 1, inner_max_iters / 2);
-
-        bool       has_rnorm_progress = false;
-        RealScalar rnorm_ratio        = RealScalar{1};
-        // This heuristic uses consecutive absolute residual ratios. Re-scaling both
-        // entries by the current relative-residual scale would leave this ratio unchanged,
-        // and storing past scales just for this local controller is not worth the state.
-        if(status.rNorms_history.size() >= 2) {
-            const auto &prev = status.rNorms_history[status.rNorms_history.size() - 2];
-            const auto &curr = status.rNorms_history[status.rNorms_history.size() - 1];
-            const auto  rows = std::min(nev, std::min(prev.size(), curr.size()));
-            if(rows > 0) {
-                VectorReal denom   = prev.topRows(rows).cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
-                VectorReal ratio   = curr.topRows(rows).cwiseQuotient(denom);
-                rnorm_ratio        = ratio.maxCoeff();
-                has_rnorm_progress = std::isfinite(rnorm_ratio);
-            }
-        }
-
-        RealScalar next_tol = oldtol;
-        if(status.iter > 0) {
-            if(has_rnorm_progress) {
-                if(rnorm_ratio > slow_rnorm_ratio) {
-                    if(oldits < low_inner_iters) next_tol = oldtol * inner_tol_decr_factor;
-                } else if(rnorm_ratio < fast_rnorm_ratio) {
-                    if(oldits > high_inner_iters) next_tol = oldtol * inner_tol_incr_factor;
-                }
-            } else {
-                if(oldits < low_inner_iters) next_tol = oldtol * inner_tol_decr_factor;
-                if(oldits > high_inner_iters) next_tol = oldtol * inner_tol_incr_factor;
-            }
-        }
-
-        inner_tol = std::clamp(next_tol, inner_tol_min, inner_tol_max);
-    }
-
-    template<typename Scalar>
-    typename base<Scalar>::VectorReal base<Scalar>::get_standard_deviations(const std::deque<VectorReal> &v, bool apply_log10) {
+    template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::get_standard_deviations(const std::deque<VectorReal> &v, bool apply_log10) {
         if(v.empty()) return {};
         auto       cols         = static_cast<Eigen::Index>(v.size());
         auto       rows         = static_cast<Eigen::Index>(v.front().size());
@@ -1146,50 +385,15 @@ namespace grit::form {
         return stddev;
     }
 
-    template<typename Scalar>
-    typename base<Scalar>::VectorReal base<Scalar>::get_slopes(const std::deque<VectorReal> &v, bool apply_log10) {
-        auto get_slope = [](const VectorReal &x, const VectorReal &y) -> RealScalar {
-            assert(x.size() == y.size());
-            assert(x.size() >= 2);
-            auto xmean = x.mean();
-            auto ymean = y.mean();
-            auto sxy   = (x.array() - xmean).matrix().dot((y.array() - ymean).matrix());
-            auto sxx   = (x.array() - xmean).matrix().dot((x.array() - xmean).matrix());
-            return sxy / sxx;
-        };
-        if(v.empty()) return {};
-
-        auto       m = static_cast<Eigen::Index>(v.size());
-        auto       n = static_cast<Eigen::Index>(v.front().size());
-        VectorReal x = VectorReal::LinSpaced(m, RealScalar(0), RealScalar(m - 1));
-        VectorReal slopes(n);
-        using history_size_type = typename std::deque<VectorReal>::size_type;
-        for(Eigen::Index j = 0; j < n; ++j) {
-            VectorReal y(m);
-            for(Eigen::Index i = 0; i < m; ++i) {
-                auto              udx       = static_cast<history_size_type>(i);
-                const VectorReal &eigVals_i = v.at(udx);
-                assert(eigVals_i.size() == n);
-                y(i) = eigVals_i[j];
-            }
-            if(apply_log10)
-                slopes(j) = get_slope(x, y.array().log10());
-            else
-                slopes(j) = get_slope(x, y);
-        }
-
-        return slopes;
-    }
-
-    template<typename Scalar>
-    bool base<Scalar>::rNorms_have_saturated() {
-        if(sat_rnorm_threshold <= RealScalar{0}) return false;
+    template<typename Scalar, grit::Form form_>
+    bool base<Scalar, form_>::rNorms_have_saturated() {
+        if(cfg().sat_rnorm_threshold <= RealScalar{0}) return false;
         const auto min_history_size = std::min<size_t>(status.max_history_size, size_t{2});
         if(status.iter < static_cast<Eigen::Index>(min_history_size)) return false;
         if(status.rNorms_history.size() < static_cast<size_t>(min_history_size)) return false;
         if(status.rNorms.size() == 0) return false;
 
-        auto rows = std::min<Eigen::Index>(nev, status.rNorms.size());
+        auto rows = std::min<Eigen::Index>(cfg().nev, status.rNorms.size());
         if(rows <= 0) return false;
         VectorReal             scales = relative_rNormScales().topRows(rows);
         std::deque<VectorReal> relative_history;
@@ -1199,147 +403,26 @@ namespace grit::form {
         }
         VectorReal vals           = status.rNorms.topRows(rows).cwiseQuotient(scales);
         VectorReal stds           = get_standard_deviations(relative_history, false);
-        VectorReal threshold      = sat_rnorm_threshold * vals.cwiseMax(VectorReal::Constant(vals.size(), std::numeric_limits<RealScalar>::min()));
+        VectorReal threshold      = cfg().sat_rnorm_threshold * vals.cwiseMax(VectorReal::Constant(vals.size(), std::numeric_limits<RealScalar>::min()));
         VectorIdxT stds_saturated = (stds.array() < threshold.array()).template cast<Eigen::Index>();
         return stds_saturated.all();
     }
 
-    template<typename Scalar>
-    bool base<Scalar>::eigVals_have_saturated() {
-        if(sat_eigval_threshold <= RealScalar{0}) return false;
+    template<typename Scalar, grit::Form form_>
+    bool base<Scalar, form_>::eigVals_have_saturated() {
+        if(cfg().sat_eigval_threshold <= RealScalar{0}) return false;
         const auto min_history_size = std::min<size_t>(status.max_history_size, size_t{2});
         if(status.iter < static_cast<Eigen::Index>(min_history_size)) return false;
         if(status.eigVals_history.size() < static_cast<size_t>(min_history_size)) return false;
         VectorReal vals           = status.eigVal.cwiseAbs().array() + eps;
         VectorReal stds           = get_standard_deviations(status.eigVals_history, false);
         VectorReal rels           = stds.cwiseQuotient(vals);
-        VectorIdxT rels_saturated = (rels.array() < sat_eigval_threshold).template cast<Eigen::Index>();
+        VectorIdxT rels_saturated = (rels.array() < cfg().sat_eigval_threshold).template cast<Eigen::Index>();
         return rels_saturated.all();
     }
 
-    template<typename Scalar>
-    bool base<Scalar>::rNorms_saturated_for_auto_jd_start() {
-        return get_auto_rnorm_saturation_metric().saturated;
-    }
-
-    template<typename Scalar>
-    bool base<Scalar>::eigVals_saturated_for_auto_jd_start() {
-        return get_auto_eigval_saturation_metric().saturated;
-    }
-
-    template<typename Scalar>
-    bool base<Scalar>::auto_jd_start_ready() {
-        return get_auto_saturation_status().ready || (auto_jd_start_rnorm_threshold > RealScalar{0} && status.rNorms.size() > 0 &&
-                                                      get_auto_rnorm_scalar(relative_rNorms(status.rNorms)) <= auto_jd_start_rnorm_threshold);
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::update_auto_residual_correction_state() {
-        if(residual_correction_type != ResidualCorrectionType::AUTO) return;
-
-        auto method_name = [](ResidualCorrectionType method) -> std::string_view {
-            switch(method) {
-                case ResidualCorrectionType::CHEAP_OLSEN: return "CHEAP_OLSEN";
-                case ResidualCorrectionType::JACOBI_DAVIDSON: return "JACOBI_DAVIDSON";
-                case ResidualCorrectionType::NONE: return "NONE";
-                case ResidualCorrectionType::FULL_OLSEN: return "FULL_OLSEN";
-                case ResidualCorrectionType::AUTO: return "AUTO";
-            }
-            return "NONE";
-        };
-
-        auto step_seconds = std::max(0.0, status.time_elapsed.get_time() - auto_residual_correction.step_time_start);
-
-        if(auto_residual_correction.active == ResidualCorrectionType::JACOBI_DAVIDSON &&
-           auto_residual_correction.step_method == ResidualCorrectionType::CHEAP_OLSEN) {
-            auto rnorm = get_auto_rnorm_scalar(status.rNorms);
-            // Cheap probes are accepted only when they move the Ritz value by more than
-            // the variance scale implied by the stored absolute residual norm.
-            auto rnorm_squared     = rnorm * rnorm;
-            auto op_norm_estimate  = get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
-            auto probe_scale_floor = eps * op_norm_estimate;
-            auto probe_scale       = std::max(rnorm_squared, probe_scale_floor);
-            auto improvement       = get_auto_probe_eigval_improvement();
-            auto threshold         = auto_cheap_probe_factor * probe_scale;
-            bool keep_cheap        = improvement > threshold;
-
-            if(keep_cheap) {
-                auto_residual_correction.active               = ResidualCorrectionType::CHEAP_OLSEN;
-                auto_residual_correction.dwell                = 0;
-                auto_residual_correction.jd_steps_since_probe = 0;
-                auto_residual_correction.jd_to_cheap_switch_iters.push_back(status.iter);
-            } else {
-                auto_residual_correction.active               = ResidualCorrectionType::JACOBI_DAVIDSON;
-                auto_residual_correction.jd_steps_since_probe = 0;
-            }
-
-            if(eiglog) {
-                eiglog->debug("auto residual correction cheap probe: {} -> {} | eigval {:.16e}->{:.16e} improvement {:.6e} threshold {:.6e} factor {:.6e} "
-                              "abs rnorm {:.6e} abs rnorm2 {:.6e} scale_floor {:.6e} interval {} decision {} | mv {} outer {} inner {} inner_iters {} jdops {} "
-                              "time {:.6e}s",
-                              method_name(ResidualCorrectionType::JACOBI_DAVIDSON), method_name(ResidualCorrectionType::CHEAP_OLSEN),
-                              status.oldVal.size() > 0 ? status.oldVal(0) : RealScalar{0}, status.eigVal.size() > 0 ? status.eigVal(0) : RealScalar{0},
-                              improvement, threshold, auto_cheap_probe_factor, rnorm, rnorm_squared, probe_scale_floor, auto_cheap_probe_interval,
-                              keep_cheap ? "keep CHEAP_OLSEN" : "return JACOBI_DAVIDSON", status.num_matvecs + status.num_matvecs_inner, status.num_matvecs,
-                              status.num_matvecs_inner, status.num_iters_inner, status.num_jdops_inner, step_seconds);
-            }
-            return;
-        }
-
-        if(auto_residual_correction.step_method == ResidualCorrectionType::JACOBI_DAVIDSON) {
-            auto_residual_correction.active = ResidualCorrectionType::JACOBI_DAVIDSON;
-            auto_residual_correction.jd_steps_since_probe++;
-            if(eiglog) {
-                eiglog->trace("auto residual correction jd step: steps since cheap probe {}/{}", auto_residual_correction.jd_steps_since_probe,
-                              auto_cheap_probe_interval);
-            }
-            return;
-        }
-
-        auto_residual_correction.active = ResidualCorrectionType::CHEAP_OLSEN;
-        auto_residual_correction.dwell++;
-        auto saturation             = get_auto_saturation_status();
-        auto rrnorm                 = get_auto_rnorm_scalar(relative_rNorms(status.rNorms));
-        bool jd_start_rnorm_enabled = auto_jd_start_rnorm_threshold > RealScalar{0};
-        bool jd_start_rnorm_ready   = jd_start_rnorm_enabled && status.rNorms.size() > 0 && rrnorm <= auto_jd_start_rnorm_threshold;
-        bool jd_start_ready         = saturation.ready || jd_start_rnorm_ready;
-        if(eiglog) {
-            eiglog->trace(
-                "auto residual correction start check: cheap dwell {}/{} ready {} | eigval sat {} ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} "
-                "value {:.6e} hist {} enough {} | rrnorm sat {} ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} value {:.6e} hist {} "
-                "enough {} | jd start rrnorm ready {} threshold {:.6e} value {:.6e}",
-                auto_residual_correction.dwell, auto_min_dwell_iters, jd_start_ready, saturation.eigval.saturated, saturation.eigval.ratio,
-                saturation.eigval.threshold, saturation.eigval.stddev, saturation.eigval.scale, saturation.eigval.value, saturation.eigval.history_size,
-                saturation.eigval.enough_history, saturation.rnorm.saturated, saturation.rnorm.ratio, saturation.rnorm.threshold, saturation.rnorm.stddev,
-                saturation.rnorm.scale, saturation.rnorm.value, saturation.rnorm.history_size, saturation.rnorm.enough_history, jd_start_rnorm_ready,
-                auto_jd_start_rnorm_threshold, rrnorm);
-        }
-        if(auto_residual_correction.dwell < auto_min_dwell_iters && !jd_start_rnorm_ready) return;
-
-        if(jd_start_ready) {
-            auto_residual_correction.active               = ResidualCorrectionType::JACOBI_DAVIDSON;
-            auto_residual_correction.dwell                = 0;
-            auto_residual_correction.jd_steps_since_probe = 0;
-            auto_residual_correction.cheap_to_jd_switch_iters.push_back(status.iter);
-
-            if(eiglog) {
-                eiglog->debug(
-                    "auto residual correction switch: {} -> {} | reason {} | eigval ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} value {:.6e} | "
-                    "rrnorm ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} value {:.6e} | probe interval {} probe factor {:.6e} | "
-                    "jd start rrnorm threshold {:.6e} rrnorm {:.6e} | "
-                    "mv {} outer {} inner {} inner_iters {} jdops {} time {:.6e}s",
-                    method_name(ResidualCorrectionType::CHEAP_OLSEN), method_name(ResidualCorrectionType::JACOBI_DAVIDSON),
-                    jd_start_rnorm_ready ? "rrnorm threshold" : "saturation", saturation.eigval.ratio, saturation.eigval.threshold, saturation.eigval.stddev,
-                    saturation.eigval.scale, saturation.eigval.value, saturation.rnorm.ratio, saturation.rnorm.threshold, saturation.rnorm.stddev,
-                    saturation.rnorm.scale, saturation.rnorm.value, auto_cheap_probe_interval, auto_cheap_probe_factor, auto_jd_start_rnorm_threshold, rrnorm,
-                    status.num_matvecs + status.num_matvecs_inner, status.num_matvecs, status.num_matvecs_inner, status.num_iters_inner, status.num_jdops_inner,
-                    step_seconds);
-            }
-        }
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::updateStatus() {
+    template<typename Scalar, grit::Form form_>
+    void base<Scalar, form_>::updateStatus() {
         // Accumulate counters from the inner solver
         status.num_matvecs_total  += status.num_matvecs + status.num_matvecs_inner;
         status.num_precond_total  += status.num_precond + status.num_precond_inner;
@@ -1347,8 +430,8 @@ namespace grit::form {
         status.time_precond_total += status.time_precond.get_time() + status.time_precond_inner.get_time();
 
         // Eigenvalues are sorted in ascending order.
-        status.oldVal  = status.eigVal.topRows(nev);
-        status.eigVal  = T_evals(status.optIdx).topRows(nev);
+        status.oldVal  = status.eigVal.topRows(cfg().nev);
+        status.eigVal  = T_evals(status.optIdx).topRows(cfg().nev);
         status.absDiff = (status.eigVal - status.oldVal).cwiseAbs();
 
         VectorReal denom = (RealScalar{0.5} * (status.eigVal + status.oldVal).array().abs()).matrix();
@@ -1357,14 +440,12 @@ namespace grit::form {
 
         status.op_norm_estimate = get_op_norm_estimate();
 
-        status.rNorms_history.push_back(status.rNorms.topRows(nev));
-        status.eigVals_history.push_back(status.eigVal.topRows(nev));
+        status.rNorms_history.push_back(status.rNorms.topRows(cfg().nev));
+        status.eigVals_history.push_back(status.eigVal.topRows(cfg().nev));
         status.matvecs_history.push_back(status.num_matvecs + status.num_matvecs_inner);
         while(status.rNorms_history.size() > status.max_history_size) status.rNorms_history.pop_front();
         while(status.eigVals_history.size() > status.max_history_size) status.eigVals_history.pop_front();
         while(status.matvecs_history.size() > status.max_history_size) status.matvecs_history.pop_front();
-
-        update_auto_residual_correction_state();
 
         if(eigVals_have_saturated())
             status.saturation_count_eigVal++;
@@ -1387,8 +468,8 @@ namespace grit::form {
         };
 
         constexpr auto beta    = RealScalar{0.5f};
-        VectorReal     rNorms  = status.rNorms.topRows(nev);
-        VectorReal     rrNorms = relative_rNorms(status.rNorms).topRows(nev);
+        VectorReal     rNorms  = status.rNorms.topRows(cfg().nev);
+        VectorReal     rrNorms = relative_rNorms(status.rNorms).topRows(cfg().nev);
         VectorReal     tols    = rNormTols();
         RealScalar     relGap  = status.gap * get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
         if(rNorms.size() != tols.size()) throw std::logic_error("unequal residual norm and tolerance sizes");
@@ -1397,27 +478,27 @@ namespace grit::form {
 
         if(status.rNorm_below_rnormTol) {
             std::string msg_rnorm_gap = fmt::format(" | gap {:.3e} (rel {:.3e})", status.gap, relGap);
-            if(use_relative_rnorm_tolerance) {
+            if(cfg().use_relative_rnorm_tolerance) {
                 status.stopMessage.emplace_back(fmt::format("converged rNorm {} < relative tol {}{} | rrNorm {} | iters {} | mv {} | {:.3e} s",
-                                                            format_vector(VectorReal(status.rNorms.topRows(nev))), format_vector(tols), msg_rnorm_gap,
+                                                            format_vector(VectorReal(status.rNorms.topRows(cfg().nev))), format_vector(tols), msg_rnorm_gap,
                                                             format_vector(rrNorms), status.iter + 1, status.num_matvecs_total, status.time_elapsed.get_time()));
             } else {
                 status.stopMessage.emplace_back(fmt::format("converged rNorm {} < tol {}{} | rrNorm {} | iters {} | mv {} | {:.3e} s",
-                                                            format_vector(VectorReal(status.rNorms.topRows(nev))), format_vector(tols), msg_rnorm_gap,
+                                                            format_vector(VectorReal(status.rNorms.topRows(cfg().nev))), format_vector(tols), msg_rnorm_gap,
                                                             format_vector(rrNorms), status.iter + 1, status.num_matvecs_total, status.time_elapsed.get_time()));
             }
             status.stopReason |= StopReason::converged;
         }
 
-        if(max_iters >= 0 && status.iter + 1 >= max_iters) {
-            status.stopMessage.emplace_back(fmt::format("iters ({}) >= maxiter ({}) | mv {} | {:.3e} s", status.iter + 1, max_iters, status.num_matvecs_total,
-                                                        status.time_elapsed.get_time()));
+        if(cfg().max_iters >= 0 && status.iter + 1 >= cfg().max_iters) {
+            status.stopMessage.emplace_back(fmt::format("iters ({}) >= maxiter ({}) | mv {} | {:.3e} s", status.iter + 1, cfg().max_iters,
+                                                        status.num_matvecs_total, status.time_elapsed.get_time()));
             status.stopReason |= StopReason::max_iters;
         }
 
-        if(max_matvecs >= 0 && status.num_matvecs_total >= max_matvecs) {
-            status.stopMessage.emplace_back(
-                fmt::format("num_matvecs_total ({}) >= max_matvecs ({}) | {:.3e} s", status.num_matvecs_total, max_matvecs, status.time_elapsed.get_time()));
+        if(cfg().max_matvecs >= 0 && status.num_matvecs_total >= cfg().max_matvecs) {
+            status.stopMessage.emplace_back(fmt::format("num_matvecs_total ({}) >= max_matvecs ({}) | {:.3e} s", status.num_matvecs_total, cfg().max_matvecs,
+                                                        status.time_elapsed.get_time()));
             status.stopReason |= StopReason::max_matvecs;
         }
 
@@ -1441,8 +522,8 @@ namespace grit::form {
         }
     }
 
-    template<typename Scalar>
-    void base<Scalar>::printStatus() {
+    template<typename Scalar, grit::Form form_>
+    void base<Scalar, form_>::printStatus() {
         if(!eiglog || status.eigVal.size() == 0 || status.rNorms.size() == 0) return;
 
         auto format_vector = [](const VectorReal &v, std::string_view spec = "{:.8e}") {
@@ -1475,16 +556,18 @@ namespace grit::form {
 
         RealScalar orthError = RealScalar{0};
         if(Q.cols() > 0) {
-            MatrixType Gram = use_b_inner_product && BQ.size() == Q.size() ? Q.adjoint() * BQ : Q.adjoint() * Q;
+            MatrixType Gram = cfg().use_b_inner_product && BQ.size() == Q.size() ? Q.adjoint() * BQ : Q.adjoint() * Q;
             Gram            = (Gram + Gram.adjoint()).eval() / RealScalar{2};
             orthError       = (Gram - MatrixType::Identity(Gram.rows(), Gram.cols())).norm();
         }
 
         std::string evMsg;
-        if(is_generalized_problem() && V.cols() > 0 && AV.size() == V.size() && BV.size() == V.size()) {
+        if constexpr(form_ == grit::Form::GENERALIZED) {
+            if(V.cols() > 0 && AV.size() == V.size() && BV.size() == V.size()) {
             VectorReal VAV = (V.adjoint() * AV).diagonal().real();
             VectorReal VBV = (V.adjoint() * BV).diagonal().real();
             evMsg          = fmt::format(" {} / {}", format_vector(VAV, "{:.16f}"), format_vector(VBV, "{:.16f}"));
+            }
         }
 
         auto op_norm_estimate              = get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
@@ -1506,23 +589,18 @@ namespace grit::form {
                     "op norm {:.2e} cond {:.2e} sens {:.2e}{}",
                     status.iter, status.num_matvecs, status.num_precond, status.time_elapsed.get_time(), N, innerMsg,
                     format_vector(VectorReal(status.eigVal), "{:.16f}"), evMsg, orthError, format_vector(VectorReal(status.rNorms)),
-                    format_vector(VectorReal(rrNorms)), active_tol_name, format_vector(active_tols, "{:.3e}"), tol, tol_rnorm_relative,
+                    format_vector(VectorReal(rrNorms)), active_tol_name, format_vector(active_tols, "{:.3e}"), cfg().tol, cfg().tol_rnorm_relative,
                     get_rNorms_log10_change_per_matvec(), status.saturation_count_eigVal, status.saturation_count_rNorm, status.saturation_count_max, Q.cols(),
-                    block_size, enum2sv(ritz), op_norm_estimate, status.condition, status.sensitivity, msg_rnorm_gap);
+                    cfg().block_size, enum2sv(cfg().ritz), op_norm_estimate, status.condition, status.sensitivity, msg_rnorm_gap);
     }
 
-    template<typename Scalar>
-    result_view<Scalar> base<Scalar>::result() const {
-        return result_view<Scalar>(*this);
+    template<typename Scalar, grit::Form form_>
+    void base<Scalar, form_>::run_user_callback() {
+        return;
     }
 
-    template<typename Scalar>
-    void base<Scalar>::notify_status_callback() {
-        if(status_callback) status_callback(result());
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::clear_result() {
+    template<typename Scalar, grit::Form form_>
+    void base<Scalar, form_>::clear_result() {
         status                   = Status{};
         qBlocks                  = 0;
         T                        = MatrixType{};
@@ -1553,24 +631,24 @@ namespace grit::form {
         auto_residual_correction = AutoResidualCorrectionState{};
     }
 
-    template<typename Scalar>
-    void base<Scalar>::step() {
+    template<typename Scalar, grit::Form form_>
+    void base<Scalar, form_>::step() {
         preamble();
         build();
         diagonalizeT();
         extractRitzVectors();
         updateStatus();
         printStatus();
-        notify_status_callback();
+        run_user_callback();
         status.iter++;
     }
 
-    template<typename Scalar>
-    void base<Scalar>::run() {
+    template<typename Scalar, grit::Form form_>
+    void base<Scalar, form_>::run() {
         auto token_elapsed = status.time_elapsed.tic_token();
         init();
         printStatus();
-        notify_status_callback();
+        run_user_callback();
         status.iter++;
         while(true) {
             step();
@@ -1578,516 +656,4 @@ namespace grit::form {
         }
     }
 
-    template<typename Scalar>
-    void base<Scalar>::set_maxPrevBlocks(Eigen::Index pb) {
-        maxPrevBlocks = pb;
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::assert_allFinite(const Eigen::Ref<const MatrixType> &X, const std::source_location &location) {
-        if(X.cols() == 0) return;
-        if(!X.allFinite())
-            throw std::runtime_error(fmt::format("{}:{}: {}: matrix has non-finite elements", location.file_name(), location.line(), location.function_name()));
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::assert_l2_orthonormal(const Eigen::Ref<const MatrixType> &X, const OrthMeta &m, const std::source_location &location) {
-        if(X.cols() == 0) return;
-
-        MatrixType Gram      = X.adjoint() * X;
-        RealScalar orthError = (Gram - MatrixType::Identity(Gram.rows(), Gram.cols())).norm();
-        RealScalar xnorm     = X.norm();
-        RealScalar t_abs     = static_cast<RealScalar>(X.size()) * eps * (xnorm + xnorm);
-        RealScalar maskTol   = std::isfinite(m.maskTol) ? m.maskTol : normTol * static_cast<RealScalar>(X.cols());
-        RealScalar finalTol  = std::max({t_abs, normTol, maskTol}) * RealScalar{10};
-
-        if(orthError > finalTol && eiglog)
-            eiglog->warn("{}:{}: {}: matrix is not L2-orthonormal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(), location.function_name(),
-                         orthError, finalTol);
-        if(orthError > RealScalar{1000} * finalTol)
-            throw std::runtime_error(fmt::format("{}:{}: {}: matrix is not L2-orthonormal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
-                                                 location.function_name(), orthError, finalTol));
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::assert_l2_orthogonal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &Y, const OrthMeta &m,
-                                            const std::source_location &location) {
-        if(X.cols() == 0 || Y.cols() == 0) return;
-        if(m.mask.size() > 0 && m.mask.sum() == 0) return;
-
-        MatrixType Gram      = X.adjoint() * Y;
-        RealScalar orthError = Gram.norm();
-        RealScalar xnorm     = X.norm();
-        RealScalar ynorm     = Y.norm();
-        RealScalar t_abs     = static_cast<RealScalar>(X.size()) * eps * (xnorm + ynorm);
-        RealScalar maskTol   = std::isfinite(m.maskTol) ? m.maskTol : orthTol * static_cast<RealScalar>(X.cols());
-        RealScalar finalTol  = std::max({t_abs, orthTol, maskTol}) * RealScalar{10};
-
-        if(orthError > finalTol && eiglog)
-            eiglog->warn("{}:{}: {}: matrices are not L2-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
-                         location.function_name(), orthError, finalTol);
-        if(orthError > RealScalar{1000} * finalTol)
-            throw std::runtime_error(fmt::format("{}:{}: {}: matrices are not L2-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
-                                                 location.function_name(), orthError, finalTol));
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::assert_bm_orthonormal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &B_X, const OrthMeta &m,
-                                             const std::source_location &location) {
-        if(X.cols() == 0) return;
-        if(X.cols() != B_X.cols() || X.rows() != B_X.rows())
-            throw std::runtime_error(
-                fmt::format("{}:{}: {}: X and B_X have incompatible dimensions", location.file_name(), location.line(), location.function_name()));
-
-        MatrixType G1        = X.adjoint() * B_X;
-        MatrixType G2        = B_X.adjoint() * X;
-        MatrixType Gram      = G1;
-        MatrixType Gram_symm = (G1 + G2) * half;
-        MatrixType Gram_skew = (G1 - G2) * half;
-        MatrixType I         = MatrixType::Identity(Gram.rows(), Gram.cols());
-        RealScalar orthError = (Gram - I).norm();
-        RealScalar symmError = (Gram_symm - I).norm();
-        RealScalar skewError = Gram_skew.norm();
-
-        RealScalar xnorm    = X.norm();
-        RealScalar bxnorm   = B_X.norm();
-        RealScalar bnorm    = std::isfinite(status.op_norm_estimate) ? status.op_norm_estimate : RealScalar{1};
-        RealScalar t_abs    = orthTol * static_cast<RealScalar>(X.cols()) * (xnorm + bxnorm);
-        RealScalar bmTol    = orthTol * static_cast<RealScalar>(X.cols()) * bnorm;
-        RealScalar maskTol  = std::isfinite(m.maskTol) ? m.maskTol : orthTol;
-        RealScalar finalTol = std::max({t_abs, orthTol, bmTol, maskTol}) * RealScalar{10};
-
-        RealScalar error = std::max({orthError, symmError, skewError});
-        if(error > finalTol && eiglog)
-            eiglog->warn("{}:{}: {}: matrix is not B-orthonormal: error {:.5e} > tol {:.5e} | orth {:.5e} symm {:.5e} skew {:.5e}", location.file_name(),
-                         location.line(), location.function_name(), error, finalTol, orthError, symmError, skewError);
-        if(error > RealScalar{1000} * finalTol)
-            throw std::runtime_error(fmt::format("{}:{}: {}: matrix is not B-orthonormal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
-                                                 location.function_name(), error, finalTol));
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::assert_bm_orthogonal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &B_Y, const OrthMeta &m,
-                                            const std::source_location &location) {
-        if(X.cols() == 0 || B_Y.cols() == 0) return;
-
-        MatrixType Gram      = X.adjoint() * B_Y;
-        RealScalar orthError = Gram.norm();
-        RealScalar xnorm     = X.norm();
-        RealScalar bynorm    = B_Y.norm();
-        RealScalar bnorm     = std::isfinite(status.op_norm_estimate) ? status.op_norm_estimate : RealScalar{1};
-        RealScalar t_abs     = orthTol * static_cast<RealScalar>(X.cols()) * (xnorm + bynorm);
-        RealScalar bmTol     = orthTol * static_cast<RealScalar>(X.cols()) * bnorm;
-        RealScalar maskTol   = std::isfinite(m.maskTol) ? m.maskTol : orthTol;
-        RealScalar finalTol  = std::max({t_abs, orthTol, bmTol, maskTol}) * RealScalar{10};
-
-        if(orthError > finalTol && eiglog)
-            eiglog->warn("{}:{}: {}: matrices are not B-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(), location.function_name(),
-                         orthError, finalTol);
-        if(orthError > RealScalar{1000} * finalTol)
-            throw std::runtime_error(fmt::format("{}:{}: {}: matrices are not B-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
-                                                 location.function_name(), orthError, finalTol));
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::compress_cols(MatrixType &X, const VectorIdxT &mask) {
-        assert(mask.size() == X.cols() && "Mask size must match number of columns in X.");
-        if(mask.sum() == X.cols()) return;
-
-        std::vector<Eigen::Index> active_columns;
-        active_columns.reserve(static_cast<typename std::vector<Eigen::Index>::size_type>(X.cols()));
-        for(Eigen::Index j = 0; j < X.cols(); ++j) {
-            if(mask(j) == 1) active_columns.push_back(j);
-        }
-        active_columns.shrink_to_fit();
-        X = X(Eigen::placeholders::all, active_columns).eval();
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::block_l2_orthogonalize(const MatrixType &X, const MatrixType &AX, MatrixType &Y, MatrixType &AY, OrthMeta &m) {
-        if(X.cols() == 0 || Y.cols() == 0) {
-            AY.resizeLike(Y);
-            return;
-        }
-        if(m.mask.size() > 0 && m.mask.sum() == 0) return;
-
-        assert_allFinite(X);
-        assert_allFinite(AX);
-        assert_allFinite(Y);
-
-        if(std::isnan(m.orthTol)) m.orthTol = normTol * static_cast<RealScalar>(Y.cols());
-
-        m.Gram      = X.adjoint() * Y;
-        m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
-        m.orthError = m.Gram.size() > 0 ? m.Gram.norm() : 0;
-
-        MatrixType Gxx = X.adjoint() * X;
-
-        Eigen::Index maxReps = 2;
-        Eigen::Index rep     = 0;
-        for(rep = 0; rep < maxReps; ++rep) {
-            MatrixType W  = Gxx.ldlt().solve(m.Gram);
-            Y.noalias()  -= X * W;
-
-            m.Gram      = X.adjoint() * Y;
-            m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
-            m.orthError = m.Gram.size() > 0 ? m.Gram.norm() : 0;
-
-            bool orth_converged = m.orthError < m.orthTol;
-            if(orth_converged || Y.cols() == 0) break;
-        }
-        if constexpr(settings::debug_ortho) {
-            if(eiglog && eiglog->should_log(spdlog::level::trace))
-                eiglog->trace("rep {} orthError after l2 orthogonalization: {:.3e} | orthTol {:.3e}", rep, m.orthError, m.orthTol);
-        }
-        assert_l2_orthogonal(X, Y, m);
-        AY = MultA(Y);
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::block_l2_orthogonalize(const MatrixType &X, const MatrixType &AX, const MatrixType &BX, MatrixType &Y, MatrixType &AY, MatrixType &BY,
-                                              OrthMeta &m) {
-        if(X.cols() == 0 || Y.cols() == 0) {
-            AY.resizeLike(Y);
-            BY.resizeLike(Y);
-            return;
-        }
-        if(m.mask.size() > 0 && m.mask.sum() == 0) return;
-
-        assert_allFinite(X);
-        assert_allFinite(AX);
-        assert_allFinite(BX);
-        assert_allFinite(Y);
-
-        if(std::isnan(m.orthTol)) m.orthTol = orthTol * static_cast<RealScalar>(Y.cols());
-        m.orthTol   = std::max(m.orthTol, orthTol * static_cast<RealScalar>(Y.cols()));
-        m.Gram      = X.adjoint() * Y;
-        m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
-        m.orthError = m.Gram.size() > 0 ? m.Gram.norm() : 0;
-
-        MatrixType Gxx = X.adjoint() * X;
-
-        Eigen::Index maxReps = 2;
-        Eigen::Index rep     = 0;
-        for(rep = 0; rep < maxReps; ++rep) {
-            MatrixType W  = Gxx.ldlt().solve(m.Gram);
-            Y.noalias()  -= X * W;
-
-            m.Gram      = X.adjoint() * Y;
-            m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
-            m.orthError = m.Gram.size() > 0 ? m.Gram.norm() : 0;
-
-            bool orth_converged = m.orthError < m.orthTol;
-            if(orth_converged || Y.cols() == 0) break;
-        }
-        if(eiglog && eiglog->should_log(spdlog::level::trace))
-            eiglog->trace("rep {} orthError after l2 orthogonalization: {:.3e} | orthTol {:.3e}", rep, m.orthError, m.orthTol);
-        assert_l2_orthogonal(X, Y, m);
-
-        AY = MultA(Y);
-        BY = MultB(Y);
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::block_bm_orthogonalize(const MatrixType &X, const MatrixType &AX, const MatrixType &BX, MatrixType &Y, MatrixType &AY, MatrixType &BY,
-                                              OrthMeta &m) {
-        if(X.cols() == 0 || Y.cols() == 0) {
-            AY.resizeLike(Y);
-            BY.resizeLike(Y);
-            return;
-        }
-        if(m.mask.size() > 0 && m.mask.sum() == 0) return;
-        assert(is_generalized_problem() && use_b_inner_product && "block_bm_orthogonalize is for B inner product");
-
-        assert_allFinite(X);
-        assert_allFinite(AX);
-        assert_allFinite(BX);
-        assert_allFinite(Y);
-        assert_bm_orthonormal(X, BX, OrthMeta{});
-
-        if(std::isnan(m.orthTol)) m.orthTol = orthTol * static_cast<RealScalar>(X.cols());
-        m.orthTol = std::max(m.orthTol, eps * std::sqrt(status.op_norm_estimate));
-        if(!std::isfinite(m.orthTol))
-            throw std::runtime_error(
-                fmt::format("block_bm_orthogonalize: invalid orthTol {:.3e} | op_norm_estimate {:.3e}", m.orthTol, status.op_norm_estimate));
-
-        bool has_refreshed_by = false;
-        if(m.refresh_by || Y.size() != BY.size()) {
-            BY               = MultB(Y);
-            has_refreshed_by = true;
-            if(eiglog && eiglog->should_log(spdlog::level::trace)) eiglog->trace("block_bm_orthogonalize: refreshed BY");
-        } else {
-            assert_allFinite(BY);
-        }
-
-        m.analyze_bm_orthogonality(X, BX, Y, BY);
-
-        MatrixType Gyy = Y.adjoint() * BY;
-        Gyy            = (Gyy + Gyy.adjoint()).eval() * half;
-        RealScalar Eyy = (Gyy - MatrixType::Identity(Gyy.cols(), Gyy.rows())).norm();
-
-        MatrixType Gxx = X.adjoint() * BX;
-        Gxx            = (Gxx + Gxx.adjoint()).eval() * half;
-        RealScalar Exx = (Gxx - MatrixType::Identity(Gxx.cols(), Gxx.rows())).norm();
-
-        if(m.skewError > std::sqrt(m.orthTol) && !has_refreshed_by) {
-            MatrixType BY_new = MultB(Y);
-            OrthMeta   m_new  = m;
-            m_new.analyze_bm_orthogonality(X, BX, Y, BY_new);
-            if(m_new.skewError < m.skewError) {
-                BY.swap(BY_new);
-                m                = m_new;
-                has_refreshed_by = true;
-            }
-        }
-
-        if(std::isfinite(m.orthTol) && std::max(m.symmError, m.skewError) < m.orthTol) {
-            if(has_refreshed_by || m.refresh_by || Y.size() != AY.size()) AY = MultA(Y);
-            if(eiglog && eiglog->should_log(spdlog::level::trace))
-                eiglog->trace("block_bm_orthogonalize: no need: orthError {:.4e} symmError {:.4e} skewError {:.4e} Eyy {:.4e} orthTol {:.4e}", m.orthError,
-                              m.symmError, m.skewError, Eyy, m.orthTol);
-            return;
-        }
-        m.refresh_by = false;
-
-        if(Exx > m.orthTol && eiglog && eiglog->should_log(spdlog::level::debug))
-            eiglog->debug("block_bm_orthogonalize: X is not sufficiently B-orthonormal: error {:.4e}", Exx);
-
-        Eigen::Index maxReps = 2;
-        Eigen::Index rep     = 0;
-        for(rep = 0; rep < maxReps; ++rep) {
-            if(m.mask.size() != Y.cols()) m.mask = VectorIdxT::Ones(Y.cols());
-            if(m.proj_sum_a.size() != Y.cols()) m.proj_sum_a = VectorReal::Zero(Y.cols());
-            if(m.proj_sum_b.size() != Y.cols()) m.proj_sum_b = VectorReal::Zero(Y.cols());
-            if(m.scale_log.size() != Y.cols()) m.scale_log = VectorReal::Zero(Y.cols());
-
-            MatrixType W = Gxx.ldlt().solve(m.Gram_symm);
-
-            Y.noalias()  -= X * W;
-            BY.noalias() -= BX * W;
-
-            m.analyze_bm_orthogonality(X, BX, Y, BY);
-            if(rep >= 1) {
-                bool orth_converged = std::max(m.symmError, m.skewError) < m.orthTol;
-                if(orth_converged) break;
-            }
-        }
-        if(eiglog && eiglog->should_log(spdlog::level::trace))
-            eiglog->trace("rep {} orthError after bm orthogonalization: {:.3e} | symm {:.3e} | skew {:.3e} | orthTol {:.3e}", rep, m.orthError, m.symmError,
-                          m.skewError, m.orthTol);
-
-        AY = MultA(Y);
-        assert_bm_orthogonal(X, BY, m);
-        assert_bm_orthogonal(BX, Y, m);
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &AY, OrthMeta &m) {
-        if(Y.cols() == 0) {
-            AY.resizeLike(Y);
-            return;
-        }
-        if(m.mask.size() > 0 && m.mask.sum() == 0) return;
-
-        assert(!use_b_inner_product);
-
-        m.mask = VectorIdxT::Ones(Y.cols());
-        if(std::isnan(m.maskTol)) m.maskTol = normTol * static_cast<RealScalar>(Y.cols());
-
-        auto handle_masked_columns = [&]() {
-            if(m.mask.sum() == Y.cols()) return;
-            VectorReal norms = (Y.adjoint() * Y).diagonal().cwiseAbs();
-            switch(m.maskPolicy) {
-                case MaskPolicy::COMPRESS:
-                    if(eiglog && eiglog->should_log(spdlog::level::debug))
-                        eiglog->debug("block_l2_orthonormalize: compressing Y | kept {} of {} | maskTol {:.3e}", m.mask.sum(), Y.cols(), m.maskTol);
-                    compress_cols(Y, m.mask);
-                    m.mask = VectorIdxT::Ones(Y.cols());
-                    break;
-                case MaskPolicy::RANDOMIZE:
-                    if(eiglog && eiglog->should_log(spdlog::level::debug))
-                        eiglog->debug("block_l2_orthonormalize: randomizing masked columns | kept {} of {} | maskTol {:.3e}", m.mask.sum(), Y.cols(),
-                                      m.maskTol);
-                    for(Eigen::Index j = 0; j < Y.cols(); ++j) {
-                        if(m.mask(j) == 0) Y.col(j) = Eigen::VectorXf::Random(Y.col(j).size()).template cast<Scalar>();
-                    }
-                    break;
-            }
-            (void) norms;
-        };
-
-        for(Eigen::Index j = 0; j < Y.cols(); ++j) {
-            auto       yj   = Y.col(j);
-            RealScalar norm = yj.norm();
-            if(norm < m.maskTol) {
-                if(eiglog && eiglog->should_log(spdlog::level::trace)) eiglog->trace("masking Y col {} | norm {:.3e} | maskTol {:.3e}", j, norm, m.maskTol);
-                m.mask(j) = 0;
-                yj.setZero();
-            }
-        }
-        handle_masked_columns();
-        if(Y.cols() == 0) {
-            AY.resizeLike(Y);
-            return;
-        }
-
-        hhqr.compute(Y);
-        Y       = hhqr.householderQ().setLength(Y.cols()) * MatrixType::Identity(Y.rows(), Y.cols());
-        m.Rdiag = hhqr.matrixQR().diagonal().cwiseAbs().topRows(Y.cols());
-
-        for(Eigen::Index j = 0; j < Y.cols(); ++j) {
-            auto       yj   = Y.col(j);
-            RealScalar norm = yj.norm();
-            if(norm < m.maskTol) {
-                if(eiglog && eiglog->should_log(spdlog::level::trace)) eiglog->trace("masking Y col {} | norm {:.3e} | maskTol {:.3e}", j, norm, m.maskTol);
-                m.mask(j) = 0;
-                yj.setZero();
-            }
-        }
-        handle_masked_columns();
-
-        AY = MultA(Y);
-        m.analyze_l2_orthonormality(Y);
-        assert_l2_orthonormal(Y, m);
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &AY, MatrixType &BY, OrthMeta &m) {
-        assert(!use_b_inner_product);
-        block_l2_orthonormalize(Y, AY, m);
-        if(Y.cols() == 0) {
-            BY.resizeLike(Y);
-            return;
-        }
-        BY = MultB(Y);
-    }
-
-    template<typename Scalar>
-    void base<Scalar>::block_bm_orthonormalize(MatrixType &Y, MatrixType &AY, MatrixType &BY, OrthMeta &m) {
-        if(Y.cols() == 0) {
-            AY.resizeLike(Y);
-            BY.resizeLike(Y);
-            return;
-        }
-        if(m.mask.size() > 0 && m.mask.sum() == 0) return;
-        assert(is_generalized_problem() && use_b_inner_product && "block_bm_orthonormalize is for B inner product");
-
-        auto handle_masked_columns = [&]() {
-            if(m.mask.sum() == Y.cols()) return;
-            switch(m.maskPolicy) {
-                case MaskPolicy::COMPRESS:
-                    if(eiglog && eiglog->should_log(spdlog::level::debug))
-                        eiglog->debug("block_bm_orthonormalize: compressing Y | kept {} of {} | maskTol {:.3e}", m.mask.sum(), Y.cols(), m.maskTol);
-                    compress_cols(Y, m.mask);
-                    if(BY.rows() == Y.rows() && BY.cols() == m.mask.size()) compress_cols(BY, m.mask);
-                    m.mask = VectorIdxT::Ones(Y.cols());
-                    if(BY.rows() == Y.rows() && BY.cols() == Y.cols()) m.analyze_bm_orthonormality(Y, BY);
-                    break;
-                case MaskPolicy::RANDOMIZE:
-                    if(eiglog && eiglog->should_log(spdlog::level::debug))
-                        eiglog->debug("block_bm_orthonormalize: randomizing masked columns | kept {} of {} | maskTol {:.3e}", m.mask.sum(), Y.cols(),
-                                      m.maskTol);
-                    for(Eigen::Index j = 0; j < Y.cols(); ++j) {
-                        if(m.mask(j) == 0) Y.col(j) = Eigen::VectorXf::Random(Y.col(j).size()).template cast<Scalar>();
-                    }
-                    BY = MultB(Y);
-                    m.analyze_bm_orthonormality(Y, BY);
-                    break;
-            }
-        };
-
-        m.mask       = VectorIdxT::Ones(Y.cols());
-        m.proj_sum_b = VectorReal::Zero(Y.cols());
-        m.scale_log  = VectorReal::Zero(Y.cols());
-        if(std::isnan(m.maskTol)) m.maskTol = normTol * static_cast<RealScalar>(Y.cols());
-        if(std::isnan(m.orthTol)) m.orthTol = normTol * static_cast<RealScalar>(Y.cols());
-
-        if(m.refresh_by || Y.cols() != BY.cols() || Y.rows() != BY.rows()) BY = MultB(Y);
-        m.refresh_by = false;
-        m.analyze_bm_orthonormality(Y, BY);
-        assert_allFinite(BY);
-
-        m.Rdiag = VectorReal::Zero(Y.cols());
-        for(Eigen::Index j = 0; j < Y.cols(); ++j) {
-            auto       yj     = Y.col(j);
-            auto       byj    = BY.col(j);
-            RealScalar normSq = std::real(yj.dot(byj));
-            RealScalar norm   = std::sqrt(std::max<RealScalar>(0, normSq));
-            m.Rdiag(j)        = norm;
-            if(norm < m.maskTol) {
-                if(eiglog && eiglog->should_log(spdlog::level::trace)) eiglog->trace("masking Y col {} | bm norm {:.3e} | maskTol {:.3e}", j, norm, m.maskTol);
-                m.mask(j) = 0;
-                yj.setZero();
-                byj.setZero();
-            }
-        }
-        handle_masked_columns();
-        if(Y.cols() == 0) {
-            AY.resizeLike(Y);
-            BY.resizeLike(Y);
-            return;
-        }
-
-        Eigen::Index maxReps = 2;
-        for(Eigen::Index rep = 0; rep < maxReps; ++rep) {
-            VectorReal normSqs = VectorReal::Zero(Y.cols());
-            VectorIdxT have    = VectorIdxT::Zero(Y.cols());
-
-            for(Eigen::Index j = 0; j < Y.cols(); ++j) {
-                if(m.mask(j) == 0) continue;
-
-                auto yj  = Y.col(j);
-                auto byj = BY.col(j);
-
-                for(Eigen::Index i = 0; i < j; ++i) {
-                    if(m.mask(i) == 0) continue;
-                    auto yi  = Y.col(i);
-                    auto byi = BY.col(i);
-
-                    if(have(i) == 0) {
-                        normSqs(i) = std::max<RealScalar>(0, std::real(yi.dot(byi)));
-                        have(i)    = 1;
-                    }
-
-                    RealScalar normSq  = normSqs(i);
-                    Scalar     proj1   = yi.dot(byj);
-                    Scalar     proj2   = byi.dot(yj);
-                    Scalar     proj_ij = normSq > std::numeric_limits<RealScalar>::min() ? (proj1 + proj2) / (RealScalar{2} * normSq) : Scalar{0};
-
-                    yj.noalias()  -= yi * proj_ij;
-                    byj.noalias() -= byi * proj_ij;
-                }
-
-                RealScalar normSq = std::real(yj.dot(byj));
-                RealScalar norm   = std::sqrt(std::max<RealScalar>(0, normSq));
-                if(norm <= m.maskTol) {
-                    if(eiglog && eiglog->should_log(spdlog::level::trace))
-                        eiglog->trace("masking Y col {} | bm norm {:.3e} | maskTol {:.3e}", j, norm, m.maskTol);
-                    m.mask(j) = 0;
-                    yj.setZero();
-                    byj.setZero();
-                    continue;
-                }
-
-                yj         /= norm;
-                byj        /= norm;
-                normSqs(j)  = std::max<RealScalar>(0, std::real(yj.dot(byj)));
-            }
-
-            m.analyze_bm_orthonormality(Y, BY);
-            handle_masked_columns();
-            if(Y.cols() == 0) {
-                AY.resizeLike(Y);
-                BY.resizeLike(Y);
-                return;
-            }
-            if(eiglog && eiglog->should_log(spdlog::level::trace))
-                eiglog->trace("block_bm_orthonormalize: dgks rep {} | orthError {:.4e} symmError {:.4e} skewError {:.4e}", rep, m.orthError, m.symmError,
-                              m.skewError);
-            if(m.orthError < m.orthTol) break;
-        }
-
-        AY = MultA(Y);
-        assert_bm_orthonormal(Y, BY, m);
-    }
 }

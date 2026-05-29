@@ -3,7 +3,7 @@
 
 #include <grit/grit.h>
 
-TEST_CASE("solver result can be cleared") {
+TEST_CASE("solver view reflects clear_result") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
     Matrix A_matrix = Matrix::Identity(3, 3);
@@ -11,17 +11,15 @@ TEST_CASE("solver result can be cleared") {
 
     Matrix V = Matrix::Random(3, 1);
 
-    grit::standard::problem<double> problem(A);
-    grit::gdplusk_config<double>    cfg;
-    cfg.nev = 1;
-    cfg.ncv = 3;
-    cfg.block_size   = 1;
-    cfg.set_initial_guess(V);
-
-    grit::standard::gdplusk<double> solver(problem, cfg);
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev              = 1;
+    solver.config.ncv              = 3;
+    solver.config.block_size       = 1;
+    solver.config.max_basis_blocks = 3;
+    solver.set_initial_guess(V);
     solver.run();
-    REQUIRE(solver.result().eigVal().size() == 1);
+    REQUIRE(grit::solver_view<double>(solver).eigVal().size() == 1);
 
     solver.clear_result();
-    REQUIRE(solver.result().eigVal().size() == 0);
+    REQUIRE(grit::solver_view<double>(solver).eigVal().size() == 0);
 }
