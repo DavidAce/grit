@@ -35,3 +35,5 @@ Read the relevant project skill before making focused changes:
 - Use existing CMake presets. Do not create ad hoc build directories.
 - Use `std::print` and `std::format`; do not add `<iostream>` or `<iomanip>`.
 - Keep changes scoped and add tests when solver behavior changes.
+- Prefer `snake_case` for functions, variables, fields, files, and user-facing options.
+- Reserve `CamelCase` for types and enum names.
