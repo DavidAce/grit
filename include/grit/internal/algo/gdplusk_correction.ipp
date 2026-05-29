@@ -1,7 +1,7 @@
 #pragma once
 
-#include <grit/form/base.h>
-#include <grit/internal/precondition/JacobiDavidsonOperator.h>
+#include "grit/form/base.h"
+#include "grit/internal/precondition/JacobiDavidsonOperator.h"
 
 namespace grit::algo {
     template<typename Scalar, grit::Form form_>
@@ -122,7 +122,7 @@ namespace grit::algo {
         if(!info.enabled) return info;
 
         const auto min_history_size = std::min<size_t>(status.max_history_size, size_t{2});
-        info.enough_history       = status.iter >= static_cast<Eigen::Index>(min_history_size) && status.rNorms_history.size() >= min_history_size;
+        info.enough_history         = status.iter >= static_cast<Eigen::Index>(min_history_size) && status.rNorms_history.size() >= min_history_size;
         if(!info.enough_history || status.rNorms.size() == 0) return info;
 
         auto rows = std::min<Eigen::Index>(cfg().nev, status.rNorms.size());
@@ -155,7 +155,7 @@ namespace grit::algo {
         if(!info.enabled) return info;
 
         const auto min_history_size = std::min<size_t>(status.max_history_size, size_t{2});
-        info.enough_history       = status.iter >= static_cast<Eigen::Index>(min_history_size) && status.eigVals_history.size() >= min_history_size;
+        info.enough_history         = status.iter >= static_cast<Eigen::Index>(min_history_size) && status.eigVals_history.size() >= min_history_size;
         if(!info.enough_history || status.eigVal.size() == 0) return info;
 
         VectorReal stds = get_standard_deviations(status.eigVals_history, false);
@@ -353,7 +353,8 @@ namespace grit::algo {
     }
 
     template<typename Scalar, grit::Form form_>
-    typename gdplusk<Scalar, form_>::MatrixType gdplusk<Scalar, form_>::jacobi_davidson_l2_correction(const MatrixType &V, const MatrixType &S, const VectorReal &evals) {
+    typename gdplusk<Scalar, form_>::MatrixType gdplusk<Scalar, form_>::jacobi_davidson_l2_correction(const MatrixType &V, const MatrixType &S,
+                                                                                                      const VectorReal &evals) {
         assert(V.rows() == S.rows());
         assert(V.cols() == S.cols());
         assert(!this->cfg().use_b_inner_product);
@@ -451,9 +452,9 @@ namespace grit::algo {
 
     template<typename Scalar, grit::Form form_>
     typename gdplusk<Scalar, form_>::MatrixType gdplusk<Scalar, form_>::jacobi_davidson_bm_correction(const MatrixType &V, const MatrixType &BV,
-                                                                                                        const MatrixType &S,
-                                                                                                        const VectorReal &evals)
-        requires(form_ == grit::Form::GENERALIZED) {
+                                                                                                      const MatrixType &S, const VectorReal &evals)
+        requires(form_ == grit::Form::GENERALIZED)
+    {
         assert(this->cfg().use_b_inner_product);
         assert(V.rows() == S.rows());
         assert(V.cols() == S.cols());

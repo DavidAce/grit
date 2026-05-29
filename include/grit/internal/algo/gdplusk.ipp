@@ -1,7 +1,7 @@
 #pragma once
 
 #include <algorithm>
-#include <grit/algo/gdplusk.h>
+#include "grit/algo/gdplusk.h"
 #include <optional>
 #include <stdexcept>
 #include <string>

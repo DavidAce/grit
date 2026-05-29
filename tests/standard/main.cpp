@@ -30,6 +30,36 @@ TEST_CASE("standard gdplusk matches dense eigensolver") {
     Matrix V = Matrix::Identity(A_matrix.rows(), A_matrix.rows());
 
     auto solver = grit::standard::gdplusk<double>(A);
+    solver.config.nev              = 1;
+    solver.config.ncv              = A_matrix.rows();
+    solver.config.block_size       = 1;
+    solver.config.max_basis_blocks = A_matrix.rows();
+    solver.config.ritz             = grit::OptRitz::SR;
+    solver.config.max_iters        = 20;
+    solver.set_initial_guess(V);
+    solver.run();
+
+    Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
+    auto view = grit::solver_view<double>(solver);
+    REQUIRE(view.stopReason() == grit::StopReason::converged);
+    require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
+}
+
+TEST_CASE("standard lanczos matches dense eigensolver") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix(5, 5);
+    A_matrix << 4.0, 1.0, 0.0, 0.0, 0.0,
+        1.0, 3.0, 0.5, 0.0, 0.0,
+        0.0, 0.5, 2.0, 0.25, 0.0,
+        0.0, 0.0, 0.25, 5.0, 0.5,
+        0.0, 0.0, 0.0, 0.5, 6.0;
+
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    Matrix V = Matrix::Identity(A_matrix.rows(), A_matrix.rows());
+
+    grit::standard::lanczos<double> solver(A);
     solver.config.nev              = 2;
     solver.config.ncv              = A_matrix.rows();
     solver.config.block_size       = 1;
@@ -43,6 +73,38 @@ TEST_CASE("standard gdplusk matches dense eigensolver") {
     auto view = grit::solver_view<double>(solver);
     REQUIRE(view.stopReason() == grit::StopReason::converged);
     require_close(view.eigVal(), exact.eigenvalues().head(2), 1e-10);
+}
+
+TEST_CASE("standard lobpcg matches dense eigensolver") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix(5, 5);
+    A_matrix << 4.0, 1.0, 0.0, 0.0, 0.0,
+        1.0, 3.0, 0.5, 0.0, 0.0,
+        0.0, 0.5, 2.0, 0.25, 0.0,
+        0.0, 0.0, 0.25, 5.0, 0.5,
+        0.0, 0.0, 0.0, 0.5, 6.0;
+
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    Matrix V = Matrix::Identity(A_matrix.rows(), A_matrix.rows());
+
+    grit::standard::lobpcg<double> solver(A);
+    solver.config.nev                    = 1;
+    solver.config.ncv                    = A_matrix.rows();
+    solver.config.block_size             = 1;
+    solver.config.max_basis_blocks       = A_matrix.rows();
+    solver.config.max_extra_ritz_history = 1;
+    solver.config.max_ritz_residual_history = 1;
+    solver.config.ritz                   = grit::OptRitz::SR;
+    solver.config.max_iters              = 20;
+    solver.set_initial_guess(V);
+    solver.run();
+
+    Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
+    auto view = grit::solver_view<double>(solver);
+    REQUIRE(view.stopReason() == grit::StopReason::converged);
+    require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
 }
 
 TEST_CASE("standard gdplusk converges with an exact zero eigenvalue") {
