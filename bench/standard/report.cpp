@@ -59,7 +59,7 @@ namespace bench_standard {
         return "warn";
     }
 
-    void print_solver_config(const Options &opts, const grit::gdplusk_config<Scalar> &cfg) {
+    void print_solver_config(const Options &opts, const Solver::Config &cfg) {
         std::println("solver:");
         std::println("  problem: standard | outer iteration: gdplusk | ritz: {}", grit::enum2sv(cfg.ritz));
         std::println("  residual correction: {}", residual_correction_name(opts.residual_correction));
@@ -72,7 +72,7 @@ namespace bench_standard {
         std::println("  initial guess: {} | seed: {} | Eigen threads: {} | log level: {}",
                      opts.initial_guess.empty() ? "random(seed + rep - 1)" : opts.initial_guess, opts.seed, Eigen::nbThreads(), log_level_name(cfg.log_level));
         std::println("  history: extra ritz {} | ritz residual {} | basis blocks {} | retain blocks {}", cfg.max_extra_ritz_history,
-                     cfg.max_ritz_residual_history, cfg.max_basis_blocks, cfg.max_retain_blocks);
+                     cfg.max_ritz_residual_history, cfg.max_basis_blocks, cfg.maxRetainBlocks);
         if(opts.residual_correction == ResidualCorrection::AUTO) {
             std::println("  auto correction: cheap min dwell iters {} | eigval saturation {:.3e} | rrnorm saturation {:.3e} | jd start rrnorm {:.3e} | cheap "
                          "probe interval {} | "
