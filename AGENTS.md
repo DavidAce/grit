@@ -17,10 +17,10 @@ The xDMRGpp source is at `https://github.com/DavidAce/xDMRGpp`.
 
 Read the relevant project skill before making focused changes:
 
-- `skills/grit-build-test/SKILL.md`: CMake presets, package managers, and validation commands.
-- `skills/grit-xdmrgpp-port/SKILL.md`: rules for porting solver code from xDMRGpp.
-- `skills/grit-benchmark/SKILL.md`: benchmark structure and implementation preferences.
-- `skills/grit-commit-style/SKILL.md`: commit message style for this repository.
+- `.skills/grit-build-test/SKILL.md`: CMake presets, package managers, and validation commands.
+- `.skills/grit-xdmrgpp-port/SKILL.md`: rules for porting solver code from xDMRGpp.
+- `.skills/grit-benchmark/SKILL.md`: benchmark structure and implementation preferences.
+- `.skills/grit-commit-style/SKILL.md`: commit message style for this repository.
 
 ## Notation
 
