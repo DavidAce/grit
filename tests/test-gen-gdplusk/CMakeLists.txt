@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(grit-test-generalized)
+project(test-gen-gdplusk)
 enable_testing()
 add_executable(${PROJECT_NAME} main.cpp)
 target_link_libraries(${PROJECT_NAME} PRIVATE grit::grit)

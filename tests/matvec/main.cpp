@@ -1,4 +1,4 @@
-#define CATCH_CONFIG_MAIN
+#define CATCH_CONFIG_RUNNER
 #include "catch.hpp"
 
 #include <grit/grit.h>
@@ -55,4 +55,11 @@ TEST_CASE("preconditioner callbacks are invoked") {
     REQUIRE(calc_count == 1);
     REQUIRE(prec_count == 1);
     require_close(x, y, 1e-12);
+}
+
+int main(int argc, char **argv) {
+    Catch::Session session;
+    const int      return_code = session.applyCommandLine(argc, argv);
+    if(return_code != 0) return return_code;
+    return session.run();
 }

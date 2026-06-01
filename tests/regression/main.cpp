@@ -1,4 +1,4 @@
-#define CATCH_CONFIG_MAIN
+#define CATCH_CONFIG_RUNNER
 #include "catch.hpp"
 #include <algorithm>
 #include <cctype>
@@ -163,4 +163,11 @@ TEST_CASE("Andrews matvec count does not regress") {
         INFO(std::format("ncv {} baseline {} actual {} allowed {}", c.ncv, c.matvecs, actual, allowed));
         REQUIRE(actual <= allowed);
     }
+}
+
+int main(int argc, char **argv) {
+    Catch::Session session;
+    const int      return_code = session.applyCommandLine(argc, argv);
+    if(return_code != 0) return return_code;
+    return session.run();
 }

@@ -1,4 +1,4 @@
-#define CATCH_CONFIG_MAIN
+#define CATCH_CONFIG_RUNNER
 #include "catch.hpp"
 
 #include <grit/grit.h>
@@ -22,4 +22,11 @@ TEST_CASE("solver view reflects clear_result") {
 
     solver.clear_result();
     REQUIRE(grit::solver_view<double>(solver).eigVal().size() == 0);
+}
+
+int main(int argc, char **argv) {
+    Catch::Session session;
+    const int      return_code = session.applyCommandLine(argc, argv);
+    if(return_code != 0) return return_code;
+    return session.run();
 }
