@@ -37,22 +37,24 @@ namespace grit::algo {
 
     template<typename Scalar, grit::Form form_>
     void lobpcg<Scalar, form_>::set_initial_guess(const MatrixType &guess) {
-        initial_guess_ptr = &guess;
+        initial_guess_storage    = guess;
+        has_stored_initial_guess = true;
     }
 
     template<typename Scalar, grit::Form form_>
     void lobpcg<Scalar, form_>::clear_initial_guess() {
-        initial_guess_ptr = nullptr;
+        initial_guess_storage.resize(0, 0);
+        has_stored_initial_guess = false;
     }
 
     template<typename Scalar, grit::Form form_>
     bool lobpcg<Scalar, form_>::has_initial_guess() const {
-        return initial_guess_ptr != nullptr;
+        return has_stored_initial_guess;
     }
 
     template<typename Scalar, grit::Form form_>
     const typename lobpcg<Scalar, form_>::MatrixType &lobpcg<Scalar, form_>::initial_guess() const {
-        if(initial_guess_ptr) return *initial_guess_ptr;
+        if(has_stored_initial_guess) return initial_guess_storage;
         return empty_initial_guess;
     }
 
@@ -105,10 +107,10 @@ namespace grit::algo {
         assert_config();
 
         this->setLogger(config.log_level, std::string("grit|") + std::string(this->form_name()));
-        this->V = initial_guess();
         max_mBlocks = config.max_extra_ritz_history;
         max_sBlocks = config.max_ritz_residual_history;
         clear_result();
+        this->V = initial_guess();
         Base::run();
     }
 

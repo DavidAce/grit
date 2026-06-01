@@ -33,23 +33,22 @@ namespace grit::algo {
 
     template<typename Scalar, grit::Form form_>
     void lanczos<Scalar, form_>::set_initial_guess(const MatrixType &guess) {
-        initial_guess_ptr = &guess;
+        this->V = guess;
     }
 
     template<typename Scalar, grit::Form form_>
     void lanczos<Scalar, form_>::clear_initial_guess() {
-        initial_guess_ptr = nullptr;
+        this->V.resize(0, 0);
     }
 
     template<typename Scalar, grit::Form form_>
     bool lanczos<Scalar, form_>::has_initial_guess() const {
-        return initial_guess_ptr != nullptr;
+        return this->V.size() > 0;
     }
 
     template<typename Scalar, grit::Form form_>
     const typename lanczos<Scalar, form_>::MatrixType &lanczos<Scalar, form_>::initial_guess() const {
-        if(initial_guess_ptr) return *initial_guess_ptr;
-        return empty_initial_guess;
+        return this->V;
     }
 
     template<typename Scalar, grit::Form form_>
@@ -99,10 +98,59 @@ namespace grit::algo {
         assert_config();
 
         this->setLogger(config.log_level, std::string("grit|") + std::string(this->form_name()));
-        this->V = initial_guess();
         beta_stalled = false;
+        auto initial_guess_copy = this->V;
         clear_result();
-        Base::run();
+        this->V = initial_guess_copy;
+
+        status.saturation_count_max = this->cfg().ncv;
+        status.rNorms.setOnes(this->cfg().nev);
+        status.rNorms_init.setOnes(this->cfg().nev);
+        status.eigVal.setOnes(this->cfg().nev);
+        status.oldVal.setOnes(this->cfg().nev);
+        status.absDiff.setOnes(this->cfg().nev);
+        status.relDiff.setOnes(this->cfg().nev);
+
+        Eigen::ColPivHouseholderQR<MatrixType> cpqr;
+        for(long i = 0; i < 2; ++i) {
+            if(V.cols() < this->cfg().block_size) {
+                auto vc = V.cols();
+                V.conservativeResize(N, this->cfg().block_size);
+                auto Vrc = V.rightCols(this->cfg().block_size - vc);
+                for(auto vj : Vrc.colwise()) { vj = Eigen::VectorXf::Random(vj.size()).template cast<Scalar>(); }
+            }
+            cpqr.compute(V);
+            auto rank = std::min<Eigen::Index>(cpqr.rank(), this->cfg().block_size);
+            V         = cpqr.householderQ().setLength(rank) * MatrixType::Identity(N, rank);
+            if(V.cols() == this->cfg().block_size) break;
+        }
+
+        {
+            auto m       = OrthMeta();
+            m.maskPolicy = Base::MaskPolicy::COMPRESS;
+            if constexpr(form_ == grit::Form::GENERALIZED) {
+                if(this->cfg().use_b_inner_product) {
+                    block_bm_orthonormalize(V, AV, BV, m);
+                } else {
+                    block_l2_orthonormalize(V, AV, BV, m);
+                }
+            } else {
+                block_l2_orthonormalize(V, AV, m);
+                BV = V;
+            }
+        }
+
+        while(true) {
+            this->preamble();
+            build();
+            this->diagonalizeT();
+            extractRitzVectors();
+            updateStatus();
+            this->printStatus();
+            run_user_callback();
+            status.iter++;
+            if(status.stopReason != StopReason::none) break;
+        }
     }
 
     template<typename Scalar, grit::Form form_>
@@ -238,6 +286,11 @@ namespace grit::algo {
     template<typename Scalar, grit::Form form_>
     void lanczos<Scalar, form_>::updateStatus() {
         if(T_evals.size() < this->cfg().block_size) return;
+        if(T_evals.size() < this->cfg().nev || status.optIdx.size() < static_cast<size_t>(this->cfg().nev) || status.rNorms.size() < this->cfg().nev) {
+            status.stopReason |= StopReason::subspace_exhausted;
+            status.stopMessage.emplace_back("lanczos updateStatus: projected problem has fewer Ritz values than requested nev");
+            return;
+        }
         Base::updateStatus();
         if(beta_stalled && status.stopReason == StopReason::none) {
             status.stopReason |= StopReason::lanczos_beta_stalled;

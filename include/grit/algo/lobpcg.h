@@ -84,8 +84,9 @@ namespace grit::algo {
         Eigen::Index      rBlocks           = 0;
         Eigen::Index      sBlocks           = 0;
         MatrixType        G;
-        const MatrixType *initial_guess_ptr = nullptr;
-        MatrixType        empty_initial_guess;
+        MatrixType                initial_guess_storage;
+        MatrixType                empty_initial_guess;
+        bool                      has_stored_initial_guess = false;
 
         void shift_blocks_right(Eigen::Ref<MatrixType> matrix, Eigen::Index offset_old, Eigen::Index offset_new, Eigen::Index extent);
         void roll_blocks_left(Eigen::Ref<MatrixType> matrix, Eigen::Index offset, Eigen::Index extent);
@@ -102,3 +103,5 @@ namespace grit::algo {
         void build() final;
     };
 }
+
+#include <grit/internal/algo/lobpcg.ipp>

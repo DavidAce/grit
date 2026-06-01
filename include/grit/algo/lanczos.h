@@ -72,10 +72,11 @@ namespace grit::algo {
         void               run();
 
         private:
-        MatrixType        A_block, B_block;
-        const MatrixType *initial_guess_ptr = nullptr;
-        MatrixType        empty_initial_guess;
-        bool              beta_stalled      = false;
+        MatrixType A_block, B_block;
+        MatrixType initial_guess_storage;
+        MatrixType empty_initial_guess;
+        bool       has_stored_initial_guess = false;
+        bool       beta_stalled             = false;
 
         void write_Q_next_B_DGKS(Eigen::Index i);
         void assert_config() const;
@@ -91,3 +92,5 @@ namespace grit::algo {
         void build() final;
     };
 }
+
+#include <grit/internal/algo/lanczos.ipp>
