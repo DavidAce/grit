@@ -118,7 +118,6 @@ namespace {
         solver.config.nev                           = 1;
         solver.config.ncv                           = ncv;
         solver.config.block_size                    = 1;
-        solver.config.max_basis_blocks              = ncv;
         solver.config.ritz                          = grit::OptRitz::SR;
         solver.config.max_iters                     = -1;
         solver.config.inner_max_iters               = 2000;
@@ -131,7 +130,7 @@ namespace {
         solver.config.auto_sat_rnorm_threshold      = 1e-2;
         solver.config.auto_jd_start_rnorm_threshold = 1e-5;
         solver.config.auto_cheap_probe_interval     = 3;
-        constexpr unsigned int initial_guess_seed = 0;
+        constexpr unsigned int initial_guess_seed   = 0;
         solver.set_initial_guess(seeded_initial_guess(matrix.rows(), solver.config.block_size, initial_guess_seed));
         solver.run();
 

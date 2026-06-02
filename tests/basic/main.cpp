@@ -1,10 +1,8 @@
 #define CATCH_CONFIG_RUNNER
 #include "catch.hpp"
-
-#include <grit/grit.h>
-
 #include <cmath>
 #include <complex>
+#include <grit/grit.h>
 #include <type_traits>
 
 TEST_CASE("scalar aliases are configured") {
@@ -24,7 +22,6 @@ TEST_CASE("identity operator converges") {
     solver.config.nev        = 1;
     solver.config.ncv        = 3;
     solver.config.block_size = 1;
-    solver.config.max_basis_blocks = 3;
     solver.config.ritz       = grit::OptRitz::SR;
     solver.config.max_iters  = 10;
     solver.set_initial_guess(V);

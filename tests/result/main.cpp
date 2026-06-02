@@ -1,9 +1,8 @@
 #define CATCH_CONFIG_RUNNER
 #include "catch.hpp"
-
 #include <grit/grit.h>
 
-TEST_CASE("solver view reflects clear_result") {
+TEST_CASE("solver run is reentrant") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
     Matrix A_matrix = Matrix::Identity(3, 3);
@@ -12,16 +11,23 @@ TEST_CASE("solver view reflects clear_result") {
     Matrix V = Matrix::Random(3, 1);
 
     grit::standard::gdplusk<double> solver(A);
-    solver.config.nev              = 1;
-    solver.config.ncv              = 3;
-    solver.config.block_size       = 1;
-    solver.config.max_basis_blocks = 3;
+    solver.config.nev        = 1;
+    solver.config.ncv        = 3;
+    solver.config.block_size = 1;
     solver.set_initial_guess(V);
     solver.run();
-    REQUIRE(grit::solver_view<double>(solver).eigVal().size() == 1);
+    auto first_view    = grit::solver_view<double>(solver);
+    auto first_iters   = first_view.iter();
+    auto first_matvecs = first_view.num_matvecs_total();
+    REQUIRE(first_view.eigVal().size() == 1);
+    REQUIRE(grit::has_flag(first_view.stopReason(), grit::StopReason::converged));
 
-    solver.clear_result();
-    REQUIRE(grit::solver_view<double>(solver).eigVal().size() == 0);
+    solver.run();
+    auto view = grit::solver_view<double>(solver);
+    REQUIRE(view.eigVal().size() == 1);
+    REQUIRE(grit::has_flag(view.stopReason(), grit::StopReason::converged));
+    REQUIRE(view.iter() > first_iters);
+    REQUIRE(view.num_matvecs_total() > first_matvecs);
 }
 
 int main(int argc, char **argv) {

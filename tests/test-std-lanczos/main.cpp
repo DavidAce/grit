@@ -1,11 +1,10 @@
 #define CATCH_CONFIG_RUNNER
 #include "catch.hpp"
-
-#include <grit/grit.h>
-
-#include <Eigen/Eigenvalues>
+#include "solver_test_utils.h"
 #include <cmath>
+#include <Eigen/Eigenvalues>
 #include <format>
+#include <grit/grit.h>
 #include <string>
 #include <string_view>
 #include <unistd.h>
@@ -44,31 +43,93 @@ TEST_CASE("standard lanczos matches dense eigensolver") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
     Matrix A_matrix(5, 5);
-    A_matrix << 4.0, 1.0, 0.0, 0.0, 0.0,
-        1.0, 3.0, 0.5, 0.0, 0.0,
-        0.0, 0.5, 2.0, 0.25, 0.0,
-        0.0, 0.0, 0.25, 5.0, 0.5,
-        0.0, 0.0, 0.0, 0.5, 6.0;
+    A_matrix << 4.0, 1.0, 0.0, 0.0, 0.0, 1.0, 3.0, 0.5, 0.0, 0.0, 0.0, 0.5, 2.0, 0.25, 0.0, 0.0, 0.0, 0.25, 5.0, 0.5, 0.0, 0.0, 0.0, 0.5, 6.0;
 
     auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
 
     Matrix V = Matrix::Identity(A_matrix.rows(), A_matrix.rows());
 
     grit::standard::lanczos<double> solver(A);
-    solver.config.nev              = 2;
-    solver.config.ncv              = A_matrix.rows();
-    solver.config.block_size       = 1;
-    solver.config.max_basis_blocks = A_matrix.rows();
-    solver.config.ritz             = grit::OptRitz::SR;
-    solver.config.max_iters        = 20;
+    solver.config.nev        = 1;
+    solver.config.ncv        = A_matrix.rows();
+    solver.config.block_size = 1;
+    solver.config.ritz       = grit::OptRitz::SR;
+    solver.config.max_iters  = 20;
     solver.set_initial_guess(V);
     solver.run();
 
     Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
-    auto view = grit::solver_view<double>(solver);
+    auto                                  view = grit::solver_view<double>(solver);
     REQUIRE(view.stopReason() == grit::StopReason::converged);
     print_eigenvalue_comparison("standard lanczos", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
-    require_close(view.eigVal(), exact.eigenvalues().head(2), 1e-10);
+    require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
+}
+
+TEST_CASE("standard lanczos handles nos4 restart block search") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = grit_test::nos4_matrix<double>();
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::lanczos<double> solver(A);
+    solver.config.nev        = 2;
+    solver.config.ncv        = 20;
+    solver.config.block_size = 2;
+    solver.config.ritz       = grit::OptRitz::SR;
+    solver.config.max_iters  = 80;
+    solver.config.tol        = 1e-9;
+    solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 51));
+    solver.run();
+
+    Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
+    auto                                  expected = grit_test::expected_ritz_values(exact.eigenvalues(), solver.config.ritz, solver.config.nev);
+    auto                                  view     = grit::solver_view<double>(solver);
+    REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
+    REQUIRE(std::abs(exact.eigenvalues()(0) - grit_test::nos4_min_eigenvalue) < 1e-12);
+    REQUIRE(std::abs(exact.eigenvalues()(exact.eigenvalues().size() - 1) - grit_test::nos4_max_eigenvalue) < 1e-12);
+    REQUIRE(std::abs(exact.eigenvalues()(exact.eigenvalues().size() - 1) / exact.eigenvalues()(0) - grit_test::nos4_condition) < 1e-8);
+    print_eigenvalue_comparison("standard lanczos nos4 restart", view.eigVal(), expected, view.eigVal().size());
+    require_close(view.eigVal(), expected, 1e-7);
+}
+
+TEST_CASE("standard lanczos supports all Ritz targets on nos4") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = grit_test::nos4_matrix<double>();
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
+    for(auto ritz : {grit::OptRitz::SR, grit::OptRitz::LR, grit::OptRitz::SM, grit::OptRitz::LM}) {
+        grit::standard::lanczos<double> solver(A);
+        solver.config.nev        = 2;
+        solver.config.ncv        = A_matrix.rows();
+        solver.config.block_size = 2;
+        solver.config.ritz       = ritz;
+        solver.config.max_iters  = 100;
+        solver.config.tol        = 1e-9;
+        solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 60 + static_cast<int>(ritz)));
+        solver.run();
+
+        auto expected = grit_test::expected_ritz_values(exact.eigenvalues(), ritz, solver.config.nev);
+        auto view     = grit::solver_view<double>(solver);
+        REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
+        print_eigenvalue_comparison(std::format("standard lanczos {}", grit::enum2sv(ritz)), view.eigVal(), expected, view.eigVal().size());
+        require_close(view.eigVal(), expected, 1e-7);
+    }
+}
+
+TEST_CASE("standard lanczos rejects nev larger than block_size") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = grit_test::nos4_matrix<double>();
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::lanczos<double> solver(A);
+    solver.config.nev        = 3;
+    solver.config.block_size = 2;
+    solver.config.ncv        = 20;
+
+    REQUIRE_THROWS_WITH(solver.run(), Catch::Matchers::Contains("lanczos config error: nev must not exceed block_size"));
 }
 
 int main(int argc, char **argv) {

@@ -15,46 +15,93 @@ Ritz iteration eigensolvers. Operators are supplied as Eigen block callbacks.
 The default build enables `double` and `std::complex<double>`. Other scalar
 widths can be enabled with CMake options.
 
-## Example
+## Examples
+
+Standard Hermitian problem:
 
 ```cpp
 #include <grit/grit.h>
 
 #include <Eigen/Core>
-#include <iostream>
+#include <print>
 
 int main() {
-    Eigen::MatrixXd H(4, 4);
-    H << 1, 0, 0, 0,
-         0, 2, 0, 0,
-         0, 0, 3, 0,
-         0, 0, 0, 4;
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
-    auto A = grit::matvec<double>(H.rows(), [&](auto const &X) {
-        return H * X;
+    Matrix A_matrix(4, 4);
+    A_matrix << 1.0, 0.1, 0.0, 0.0,
+        0.1, 2.0, 0.2, 0.0,
+        0.0, 0.2, 3.0, 0.3,
+        0.0, 0.0, 0.3, 4.0;
+
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](const auto &X) {
+        return A_matrix * X;
     });
-    Eigen::MatrixXd V = Eigen::MatrixXd::Random(H.rows(), 2);
+
     grit::standard::gdplusk<double> solver(A);
-    solver.config.nev = 2;
-    solver.config.ncv = H.rows();
-    solver.config.block_size = 1;
-    solver.config.max_basis_blocks = H.rows();
-    solver.config.ritz = grit::OptRitz::SR;
-    solver.set_initial_guess(V);
+    solver.config.nev              = 1;
+    solver.config.ncv              = A_matrix.rows();
+    solver.config.block_size       = 1;
+    solver.config.ritz             = grit::OptRitz::SR;
+    solver.set_initial_guess(Matrix::Identity(A_matrix.rows(), A_matrix.rows()));
     solver.run();
 
     auto view = grit::solver_view<double>(solver);
-    std::cout << view.eigVal().transpose() << '\n';
+    for(Eigen::Index i = 0; i < view.eigVal().size(); ++i) {
+        std::println("lambda[{}] = {:.16e}", i, view.eigVal()(i));
+    }
 }
 ```
 
-More complete examples are available in `examples/`. They can be built with:
+Generalized Hermitian problem:
+
+```cpp
+#include <grit/grit.h>
+
+#include <Eigen/Core>
+#include <print>
+
+int main() {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix(4, 4);
+    A_matrix << 1.0, 0.1, 0.0, 0.0,
+        0.1, 2.0, 0.2, 0.0,
+        0.0, 0.2, 3.0, 0.3,
+        0.0, 0.0, 0.3, 4.0;
+
+    Matrix B_matrix = A_matrix * A_matrix;
+
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) {
+        return A_matrix * X;
+    });
+    auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) {
+        return B_matrix * X;
+    });
+
+    grit::generalized::lanczos<double> solver(A, B);
+    solver.config.nev              = 1;
+    solver.config.ncv              = A_matrix.rows();
+    solver.config.block_size       = 1;
+    solver.config.ritz             = grit::OptRitz::LM;
+    solver.set_initial_guess(Matrix::Identity(A_matrix.rows(), A_matrix.rows()));
+    solver.run();
+
+    auto view = grit::solver_view<double>(solver);
+    std::println("generalized lambda = {:.16e}", view.eigVal()(0));
+    std::println("recovered A eigenvalue = {:.16e}", 1.0 / view.eigVal()(0));
+}
+```
+
+The same standard and generalized aliases are available for `gdplusk`,
+`lanczos`, and `lobpcg`.
+
+More complete examples are available in `examples/`. They can be built with an
+existing preset:
 
 ```bash
-cmake -S . -B build/examples \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DGRIT_BUILD_EXAMPLES=ON
-cmake --build build/examples --target build-all-examples
+cmake --preset release-conan -DGRIT_BUILD_EXAMPLES=ON
+cmake --build --preset release-conan --target build-all-examples
 ```
 
 ## Install
@@ -62,16 +109,14 @@ cmake --build build/examples --target build-all-examples
 ```bash
 git clone https://github.com/DavidAce/grit.git
 cd grit
-cmake -S . -B build/release \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=/path/to/grit
-cmake --build build/release
-ctest --test-dir build/release
-cmake --install build/release
+cmake --preset release-conan
+cmake --build --preset release-conan
+ctest --preset release-conan
+cmake --install build/release-conan
 ```
 
-This uses the default `find` dependency mode, so Eigen, fmt, spdlog, and OpenMP
-must already be visible to CMake.
+Use `release-find` instead of `release-conan` when Eigen, fmt, spdlog, and
+OpenMP are already visible to CMake.
 
 ## Presets
 

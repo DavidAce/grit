@@ -1,9 +1,7 @@
 #define CATCH_CONFIG_RUNNER
 #include "catch.hpp"
-
-#include <grit/grit.h>
-
 #include <cmath>
+#include <grit/grit.h>
 
 namespace {
     template<typename VecA, typename VecB>
@@ -17,9 +15,7 @@ TEST_CASE("matvec ptr callback applies operator") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
     Matrix A_matrix(3, 3);
-    A_matrix << 1.0, 0.1, 0.0,
-        0.1, 2.0, 0.2,
-        0.0, 0.2, 3.0;
+    A_matrix << 1.0, 0.1, 0.0, 0.1, 2.0, 0.2, 0.0, 0.2, 3.0;
 
     auto A = grit::matvec<double>(A_matrix.rows(), grit::ptr, [&](const double *X, double *Y, Eigen::Index rows, Eigen::Index cols) {
         Eigen::Map<const Matrix> X_map(X, rows, cols);
