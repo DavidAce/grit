@@ -142,16 +142,14 @@ namespace grit {
 
     template<typename Scalar_>
     std::string_view solver_view<Scalar_>::residual_correction_active_name() const {
-        return internal::visit_solver_source(source, [](const auto &src) {
-            return std::remove_cvref_t<decltype(src)>::ResidualCorrectionToString(src.auto_residual_correction.active);
-        });
+        return internal::visit_solver_source(
+            source, [](const auto &src) { return std::remove_cvref_t<decltype(src)>::ResidualCorrectionToString(src.auto_residual_correction.active); });
     }
 
     template<typename Scalar_>
     std::string_view solver_view<Scalar_>::residual_correction_step_name() const {
-        return internal::visit_solver_source(source, [](const auto &src) {
-            return std::remove_cvref_t<decltype(src)>::ResidualCorrectionToString(src.auto_residual_correction.step_method);
-        });
+        return internal::visit_solver_source(
+            source, [](const auto &src) { return std::remove_cvref_t<decltype(src)>::ResidualCorrectionToString(src.auto_residual_correction.step_method); });
     }
 
     template<typename Scalar_>
@@ -166,11 +164,13 @@ namespace grit {
 
     template<typename Scalar_>
     const std::vector<Eigen::Index> &solver_view<Scalar_>::cheap_to_jd_switch_iters() const {
-        return internal::visit_solver_source(source, [](const auto &src) -> const std::vector<Eigen::Index> & { return src.auto_residual_correction.cheap_to_jd_switch_iters; });
+        return internal::visit_solver_source(
+            source, [](const auto &src) -> const std::vector<Eigen::Index> & { return src.auto_residual_correction.cheap_to_jd_switch_iters; });
     }
 
     template<typename Scalar_>
     const std::vector<Eigen::Index> &solver_view<Scalar_>::jd_to_cheap_switch_iters() const {
-        return internal::visit_solver_source(source, [](const auto &src) -> const std::vector<Eigen::Index> & { return src.auto_residual_correction.jd_to_cheap_switch_iters; });
+        return internal::visit_solver_source(
+            source, [](const auto &src) -> const std::vector<Eigen::Index> & { return src.auto_residual_correction.jd_to_cheap_switch_iters; });
     }
 }

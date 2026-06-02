@@ -62,8 +62,6 @@ namespace grit::algo {
         using Base::block_l2_orthogonalize;
         using Base::block_l2_orthonormalize;
         using Base::cfg;
-        using Base::clear_result;
-        using Base::eiglog;
         using Base::eps;
         using Base::get_bm_normalizer_for_the_projected_pencil;
         using Base::get_op_norm_estimate;
@@ -71,6 +69,7 @@ namespace grit::algo {
         using Base::get_refined_ritz_eigenvectors_gen;
         using Base::get_refined_ritz_eigenvectors_std;
         using Base::get_standard_deviations;
+        using Base::log;
 
         struct Config : BaseConfig {
             static constexpr RealScalar                         eps                              = std::numeric_limits<RealScalar>::epsilon();
@@ -79,7 +78,6 @@ namespace grit::algo {
             bool                                                use_jd_b_only                    = false;
             bool                                                use_krylov_schur_gdplusk_restart = false;
             bool                                                inject_randomness                = false;
-            Eigen::Index                                        max_basis_blocks                 = 8;
             Eigen::Index                                        maxRetainBlocks                  = 1;
             RealScalar                                          inner_tol                        = RealScalar{0.1f};
             Eigen::Index                                        inner_max_iters                  = 1000;
@@ -99,39 +97,31 @@ namespace grit::algo {
         gdplusk(Matvec<Scalar> &A) requires(form_ == grit::Form::STANDARD);
         gdplusk(Matvec<Scalar> &A, Matvec<Scalar> &B) requires(form_ == grit::Form::GENERALIZED);
 
-        void               set_initial_guess(const MatrixType &V);
-        void               clear_initial_guess();
-        [[nodiscard]] bool has_initial_guess() const;
-        void               run();
+        void run();
 
         private:
-        Eigen::Index      max_mBlocks       = 1;
-        Eigen::Index      max_sBlocks       = 1;
-        RealScalar        current_inner_tol = RealScalar{0.1f};
-        Eigen::Index      vBlocks           = 0;
-        Eigen::Index      mBlocks           = 0;
-        Eigen::Index      sBlocks           = 0;
-        Eigen::Index      kBlocks           = 0;
-        MatrixType        Q_new, AQ_new, BQ_new;
-        MatrixType        G;
-        const MatrixType *initial_guess_ptr = nullptr;
-        MatrixType        empty_initial_guess;
-
-        void shift_blocks_right(Eigen::Ref<MatrixType> matrix, Eigen::Index offset_old, Eigen::Index offset_new, Eigen::Index extent);
-        void roll_blocks_left(Eigen::Ref<MatrixType> matrix, Eigen::Index offset, Eigen::Index extent);
-        void selective_orthonormalize(const Eigen::Ref<const MatrixType> X, Eigen::Ref<MatrixType> Y, RealScalar breakdownTol, VectorIdxT &mask);
-        void make_new_Q_block();
-        void assert_config() const;
-        [[nodiscard]] const MatrixType        &initial_guess() const;
-        [[nodiscard]] static const MatrixType &default_initial_guess();
-        void                                   assert_operator_config() const requires(form_ == grit::Form::STANDARD);
-        void                                   assert_operator_config() const requires(form_ == grit::Form::GENERALIZED);
-        static std::string_view                ResidualCorrectionToString(ResidualCorrectionType rct);
-        static ResidualCorrectionType          StringToResidualCorrection(std::string_view rct);
-        void                                   preamble() final;
-        void                                   updateStatus() final;
-        void                                   extractRitzVectors() final;
-        void                                   run_user_callback() final;
+        Eigen::Index max_mBlocks       = 1;
+        Eigen::Index max_sBlocks       = 1;
+        RealScalar   current_inner_tol = RealScalar{0.1f};
+        Eigen::Index vBlocks           = 0;
+        Eigen::Index mBlocks           = 0;
+        Eigen::Index sBlocks           = 0;
+        Eigen::Index kBlocks           = 0;
+        MatrixType   Q_new, AQ_new, BQ_new;
+        MatrixType   G;
+        void         shift_blocks_right(Eigen::Ref<MatrixType> matrix, Eigen::Index offset_old, Eigen::Index offset_new, Eigen::Index extent);
+        void         roll_blocks_left(Eigen::Ref<MatrixType> matrix, Eigen::Index offset, Eigen::Index extent);
+        void         selective_orthonormalize(const Eigen::Ref<const MatrixType> X, Eigen::Ref<MatrixType> Y, RealScalar breakdownTol, VectorIdxT &mask);
+        void         make_new_Q_block();
+        void         assert_config() const;
+        void         assert_operator_config() const requires(form_ == grit::Form::STANDARD);
+        void         assert_operator_config() const requires(form_ == grit::Form::GENERALIZED);
+        static std::string_view       ResidualCorrectionToString(ResidualCorrectionType rct);
+        static ResidualCorrectionType StringToResidualCorrection(std::string_view rct);
+        void                          preamble() final;
+        void                          updateStatus() final;
+        void                          extractRitzVectors() final;
+        void                          run_user_callback() final;
 
         public:
         void                               adjust_inner_tolerance(const Eigen::Ref<const MatrixType> &S);

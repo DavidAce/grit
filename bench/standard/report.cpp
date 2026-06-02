@@ -72,7 +72,7 @@ namespace bench_standard {
         std::println("  initial guess: {} | seed: {} | Eigen threads: {} | log level: {}",
                      opts.initial_guess.empty() ? "random(seed + rep - 1)" : opts.initial_guess, opts.seed, Eigen::nbThreads(), log_level_name(cfg.log_level));
         std::println("  history: extra ritz {} | ritz residual {} | basis blocks {} | retain blocks {}", cfg.max_extra_ritz_history,
-                     cfg.max_ritz_residual_history, cfg.max_basis_blocks, cfg.maxRetainBlocks);
+                     cfg.max_ritz_residual_history, cfg.ncv / cfg.block_size, cfg.maxRetainBlocks);
         if(opts.residual_correction == ResidualCorrection::AUTO) {
             std::println("  auto correction: cheap min dwell iters {} | eigval saturation {:.3e} | rrnorm saturation {:.3e} | jd start rrnorm {:.3e} | cheap "
                          "probe interval {} | "
@@ -90,8 +90,8 @@ namespace bench_standard {
                      "saturation {:.4e}",
                      limit_text(opts.max_iters), limit_text(opts.max_matvecs), opts.tol_rnorm_relative, bool_text(opts.use_relative_rnorm_tolerance),
                      opts.sat_eigval_threshold, opts.sat_rnorm_threshold);
-        std::println("  sweep axes: ncv {} | block-size {} | max basis blocks {} | ritz {} | residual correction {}", list_text(opts.ncv),
-                     list_text(opts.block_size), opts.max_basis_blocks, opts.ritz, opts.residual_correction);
+        std::println("  sweep axes: ncv {} | block-size {} | ritz {} | residual correction {}", list_text(opts.ncv), list_text(opts.block_size), opts.ritz,
+                     opts.residual_correction);
         std::println("  sweep axes: tol {} | inner tol {} | inner max iters {} | refined {} | adaptive {}", list_text(opts.tol), list_text(opts.inner_tol),
                      list_text(opts.inner_max_iters), bool_list_text(opts.use_refined_rayleigh_ritz), bool_list_text(opts.use_adaptive_inner_tolerance));
         if(opts.residual_correction.find("auto") != std::string::npos || opts.residual_correction.find("AUTO") != std::string::npos) {

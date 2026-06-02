@@ -14,7 +14,6 @@ namespace bench_standard {
         int           nev                           = 1;     /*!< Number of requested eigenpairs. */
         int           ncv                           = 8;     /*!< Maximum search-space columns. */
         int           block_size                    = 1;     /*!< Number of vectors in each solver block. */
-        int           max_basis_blocks              = 8;     /*!< Basis-block count used when ncv is derived. */
         int           max_iters                     = 100;   /*!< Maximum outer solver iterations; negative means unlimited. */
         int           max_matvecs                   = -1;    /*!< Maximum total matrix-vector products; negative means unlimited. */
         int           inner_max_iters               = 1000;  /*!< Maximum iterations for the inner correction solver. */

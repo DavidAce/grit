@@ -68,20 +68,12 @@ namespace bench_standard {
             return text;
         }
 
-        void adjust_block_geometry(Options &opts, int requested_ncv, int requested_block_size, int requested_max_basis_blocks, Eigen::Index matrix_rows) {
+        void adjust_block_geometry(Options &opts, int requested_ncv, int requested_block_size, Eigen::Index matrix_rows) {
             const auto rows = static_cast<int>(matrix_rows);
             opts.nev        = std::min(std::max(1, opts.nev), rows);
             opts.block_size = std::clamp(std::max(opts.nev, requested_block_size), 1, rows);
-
-            const auto max_basis_blocks = std::max(1, rows / opts.block_size);
-            if(requested_ncv < 0) {
-                opts.max_basis_blocks = std::clamp(requested_max_basis_blocks, 1, max_basis_blocks);
-                opts.ncv              = opts.max_basis_blocks * opts.block_size;
-            } else {
-                opts.ncv              = std::min(std::max(opts.nev, requested_ncv), rows);
-                opts.max_basis_blocks = std::clamp(opts.ncv / opts.block_size, 1, max_basis_blocks);
-                opts.ncv              = opts.max_basis_blocks * opts.block_size;
-            }
+            opts.ncv        = std::min(std::max(opts.block_size, requested_ncv), rows);
+            opts.ncv        = std::max(opts.block_size, (opts.ncv / opts.block_size) * opts.block_size);
         }
     }
 
@@ -120,9 +112,8 @@ namespace bench_standard {
         app.add_option("--save-results", opts.save_results, "Path to HDF5 file where final result rows and solver snapshots are saved");
         app.add_flag("--print-summary", opts.print_summary, "Print the summary from --save-results without running the benchmark");
         app.add_option("--nev", opts.nev, "Number of eigenpairs")->check(CLI::PositiveNumber);
-        app.add_option("--ncv", opts.ncv, "Maximum subspace columns, or a comma list like [8,16]. Negative derives ncv from --max-basis-blocks * --block-size")->delimiter(',');
+        app.add_option("--ncv", opts.ncv, "Maximum subspace columns, or a comma list like [8,16]")->delimiter(',');
         app.add_option("--block-size", opts.block_size, "Solver block size, or a comma list like [1,2]")->delimiter(',');
-        app.add_option("--max-basis-blocks", opts.max_basis_blocks, "Number of basis blocks used when --ncv is negative")->check(CLI::PositiveNumber);
         app.add_option("--max-iters", opts.max_iters, "Maximum solver iterations, or a negative value for unlimited");
         app.add_option("--max-matvecs", opts.max_matvecs, "Maximum matrix-vector products, or a negative value for unlimited");
         app.add_option("--inner-max-iters", opts.inner_max_iters, "Maximum Jacobi-Davidson inner iterations, or a comma list")->delimiter(',');
@@ -151,8 +142,7 @@ namespace bench_standard {
     }
 
     void normalize_options(CliOptions &opts) {
-        require_all(
-            opts.ncv, "--ncv", [](int value) { return value != 0; }, "must be positive, or negative to derive it from --max-basis-blocks * --block-size");
+        require_all(opts.ncv, "--ncv", [](int value) { return value > 0; }, "must be positive");
         require_all(opts.block_size, "--block-size", [](int value) { return value > 0; }, "must be positive");
         require_all(opts.inner_max_iters, "--inner-max-iters", [](int value) { return value > 0; }, "must be positive");
         require_all(opts.tol, "--tol", [](double value) { return value > 0.0; }, "must be positive");
@@ -200,7 +190,7 @@ namespace bench_standard {
                                             opts.save_eigvec   = cli.save_eigvec;
                                             opts.save_results  = cli.save_results;
                                             opts.nev           = cli.nev;
-                                            adjust_block_geometry(opts, ncv, block_size, cli.max_basis_blocks, matrix_rows);
+                                            adjust_block_geometry(opts, ncv, block_size, matrix_rows);
                                             opts.max_iters                    = cli.max_iters;
                                             opts.max_matvecs                  = cli.max_matvecs;
                                             opts.inner_max_iters              = inner_iters;

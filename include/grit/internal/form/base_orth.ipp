@@ -51,7 +51,7 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::OrthMeta::analyze_bm_orthogonality(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &B_X,
-                                                          const Eigen::Ref<const MatrixType> &Y, const Eigen::Ref<const MatrixType> &B_Y) {
+                                                                 const Eigen::Ref<const MatrixType> &Y, const Eigen::Ref<const MatrixType> &B_Y) {
         if(Y.cols() != B_Y.cols() || Y.rows() != B_Y.rows()) return;
         if(X.cols() != B_X.cols() || X.rows() != B_X.rows()) return;
         if(Y.rows() != X.rows()) return;
@@ -88,9 +88,9 @@ namespace grit::form {
         RealScalar maskTol   = std::isfinite(m.maskTol) ? m.maskTol : normTol * static_cast<RealScalar>(X.cols());
         RealScalar finalTol  = std::max({t_abs, normTol, maskTol}) * RealScalar{10};
 
-        if(orthError > finalTol && eiglog)
-            eiglog->warn("{}:{}: {}: matrix is not L2-orthonormal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(), location.function_name(),
-                         orthError, finalTol);
+        if(orthError > finalTol && log)
+            log->warn("{}:{}: {}: matrix is not L2-orthonormal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(), location.function_name(),
+                      orthError, finalTol);
         if(orthError > RealScalar{1000} * finalTol)
             throw std::runtime_error(fmt::format("{}:{}: {}: matrix is not L2-orthonormal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
                                                  location.function_name(), orthError, finalTol));
@@ -98,7 +98,7 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::assert_l2_orthogonal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &Y, const OrthMeta &m,
-                                            const std::source_location &location) {
+                                                   const std::source_location &location) {
         if(X.cols() == 0 || Y.cols() == 0) return;
         if(m.mask.size() > 0 && m.mask.sum() == 0) return;
 
@@ -110,9 +110,9 @@ namespace grit::form {
         RealScalar maskTol   = std::isfinite(m.maskTol) ? m.maskTol : orthTol * static_cast<RealScalar>(X.cols());
         RealScalar finalTol  = std::max({t_abs, orthTol, maskTol}) * RealScalar{10};
 
-        if(orthError > finalTol && eiglog)
-            eiglog->warn("{}:{}: {}: matrices are not L2-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
-                         location.function_name(), orthError, finalTol);
+        if(orthError > finalTol && log)
+            log->warn("{}:{}: {}: matrices are not L2-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(), location.function_name(),
+                      orthError, finalTol);
         if(orthError > RealScalar{1000} * finalTol)
             throw std::runtime_error(fmt::format("{}:{}: {}: matrices are not L2-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
                                                  location.function_name(), orthError, finalTol));
@@ -120,7 +120,7 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::assert_bm_orthonormal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &B_X, const OrthMeta &m,
-                                             const std::source_location &location) {
+                                                    const std::source_location &location) {
         if(X.cols() == 0) return;
         if(X.cols() != B_X.cols() || X.rows() != B_X.rows())
             throw std::runtime_error(
@@ -145,9 +145,9 @@ namespace grit::form {
         RealScalar finalTol = std::max({t_abs, orthTol, bmTol, maskTol}) * RealScalar{10};
 
         RealScalar error = std::max({orthError, symmError, skewError});
-        if(error > finalTol && eiglog)
-            eiglog->warn("{}:{}: {}: matrix is not B-orthonormal: error {:.5e} > tol {:.5e} | orth {:.5e} symm {:.5e} skew {:.5e}", location.file_name(),
-                         location.line(), location.function_name(), error, finalTol, orthError, symmError, skewError);
+        if(error > finalTol && log)
+            log->warn("{}:{}: {}: matrix is not B-orthonormal: error {:.5e} > tol {:.5e} | orth {:.5e} symm {:.5e} skew {:.5e}", location.file_name(),
+                      location.line(), location.function_name(), error, finalTol, orthError, symmError, skewError);
         if(error > RealScalar{1000} * finalTol)
             throw std::runtime_error(fmt::format("{}:{}: {}: matrix is not B-orthonormal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
                                                  location.function_name(), error, finalTol));
@@ -155,7 +155,7 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::assert_bm_orthogonal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &B_Y, const OrthMeta &m,
-                                            const std::source_location &location) {
+                                                   const std::source_location &location) {
         if(X.cols() == 0 || B_Y.cols() == 0) return;
 
         MatrixType Gram      = X.adjoint() * B_Y;
@@ -168,9 +168,9 @@ namespace grit::form {
         RealScalar maskTol   = std::isfinite(m.maskTol) ? m.maskTol : orthTol;
         RealScalar finalTol  = std::max({t_abs, orthTol, bmTol, maskTol}) * RealScalar{10};
 
-        if(orthError > finalTol && eiglog)
-            eiglog->warn("{}:{}: {}: matrices are not B-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(), location.function_name(),
-                         orthError, finalTol);
+        if(orthError > finalTol && log)
+            log->warn("{}:{}: {}: matrices are not B-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(), location.function_name(),
+                      orthError, finalTol);
         if(orthError > RealScalar{1000} * finalTol)
             throw std::runtime_error(fmt::format("{}:{}: {}: matrices are not B-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
                                                  location.function_name(), orthError, finalTol));
@@ -224,16 +224,16 @@ namespace grit::form {
             if(orth_converged || Y.cols() == 0) break;
         }
         if constexpr(settings::debug_ortho) {
-            if(eiglog && eiglog->should_log(spdlog::level::trace))
-                eiglog->trace("rep {} orthError after l2 orthogonalization: {:.3e} | orthTol {:.3e}", rep, m.orthError, m.orthTol);
+            if(log && log->should_log(spdlog::level::trace))
+                log->trace("rep {} orthError after l2 orthogonalization: {:.3e} | orthTol {:.3e}", rep, m.orthError, m.orthTol);
         }
         assert_l2_orthogonal(X, Y, m);
         AY = MultA(Y);
     }
 
     template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::block_l2_orthogonalize(const MatrixType &X, const MatrixType &AX, const MatrixType &BX, MatrixType &Y, MatrixType &AY, MatrixType &BY,
-                                              OrthMeta &m) {
+    void base<Scalar, form_>::block_l2_orthogonalize(const MatrixType &X, const MatrixType &AX, const MatrixType &BX, MatrixType &Y, MatrixType &AY,
+                                                     MatrixType &BY, OrthMeta &m) {
         if(X.cols() == 0 || Y.cols() == 0) {
             AY.resizeLike(Y);
             BY.resizeLike(Y);
@@ -267,8 +267,8 @@ namespace grit::form {
             bool orth_converged = m.orthError < m.orthTol;
             if(orth_converged || Y.cols() == 0) break;
         }
-        if(eiglog && eiglog->should_log(spdlog::level::trace))
-            eiglog->trace("rep {} orthError after l2 orthogonalization: {:.3e} | orthTol {:.3e}", rep, m.orthError, m.orthTol);
+        if(log && log->should_log(spdlog::level::trace))
+            log->trace("rep {} orthError after l2 orthogonalization: {:.3e} | orthTol {:.3e}", rep, m.orthError, m.orthTol);
         assert_l2_orthogonal(X, Y, m);
 
         AY = MultA(Y);
@@ -280,7 +280,8 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::block_bm_orthogonalize(const MatrixType &X, const MatrixType &AX, const MatrixType &BX, MatrixType &Y, MatrixType &AY,
-                                                     MatrixType &BY, OrthMeta &m) requires(form_ == grit::Form::GENERALIZED) {
+                                                     MatrixType &BY, OrthMeta &m) requires(form_ == grit::Form::GENERALIZED)
+    {
         if(X.cols() == 0 || Y.cols() == 0) {
             AY.resizeLike(Y);
             BY.resizeLike(Y);
@@ -305,7 +306,7 @@ namespace grit::form {
         if(m.refresh_by || Y.size() != BY.size()) {
             BY               = MultB(Y);
             has_refreshed_by = true;
-            if(eiglog && eiglog->should_log(spdlog::level::trace)) eiglog->trace("block_bm_orthogonalize: refreshed BY");
+            if(log && log->should_log(spdlog::level::trace)) log->trace("block_bm_orthogonalize: refreshed BY");
         } else {
             assert_allFinite(BY);
         }
@@ -333,15 +334,15 @@ namespace grit::form {
 
         if(std::isfinite(m.orthTol) && std::max(m.symmError, m.skewError) < m.orthTol) {
             if(has_refreshed_by || m.refresh_by || Y.size() != AY.size()) AY = MultA(Y);
-            if(eiglog && eiglog->should_log(spdlog::level::trace))
-                eiglog->trace("block_bm_orthogonalize: no need: orthError {:.4e} symmError {:.4e} skewError {:.4e} Eyy {:.4e} orthTol {:.4e}", m.orthError,
-                              m.symmError, m.skewError, Eyy, m.orthTol);
+            if(log && log->should_log(spdlog::level::trace))
+                log->trace("block_bm_orthogonalize: no need: orthError {:.4e} symmError {:.4e} skewError {:.4e} Eyy {:.4e} orthTol {:.4e}", m.orthError,
+                           m.symmError, m.skewError, Eyy, m.orthTol);
             return;
         }
         m.refresh_by = false;
 
-        if(Exx > m.orthTol && eiglog && eiglog->should_log(spdlog::level::debug))
-            eiglog->debug("block_bm_orthogonalize: X is not sufficiently B-orthonormal: error {:.4e}", Exx);
+        if(Exx > m.orthTol && log && log->should_log(spdlog::level::debug))
+            log->debug("block_bm_orthogonalize: X is not sufficiently B-orthonormal: error {:.4e}", Exx);
 
         Eigen::Index maxReps = 2;
         Eigen::Index rep     = 0;
@@ -362,9 +363,9 @@ namespace grit::form {
                 if(orth_converged) break;
             }
         }
-        if(eiglog && eiglog->should_log(spdlog::level::trace))
-            eiglog->trace("rep {} orthError after bm orthogonalization: {:.3e} | symm {:.3e} | skew {:.3e} | orthTol {:.3e}", rep, m.orthError, m.symmError,
-                          m.skewError, m.orthTol);
+        if(log && log->should_log(spdlog::level::trace))
+            log->trace("rep {} orthError after bm orthogonalization: {:.3e} | symm {:.3e} | skew {:.3e} | orthTol {:.3e}", rep, m.orthError, m.symmError,
+                       m.skewError, m.orthTol);
 
         AY = MultA(Y);
         assert_bm_orthogonal(X, BY, m);
@@ -389,15 +390,14 @@ namespace grit::form {
             VectorReal norms = (Y.adjoint() * Y).diagonal().cwiseAbs();
             switch(m.maskPolicy) {
                 case MaskPolicy::COMPRESS:
-                    if(eiglog && eiglog->should_log(spdlog::level::debug))
-                        eiglog->debug("block_l2_orthonormalize: compressing Y | kept {} of {} | maskTol {:.3e}", m.mask.sum(), Y.cols(), m.maskTol);
+                    if(log && log->should_log(spdlog::level::debug))
+                        log->debug("block_l2_orthonormalize: compressing Y | kept {} of {} | maskTol {:.3e}", m.mask.sum(), Y.cols(), m.maskTol);
                     compress_cols(Y, m.mask);
                     m.mask = VectorIdxT::Ones(Y.cols());
                     break;
                 case MaskPolicy::RANDOMIZE:
-                    if(eiglog && eiglog->should_log(spdlog::level::debug))
-                        eiglog->debug("block_l2_orthonormalize: randomizing masked columns | kept {} of {} | maskTol {:.3e}", m.mask.sum(), Y.cols(),
-                                      m.maskTol);
+                    if(log && log->should_log(spdlog::level::debug))
+                        log->debug("block_l2_orthonormalize: randomizing masked columns | kept {} of {} | maskTol {:.3e}", m.mask.sum(), Y.cols(), m.maskTol);
                     for(Eigen::Index j = 0; j < Y.cols(); ++j) {
                         if(m.mask(j) == 0) Y.col(j) = Eigen::VectorXf::Random(Y.col(j).size()).template cast<Scalar>();
                     }
@@ -410,7 +410,7 @@ namespace grit::form {
             auto       yj   = Y.col(j);
             RealScalar norm = yj.norm();
             if(norm < m.maskTol) {
-                if(eiglog && eiglog->should_log(spdlog::level::trace)) eiglog->trace("masking Y col {} | norm {:.3e} | maskTol {:.3e}", j, norm, m.maskTol);
+                if(log && log->should_log(spdlog::level::trace)) log->trace("masking Y col {} | norm {:.3e} | maskTol {:.3e}", j, norm, m.maskTol);
                 m.mask(j) = 0;
                 yj.setZero();
             }
@@ -429,7 +429,7 @@ namespace grit::form {
             auto       yj   = Y.col(j);
             RealScalar norm = yj.norm();
             if(norm < m.maskTol) {
-                if(eiglog && eiglog->should_log(spdlog::level::trace)) eiglog->trace("masking Y col {} | norm {:.3e} | maskTol {:.3e}", j, norm, m.maskTol);
+                if(log && log->should_log(spdlog::level::trace)) log->trace("masking Y col {} | norm {:.3e} | maskTol {:.3e}", j, norm, m.maskTol);
                 m.mask(j) = 0;
                 yj.setZero();
             }
@@ -456,7 +456,8 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::block_bm_orthonormalize(MatrixType &Y, MatrixType &AY, MatrixType &BY, OrthMeta &m) requires(form_ == grit::Form::GENERALIZED) {
+    void base<Scalar, form_>::block_bm_orthonormalize(MatrixType &Y, MatrixType &AY, MatrixType &BY, OrthMeta &m) requires(form_ == grit::Form::GENERALIZED)
+    {
         if(Y.cols() == 0) {
             AY.resizeLike(Y);
             BY.resizeLike(Y);
@@ -469,17 +470,16 @@ namespace grit::form {
             if(m.mask.sum() == Y.cols()) return;
             switch(m.maskPolicy) {
                 case MaskPolicy::COMPRESS:
-                    if(eiglog && eiglog->should_log(spdlog::level::debug))
-                        eiglog->debug("block_bm_orthonormalize: compressing Y | kept {} of {} | maskTol {:.3e}", m.mask.sum(), Y.cols(), m.maskTol);
+                    if(log && log->should_log(spdlog::level::debug))
+                        log->debug("block_bm_orthonormalize: compressing Y | kept {} of {} | maskTol {:.3e}", m.mask.sum(), Y.cols(), m.maskTol);
                     compress_cols(Y, m.mask);
                     if(BY.rows() == Y.rows() && BY.cols() == m.mask.size()) compress_cols(BY, m.mask);
                     m.mask = VectorIdxT::Ones(Y.cols());
                     if(BY.rows() == Y.rows() && BY.cols() == Y.cols()) m.analyze_bm_orthonormality(Y, BY);
                     break;
                 case MaskPolicy::RANDOMIZE:
-                    if(eiglog && eiglog->should_log(spdlog::level::debug))
-                        eiglog->debug("block_bm_orthonormalize: randomizing masked columns | kept {} of {} | maskTol {:.3e}", m.mask.sum(), Y.cols(),
-                                      m.maskTol);
+                    if(log && log->should_log(spdlog::level::debug))
+                        log->debug("block_bm_orthonormalize: randomizing masked columns | kept {} of {} | maskTol {:.3e}", m.mask.sum(), Y.cols(), m.maskTol);
                     for(Eigen::Index j = 0; j < Y.cols(); ++j) {
                         if(m.mask(j) == 0) Y.col(j) = Eigen::VectorXf::Random(Y.col(j).size()).template cast<Scalar>();
                     }
@@ -508,7 +508,7 @@ namespace grit::form {
             RealScalar norm   = std::sqrt(std::max<RealScalar>(0, normSq));
             m.Rdiag(j)        = norm;
             if(norm < m.maskTol) {
-                if(eiglog && eiglog->should_log(spdlog::level::trace)) eiglog->trace("masking Y col {} | bm norm {:.3e} | maskTol {:.3e}", j, norm, m.maskTol);
+                if(log && log->should_log(spdlog::level::trace)) log->trace("masking Y col {} | bm norm {:.3e} | maskTol {:.3e}", j, norm, m.maskTol);
                 m.mask(j) = 0;
                 yj.setZero();
                 byj.setZero();
@@ -554,8 +554,7 @@ namespace grit::form {
                 RealScalar normSq = std::real(yj.dot(byj));
                 RealScalar norm   = std::sqrt(std::max<RealScalar>(0, normSq));
                 if(norm <= m.maskTol) {
-                    if(eiglog && eiglog->should_log(spdlog::level::trace))
-                        eiglog->trace("masking Y col {} | bm norm {:.3e} | maskTol {:.3e}", j, norm, m.maskTol);
+                    if(log && log->should_log(spdlog::level::trace)) log->trace("masking Y col {} | bm norm {:.3e} | maskTol {:.3e}", j, norm, m.maskTol);
                     m.mask(j) = 0;
                     yj.setZero();
                     byj.setZero();
@@ -574,9 +573,9 @@ namespace grit::form {
                 BY.resizeLike(Y);
                 return;
             }
-            if(eiglog && eiglog->should_log(spdlog::level::trace))
-                eiglog->trace("block_bm_orthonormalize: dgks rep {} | orthError {:.4e} symmError {:.4e} skewError {:.4e}", rep, m.orthError, m.symmError,
-                              m.skewError);
+            if(log && log->should_log(spdlog::level::trace))
+                log->trace("block_bm_orthonormalize: dgks rep {} | orthError {:.4e} symmError {:.4e} skewError {:.4e}", rep, m.orthError, m.symmError,
+                           m.skewError);
             if(m.orthError < m.orthTol) break;
         }
 

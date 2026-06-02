@@ -1,57 +1,28 @@
 #pragma once
 
-#include <algorithm>
 #include "grit/algo/gdplusk.h"
+#include <algorithm>
 #include <optional>
 #include <stdexcept>
 #include <string>
 
 namespace grit::algo {
     template<typename Scalar, grit::Form form_>
-    const typename gdplusk<Scalar, form_>::MatrixType &gdplusk<Scalar, form_>::default_initial_guess() {
-        static const MatrixType guess;
-        return guess;
-    }
-
-    template<typename Scalar, grit::Form form_>
     gdplusk<Scalar, form_>::gdplusk(Matvec<Scalar> &A) requires(form_ == grit::Form::STANDARD)
-        : Base(default_initial_guess(), A) {
+        : Base(MatrixType{}, A) {
         this->bind_config(config);
-        config.nev              = 1;
-        config.block_size       = 1;
-        config.ncv              = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
-        config.max_basis_blocks = config.ncv;
+        config.nev        = 1;
+        config.block_size = 1;
+        config.ncv        = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
     }
 
     template<typename Scalar, grit::Form form_>
     gdplusk<Scalar, form_>::gdplusk(Matvec<Scalar> &A, Matvec<Scalar> &B) requires(form_ == grit::Form::GENERALIZED)
-        : Base(default_initial_guess(), A, B) {
+        : Base(MatrixType{}, A, B) {
         this->bind_config(config);
-        config.nev              = 1;
-        config.block_size       = 1;
-        config.ncv              = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
-        config.max_basis_blocks = config.ncv;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::set_initial_guess(const MatrixType &guess) {
-        initial_guess_ptr = &guess;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::clear_initial_guess() {
-        initial_guess_ptr = nullptr;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    bool gdplusk<Scalar, form_>::has_initial_guess() const {
-        return initial_guess_ptr != nullptr;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    const typename gdplusk<Scalar, form_>::MatrixType &gdplusk<Scalar, form_>::initial_guess() const {
-        if(initial_guess_ptr) return *initial_guess_ptr;
-        return empty_initial_guess;
+        config.nev        = 1;
+        config.block_size = 1;
+        config.ncv        = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
     }
 
     template<typename Scalar, grit::Form form_>
@@ -81,21 +52,18 @@ namespace grit::algo {
         if(config.ncv > this->N) throw std::runtime_error("gdplusk config error: ncv must not exceed the operator size");
         if(config.block_size > config.ncv) throw std::runtime_error("gdplusk config error: block_size must not exceed ncv");
         if(config.ncv % config.block_size != 0) throw std::runtime_error("gdplusk config error: ncv must be divisible by block_size");
-        if(config.max_basis_blocks < 1) throw std::runtime_error("gdplusk config error: max_basis_blocks must be at least 1");
-        if(config.max_basis_blocks * config.block_size != config.ncv) {
-            throw std::runtime_error("gdplusk config error: max_basis_blocks * block_size must equal ncv");
-        }
+        const auto max_basis_blocks = config.ncv / config.block_size;
         if(config.maxRetainBlocks < 1) throw std::runtime_error("gdplusk config error: maxRetainBlocks must be at least 1");
-        if(config.maxRetainBlocks > config.max_basis_blocks) {
-            throw std::runtime_error("gdplusk config error: maxRetainBlocks must not exceed max_basis_blocks");
+        if(config.maxRetainBlocks > max_basis_blocks) {
+            throw std::runtime_error("gdplusk config error: maxRetainBlocks must not exceed the number of basis blocks");
         }
         if(config.max_extra_ritz_history < 0) throw std::runtime_error("gdplusk config error: max_extra_ritz_history must be nonnegative");
-        if(config.max_extra_ritz_history > config.max_basis_blocks) {
-            throw std::runtime_error("gdplusk config error: max_extra_ritz_history must not exceed max_basis_blocks");
+        if(config.max_extra_ritz_history > max_basis_blocks) {
+            throw std::runtime_error("gdplusk config error: max_extra_ritz_history must not exceed the number of basis blocks");
         }
         if(config.max_ritz_residual_history < 0) throw std::runtime_error("gdplusk config error: max_ritz_residual_history must be nonnegative");
-        if(config.max_ritz_residual_history > config.max_basis_blocks) {
-            throw std::runtime_error("gdplusk config error: max_ritz_residual_history must not exceed max_basis_blocks");
+        if(config.max_ritz_residual_history > max_basis_blocks) {
+            throw std::runtime_error("gdplusk config error: max_ritz_residual_history must not exceed the number of basis blocks");
         }
         if(config.max_iters == 0) throw std::runtime_error("gdplusk config error: max_iters must be positive or negative for unlimited");
         if(config.max_matvecs == 0) throw std::runtime_error("gdplusk config error: max_matvecs must be positive or negative for unlimited");
@@ -117,9 +85,9 @@ namespace grit::algo {
         }
         if(config.auto_cheap_probe_interval < 1) { throw std::runtime_error("gdplusk config error: auto_cheap_probe_interval must be at least 1"); }
         if(config.auto_cheap_probe_factor < RealScalar{0}) { throw std::runtime_error("gdplusk config error: auto_cheap_probe_factor must be nonnegative"); }
-        if(has_initial_guess()) {
-            if(initial_guess().rows() != this->N) throw std::runtime_error("gdplusk config error: initial guess row count must match the operator size");
-            if(initial_guess().cols() < 1) throw std::runtime_error("gdplusk config error: initial guess must have at least one column");
+        if(this->has_initial_guess()) {
+            if(this->initial_guess().rows() != this->N) throw std::runtime_error("gdplusk config error: initial guess row count must match the operator size");
+            if(this->initial_guess().cols() < 1) throw std::runtime_error("gdplusk config error: initial guess must have at least one column");
         }
     }
 
@@ -128,11 +96,9 @@ namespace grit::algo {
         assert_config();
 
         this->setLogger(config.log_level, std::string("grit|") + std::string(this->form_name()));
-        this->V                 = initial_guess();
         this->current_inner_tol = config.inner_tol;
         max_mBlocks             = config.max_extra_ritz_history;
         max_sBlocks             = config.max_ritz_residual_history;
-        clear_result();
         Base::run();
     }
 
@@ -210,7 +176,8 @@ namespace grit::algo {
     }
 
     template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::selective_orthonormalize(const Eigen::Ref<const MatrixType> X, Eigen::Ref<MatrixType> Y, RealScalar breakdownTol, VectorIdxT &mask) {
+    void gdplusk<Scalar, form_>::selective_orthonormalize(const Eigen::Ref<const MatrixType> X, Eigen::Ref<MatrixType> Y, RealScalar breakdownTol,
+                                                          VectorIdxT &mask) {
         for(Eigen::Index j = 0; j < Y.cols(); ++j) {
             if(X.cols() > 0) Y.col(j).noalias() -= X * (X.adjoint() * Y.col(j));
             auto norm = Y.col(j).norm();
@@ -250,7 +217,7 @@ namespace grit::algo {
 
         orthogonalize_Q_new();
         if(Q_new.cols() == 0 && config.inject_randomness) {
-            if(eiglog) eiglog->debug("Replacing Q_new with a random vector");
+            if(log) log->debug("Replacing Q_new with a random vector");
             Q_new = Eigen::MatrixXf::Random(N, this->cfg().block_size).template cast<Scalar>();
             orthogonalize_Q_new();
         }
@@ -270,7 +237,8 @@ namespace grit::algo {
     }
 
     template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::build(MatrixType &Q, MatrixType &AQ, MatrixType &BQ, const MatrixType &Q_new, const MatrixType &AQ_new, const MatrixType &BQ_new) {
+    void gdplusk<Scalar, form_>::build(MatrixType &Q, MatrixType &AQ, MatrixType &BQ, const MatrixType &Q_new, const MatrixType &AQ_new,
+                                       const MatrixType &BQ_new) {
         if(status.stopReason != StopReason::none) return;
 
         if(Q_new.cols() == 0 && status.iter <= status.iter_last_restart + 2) {
@@ -399,7 +367,7 @@ namespace grit::algo {
         };
 
         auto newCols = std::min<Eigen::Index>({Q.cols() + Q_new.cols(), N});
-        if(newCols > config.max_basis_blocks * this->cfg().block_size || Q_new.cols() == 0) restart_basis();
+        if(newCols > this->cfg().ncv || Q_new.cols() == 0) restart_basis();
         if(Q_new.cols() == 0) return;
 
         assert(Q_new.rows() == N);

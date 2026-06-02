@@ -234,15 +234,15 @@ namespace grit::algo {
                 auto_residual_correction.jd_steps_since_probe = 0;
             }
 
-            if(eiglog) {
-                eiglog->debug("auto residual correction cheap probe: {} -> {} | eigval {:.16e}->{:.16e} improvement {:.6e} threshold {:.6e} factor {:.6e} "
-                              "abs rnorm {:.6e} abs rnorm2 {:.6e} scale_floor {:.6e} interval {} decision {} | mv {} outer {} inner {} inner_iters {} jdops {} "
-                              "time {:.6e}s",
-                              method_name(ResidualCorrectionType::JACOBI_DAVIDSON), method_name(ResidualCorrectionType::CHEAP_OLSEN),
-                              status.oldVal.size() > 0 ? status.oldVal(0) : RealScalar{0}, status.eigVal.size() > 0 ? status.eigVal(0) : RealScalar{0},
-                              improvement, threshold, config.auto_cheap_probe_factor, rnorm, rnorm_squared, probe_scale_floor, config.auto_cheap_probe_interval,
-                              keep_cheap ? "keep CHEAP_OLSEN" : "return JACOBI_DAVIDSON", status.num_matvecs + status.num_matvecs_inner, status.num_matvecs,
-                              status.num_matvecs_inner, status.num_iters_inner, status.num_jdops_inner, step_seconds);
+            if(log) {
+                log->debug("auto residual correction cheap probe: {} -> {} | eigval {:.16e}->{:.16e} improvement {:.6e} threshold {:.6e} factor {:.6e} "
+                           "abs rnorm {:.6e} abs rnorm2 {:.6e} scale_floor {:.6e} interval {} decision {} | mv {} outer {} inner {} inner_iters {} jdops {} "
+                           "time {:.6e}s",
+                           method_name(ResidualCorrectionType::JACOBI_DAVIDSON), method_name(ResidualCorrectionType::CHEAP_OLSEN),
+                           status.oldVal.size() > 0 ? status.oldVal(0) : RealScalar{0}, status.eigVal.size() > 0 ? status.eigVal(0) : RealScalar{0},
+                           improvement, threshold, config.auto_cheap_probe_factor, rnorm, rnorm_squared, probe_scale_floor, config.auto_cheap_probe_interval,
+                           keep_cheap ? "keep CHEAP_OLSEN" : "return JACOBI_DAVIDSON", status.num_matvecs + status.num_matvecs_inner, status.num_matvecs,
+                           status.num_matvecs_inner, status.num_iters_inner, status.num_jdops_inner, step_seconds);
             }
             return;
         }
@@ -250,9 +250,9 @@ namespace grit::algo {
         if(auto_residual_correction.step_method == ResidualCorrectionType::JACOBI_DAVIDSON) {
             auto_residual_correction.active = ResidualCorrectionType::JACOBI_DAVIDSON;
             auto_residual_correction.jd_steps_since_probe++;
-            if(eiglog) {
-                eiglog->trace("auto residual correction jd step: steps since cheap probe {}/{}", auto_residual_correction.jd_steps_since_probe,
-                              config.auto_cheap_probe_interval);
+            if(log) {
+                log->trace("auto residual correction jd step: steps since cheap probe {}/{}", auto_residual_correction.jd_steps_since_probe,
+                           config.auto_cheap_probe_interval);
             }
             return;
         }
@@ -264,16 +264,15 @@ namespace grit::algo {
         bool jd_start_rnorm_enabled = config.auto_jd_start_rnorm_threshold > RealScalar{0};
         bool jd_start_rnorm_ready   = jd_start_rnorm_enabled && status.rNorms.size() > 0 && rrnorm <= config.auto_jd_start_rnorm_threshold;
         bool jd_start_ready         = saturation.ready || jd_start_rnorm_ready;
-        if(eiglog) {
-            eiglog->trace(
-                "auto residual correction start check: cheap dwell {}/{} ready {} | eigval sat {} ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} "
-                "value {:.6e} hist {} enough {} | rrnorm sat {} ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} value {:.6e} hist {} "
-                "enough {} | jd start rrnorm ready {} threshold {:.6e} value {:.6e}",
-                auto_residual_correction.dwell, config.auto_min_dwell_iters, jd_start_ready, saturation.eigval.saturated, saturation.eigval.ratio,
-                saturation.eigval.threshold, saturation.eigval.stddev, saturation.eigval.scale, saturation.eigval.value, saturation.eigval.history_size,
-                saturation.eigval.enough_history, saturation.rnorm.saturated, saturation.rnorm.ratio, saturation.rnorm.threshold, saturation.rnorm.stddev,
-                saturation.rnorm.scale, saturation.rnorm.value, saturation.rnorm.history_size, saturation.rnorm.enough_history, jd_start_rnorm_ready,
-                config.auto_jd_start_rnorm_threshold, rrnorm);
+        if(log) {
+            log->trace("auto residual correction start check: cheap dwell {}/{} ready {} | eigval sat {} ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} "
+                       "value {:.6e} hist {} enough {} | rrnorm sat {} ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} value {:.6e} hist {} "
+                       "enough {} | jd start rrnorm ready {} threshold {:.6e} value {:.6e}",
+                       auto_residual_correction.dwell, config.auto_min_dwell_iters, jd_start_ready, saturation.eigval.saturated, saturation.eigval.ratio,
+                       saturation.eigval.threshold, saturation.eigval.stddev, saturation.eigval.scale, saturation.eigval.value, saturation.eigval.history_size,
+                       saturation.eigval.enough_history, saturation.rnorm.saturated, saturation.rnorm.ratio, saturation.rnorm.threshold,
+                       saturation.rnorm.stddev, saturation.rnorm.scale, saturation.rnorm.value, saturation.rnorm.history_size, saturation.rnorm.enough_history,
+                       jd_start_rnorm_ready, config.auto_jd_start_rnorm_threshold, rrnorm);
         }
         if(auto_residual_correction.dwell < config.auto_min_dwell_iters && !jd_start_rnorm_ready) return;
 
@@ -283,8 +282,8 @@ namespace grit::algo {
             auto_residual_correction.jd_steps_since_probe = 0;
             auto_residual_correction.cheap_to_jd_switch_iters.push_back(status.iter);
 
-            if(eiglog) {
-                eiglog->debug(
+            if(log) {
+                log->debug(
                     "auto residual correction switch: {} -> {} | reason {} | eigval ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} value {:.6e} | "
                     "rrnorm ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} value {:.6e} | probe interval {} probe factor {:.6e} | "
                     "jd start rrnorm threshold {:.6e} rrnorm {:.6e} | "

@@ -1,61 +1,30 @@
 #pragma once
 
+#include "grit/algo/lobpcg.h"
 #include <algorithm>
 #include <stdexcept>
-#include "grit/algo/lobpcg.h"
 
 namespace grit::algo {
     template<typename Scalar, grit::Form form_>
-    const typename lobpcg<Scalar, form_>::MatrixType &lobpcg<Scalar, form_>::default_initial_guess() {
-        static const MatrixType guess;
-        return guess;
-    }
-
-    template<typename Scalar, grit::Form form_>
     lobpcg<Scalar, form_>::lobpcg(Matvec<Scalar> &A) requires(form_ == grit::Form::STANDARD)
-        : Base(default_initial_guess(), A) {
+        : Base(MatrixType{}, A) {
         this->bind_config(config);
-        config.nev                    = 1;
-        config.block_size             = 1;
-        config.ncv                    = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
-        config.max_basis_blocks       = config.ncv;
-        config.max_extra_ritz_history = 1;
+        config.nev                       = 1;
+        config.block_size                = 1;
+        config.ncv                       = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
+        config.max_extra_ritz_history    = 1;
         config.max_ritz_residual_history = 1;
     }
 
     template<typename Scalar, grit::Form form_>
     lobpcg<Scalar, form_>::lobpcg(Matvec<Scalar> &A, Matvec<Scalar> &B) requires(form_ == grit::Form::GENERALIZED)
-        : Base(default_initial_guess(), A, B) {
+        : Base(MatrixType{}, A, B) {
         this->bind_config(config);
-        config.nev                    = 1;
-        config.block_size             = 1;
-        config.ncv                    = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
-        config.max_basis_blocks       = config.ncv;
-        config.max_extra_ritz_history = 1;
+        config.nev                       = 1;
+        config.block_size                = 1;
+        config.ncv                       = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
+        config.max_extra_ritz_history    = 1;
         config.max_ritz_residual_history = 1;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void lobpcg<Scalar, form_>::set_initial_guess(const MatrixType &guess) {
-        initial_guess_storage    = guess;
-        has_stored_initial_guess = true;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void lobpcg<Scalar, form_>::clear_initial_guess() {
-        initial_guess_storage.resize(0, 0);
-        has_stored_initial_guess = false;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    bool lobpcg<Scalar, form_>::has_initial_guess() const {
-        return has_stored_initial_guess;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    const typename lobpcg<Scalar, form_>::MatrixType &lobpcg<Scalar, form_>::initial_guess() const {
-        if(has_stored_initial_guess) return initial_guess_storage;
-        return empty_initial_guess;
     }
 
     template<typename Scalar, grit::Form form_>
@@ -80,14 +49,11 @@ namespace grit::algo {
 
         if(config.nev < 1) throw std::runtime_error("lobpcg config error: nev must be at least 1");
         if(config.block_size < 1) throw std::runtime_error("lobpcg config error: block_size must be at least 1");
+        if(config.nev > config.block_size) throw std::runtime_error("lobpcg config error: nev must not exceed block_size");
         if(config.ncv < config.nev) throw std::runtime_error("lobpcg config error: ncv must be at least nev");
         if(config.ncv > this->N) throw std::runtime_error("lobpcg config error: ncv must not exceed the operator size");
         if(config.block_size > config.ncv) throw std::runtime_error("lobpcg config error: block_size must not exceed ncv");
         if(config.ncv % config.block_size != 0) throw std::runtime_error("lobpcg config error: ncv must be divisible by block_size");
-        if(config.max_basis_blocks < 1) throw std::runtime_error("lobpcg config error: max_basis_blocks must be at least 1");
-        if(config.max_basis_blocks * config.block_size != config.ncv) {
-            throw std::runtime_error("lobpcg config error: max_basis_blocks * block_size must equal ncv");
-        }
         if(config.max_extra_ritz_history < 0) throw std::runtime_error("lobpcg config error: max_extra_ritz_history must be nonnegative");
         if(config.max_ritz_residual_history < 0) throw std::runtime_error("lobpcg config error: max_ritz_residual_history must be nonnegative");
         if(config.max_iters == 0) throw std::runtime_error("lobpcg config error: max_iters must be positive or negative for unlimited");
@@ -96,9 +62,9 @@ namespace grit::algo {
         if(config.tol_rnorm_relative < RealScalar{0}) throw std::runtime_error("lobpcg config error: tol_rnorm_relative must be nonnegative");
         if(config.sat_eigval_threshold < RealScalar{0}) throw std::runtime_error("lobpcg config error: sat_eigval_threshold must be nonnegative");
         if(config.sat_rnorm_threshold < RealScalar{0}) throw std::runtime_error("lobpcg config error: sat_rnorm_threshold must be nonnegative");
-        if(has_initial_guess()) {
-            if(initial_guess().rows() != this->N) throw std::runtime_error("lobpcg config error: initial guess row count must match the operator size");
-            if(initial_guess().cols() < 1) throw std::runtime_error("lobpcg config error: initial guess must have at least one column");
+        if(this->has_initial_guess()) {
+            if(this->initial_guess().rows() != this->N) throw std::runtime_error("lobpcg config error: initial guess row count must match the operator size");
+            if(this->initial_guess().cols() < 1) throw std::runtime_error("lobpcg config error: initial guess must have at least one column");
         }
     }
 
@@ -109,32 +75,43 @@ namespace grit::algo {
         this->setLogger(config.log_level, std::string("grit|") + std::string(this->form_name()));
         max_mBlocks = config.max_extra_ritz_history;
         max_sBlocks = config.max_ritz_residual_history;
-        clear_result();
-        this->V = initial_guess();
         Base::run();
     }
 
     template<typename Scalar, grit::Form form_>
     void lobpcg<Scalar, form_>::shift_blocks_right(Eigen::Ref<MatrixType> matrix, Eigen::Index offset_old, Eigen::Index offset_new, Eigen::Index extent) {
         if(extent <= 0 || offset_old == offset_new) return;
-        auto from = matrix.middleCols(offset_old * this->cfg().block_size, extent * this->cfg().block_size);
-        auto to   = matrix.middleCols(offset_new * this->cfg().block_size, extent * this->cfg().block_size);
+        const auto b          = this->cfg().block_size;
+        const auto max_blocks = matrix.cols() / b;
+        extent                = std::min({extent, max_blocks - offset_old, max_blocks - offset_new});
+        if(extent <= 0) return;
+        auto from = matrix.middleCols(offset_old * b, extent * b);
+        auto to   = matrix.middleCols(offset_new * b, extent * b);
         to        = from.eval();
     }
 
     template<typename Scalar, grit::Form form_>
     void lobpcg<Scalar, form_>::roll_blocks_left(Eigen::Ref<MatrixType> matrix, Eigen::Index offset, Eigen::Index extent) {
+        const auto b          = this->cfg().block_size;
+        const auto max_blocks = matrix.cols() / b;
+        extent                = std::min(extent, max_blocks - offset);
+        if(extent <= 1) return;
         for(Eigen::Index k = extent - 1; k > 0; --k) {
-            auto K0 = matrix.middleCols((offset + k + 0) * this->cfg().block_size, this->cfg().block_size);
-            auto K1 = matrix.middleCols((offset + k - 1) * this->cfg().block_size, this->cfg().block_size);
+            auto K0 = matrix.middleCols((offset + k + 0) * b, b);
+            auto K1 = matrix.middleCols((offset + k - 1) * b, b);
             K0      = K1;
         }
     }
 
     template<typename Scalar, grit::Form form_>
     std::pair<typename lobpcg<Scalar, form_>::VectorIdxT, typename lobpcg<Scalar, form_>::VectorIdxT> lobpcg<Scalar, form_>::selective_orthonormalize() {
-        using Index = Eigen::Index;
+        using Index    = Eigen::Index;
         Index n_blocks = Q.cols() / this->cfg().block_size;
+
+        if constexpr(form_ == grit::Form::GENERALIZED) {
+            if(this->cfg().use_b_inner_product) return {VectorIdxT::Ones(n_blocks), VectorIdxT::Zero(n_blocks)};
+        }
+
         MatrixType Gram = Q.adjoint() * Q;
 
         std::vector<Index> needs_reortho;
@@ -163,10 +140,10 @@ namespace grit::algo {
             Index col_start = blk * this->cfg().block_size;
             auto  Qk        = Q.middleCols(col_start, this->cfg().block_size);
             for(Index prev_blk = 0; prev_blk < blk; ++prev_blk) {
-                Index prev_col_start = prev_blk * this->cfg().block_size;
-                auto  Qj             = Q.middleCols(prev_col_start, this->cfg().block_size);
-                MatrixType proj      = Qj.adjoint() * Qk;
-                Qk                  -= Qj * proj;
+                Index      prev_col_start  = prev_blk * this->cfg().block_size;
+                auto       Qj              = Q.middleCols(prev_col_start, this->cfg().block_size);
+                MatrixType proj            = Qj.adjoint() * Qk;
+                Qk                        -= Qj * proj;
             }
             active_block_mask(blk) = Qk.norm() > this->normTol;
             change_block_mask(blk) = 1;
@@ -226,10 +203,12 @@ namespace grit::algo {
                 shift_blocks_right(Q, qBlocks_old, qBlocks, wBlocks_old + mBlocks_old + sBlocks_old + rBlocks_old);
             }
             if(wBlocks_old != wBlocks && mBlocks_old + sBlocks_old + rBlocks_old > 0) {
-                shift_blocks_right(Q, qBlocks + wBlocks_old, qBlocks + wBlocks, std::min(mBlocks_old, mBlocks) + std::min(sBlocks_old, sBlocks) + std::min(rBlocks_old, rBlocks));
+                shift_blocks_right(Q, qBlocks + wBlocks_old, qBlocks + wBlocks,
+                                   std::min(mBlocks_old, mBlocks) + std::min(sBlocks_old, sBlocks) + std::min(rBlocks_old, rBlocks));
             }
             if(mBlocks_old < mBlocks && sBlocks_old + rBlocks_old > 0) {
-                shift_blocks_right(Q, qBlocks + wBlocks + mBlocks_old, qBlocks + wBlocks + mBlocks, std::min(sBlocks_old, sBlocks) + std::min(rBlocks_old, rBlocks));
+                shift_blocks_right(Q, qBlocks + wBlocks + mBlocks_old, qBlocks + wBlocks + mBlocks,
+                                   std::min(sBlocks_old, sBlocks) + std::min(rBlocks_old, rBlocks));
             }
             if(sBlocks_old < sBlocks && rBlocks_old > 0) {
                 shift_blocks_right(Q, qBlocks + wBlocks + mBlocks + sBlocks_old, qBlocks + wBlocks + mBlocks + sBlocks, std::min(rBlocks_old, rBlocks));
@@ -249,15 +228,15 @@ namespace grit::algo {
         Eigen::Index rOffset = qBlocks + wBlocks + mBlocks + sBlocks;
 
         if(wBlocks > 0) {
-            MatrixType W_block = MultA(V);
-            MatrixType A_block = V.adjoint() * W_block;
-            W_block.noalias() -= V * A_block;
+            MatrixType W_block  = MultA(V);
+            MatrixType A_block  = V.adjoint() * W_block;
+            W_block.noalias()  -= V * A_block;
             if(V_prev.rows() == N && V_prev.cols() == b) {
-                MatrixType B_block = V_prev.adjoint() * W_block;
-                W_block.noalias() -= V_prev * B_block.adjoint();
+                MatrixType B_block  = V_prev.adjoint() * W_block;
+                W_block.noalias()  -= V_prev * B_block.adjoint();
             }
             if(A.has_preconditioner_apply() && T_evals.size() >= b) {
-                auto select_b = this->get_ritz_indices(this->cfg().ritz, 0, b, T_evals);
+                auto       select_b = this->get_ritz_indices(this->cfg().ritz, 0, b, T_evals);
                 VectorReal evals(b);
                 for(Eigen::Index j = 0; j < b; ++j) evals(j) = T_evals(select_b[static_cast<size_t>(j)]);
                 W_block = MultP(W_block, evals);
@@ -266,8 +245,8 @@ namespace grit::algo {
         }
 
         if(mBlocks > 0 && T_evals.size() >= 2 * b && Q_prev_basis.cols() == T_evecs.rows()) {
-            auto top_2b_indices = this->get_ritz_indices(this->cfg().ritz, b, b, T_evals);
-            MatrixType Z        = T_evecs(Eigen::placeholders::all, top_2b_indices);
+            auto       top_2b_indices    = this->get_ritz_indices(this->cfg().ritz, b, b, T_evals);
+            MatrixType Z                 = T_evecs(Eigen::placeholders::all, top_2b_indices);
             Q.middleCols(mOffset * b, b) = Q_prev_basis * Z;
         }
 
@@ -279,26 +258,26 @@ namespace grit::algo {
             BQ = MultB(Q);
             if(config.use_b_inner_product) {
                 if(qBlocks * b > 0) {
-                    MatrixType QL  = Q.leftCols(qBlocks * b);
-                    MatrixType AQL = AQ.leftCols(qBlocks * b);
-                    MatrixType BQL = BQ.leftCols(qBlocks * b);
+                    MatrixType              QL  = Q.leftCols(qBlocks * b);
+                    MatrixType              AQL = AQ.leftCols(qBlocks * b);
+                    MatrixType              BQL = BQ.leftCols(qBlocks * b);
                     typename Base::OrthMeta mQL;
                     mQL.maskPolicy = Base::MaskPolicy::COMPRESS;
                     block_bm_orthonormalize(QL, AQL, BQL, mQL);
                     if(Q.cols() > QL.cols()) {
-                        MatrixType QR  = Q.rightCols(Q.cols() - QL.cols());
-                        MatrixType AQR = AQ.rightCols(AQ.cols() - AQL.cols());
-                        MatrixType BQR = BQ.rightCols(BQ.cols() - BQL.cols());
+                        MatrixType              QR  = Q.rightCols(Q.cols() - QL.cols());
+                        MatrixType              AQR = AQ.rightCols(AQ.cols() - AQL.cols());
+                        MatrixType              BQR = BQ.rightCols(BQ.cols() - BQL.cols());
                         typename Base::OrthMeta mQR;
                         mQR.maskPolicy = Base::MaskPolicy::COMPRESS;
                         block_bm_orthogonalize(QL, AQL, BQL, QR, AQR, BQR, mQR);
                         Q.resize(Eigen::NoChange, QL.cols() + QR.cols());
                         AQ.resize(Eigen::NoChange, AQL.cols() + AQR.cols());
                         BQ.resize(Eigen::NoChange, BQL.cols() + BQR.cols());
-                        Q.leftCols(QL.cols())   = QL;
-                        AQ.leftCols(AQL.cols()) = AQL;
-                        BQ.leftCols(BQL.cols()) = BQL;
-                        Q.rightCols(QR.cols())  = QR;
+                        Q.leftCols(QL.cols())    = QL;
+                        AQ.leftCols(AQL.cols())  = AQL;
+                        BQ.leftCols(BQL.cols())  = BQL;
+                        Q.rightCols(QR.cols())   = QR;
                         AQ.rightCols(AQR.cols()) = AQR;
                         BQ.rightCols(BQR.cols()) = BQR;
                     } else {
@@ -317,22 +296,22 @@ namespace grit::algo {
             }
         } else {
             if(qBlocks * b > 0) {
-                MatrixType QL  = Q.leftCols(qBlocks * b);
-                MatrixType AQL = AQ.leftCols(qBlocks * b);
+                MatrixType              QL  = Q.leftCols(qBlocks * b);
+                MatrixType              AQL = AQ.leftCols(qBlocks * b);
                 typename Base::OrthMeta mQL;
                 mQL.maskPolicy = Base::MaskPolicy::COMPRESS;
                 block_l2_orthonormalize(QL, AQL, mQL);
                 if(Q.cols() > QL.cols()) {
-                    MatrixType QR  = Q.rightCols(Q.cols() - QL.cols());
-                    MatrixType AQR = AQ.rightCols(AQ.cols() - AQL.cols());
+                    MatrixType              QR  = Q.rightCols(Q.cols() - QL.cols());
+                    MatrixType              AQR = AQ.rightCols(AQ.cols() - AQL.cols());
                     typename Base::OrthMeta mQR;
                     mQR.maskPolicy = Base::MaskPolicy::COMPRESS;
                     block_l2_orthogonalize(QL, AQL, QR, AQR, mQR);
                     Q.resize(Eigen::NoChange, QL.cols() + QR.cols());
                     AQ.resize(Eigen::NoChange, AQL.cols() + AQR.cols());
-                    Q.leftCols(QL.cols())   = QL;
-                    AQ.leftCols(AQL.cols()) = AQL;
-                    Q.rightCols(QR.cols())  = QR;
+                    Q.leftCols(QL.cols())    = QL;
+                    AQ.leftCols(AQL.cols())  = AQL;
+                    Q.rightCols(QR.cols())   = QR;
                     AQ.rightCols(AQR.cols()) = AQR;
                 } else {
                     Q  = QL;
@@ -345,7 +324,14 @@ namespace grit::algo {
             BQ = Q;
         }
 
-        qBlocks = std::max<Eigen::Index>(1, Q.cols() / b);
+        const Eigen::Index full_cols = (Q.cols() / b) * b;
+        if(full_cols != Q.cols()) {
+            Q.conservativeResize(Eigen::NoChange, full_cols);
+            AQ.conservativeResize(Eigen::NoChange, full_cols);
+            BQ.conservativeResize(Eigen::NoChange, full_cols);
+        }
+        qBlocks = Q.cols() / b;
+        if(qBlocks < 1) throw std::runtime_error("lobpcg build error: basis lost all complete blocks");
         auto [active_mask, change_mask] = selective_orthonormalize();
         static_cast<void>(active_mask);
         static_cast<void>(change_mask);

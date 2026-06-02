@@ -65,7 +65,7 @@ namespace bench_standard {
             snapshot.nev                           = static_cast<int32_t>(opts.nev);
             snapshot.ncv                           = static_cast<int32_t>(opts.ncv);
             snapshot.block_size                    = static_cast<int32_t>(opts.block_size);
-            snapshot.max_basis_blocks              = static_cast<int32_t>(opts.max_basis_blocks);
+            snapshot.max_basis_blocks              = static_cast<int32_t>(opts.ncv / opts.block_size);
             snapshot.max_iters                     = static_cast<int32_t>(opts.max_iters);
             snapshot.max_matvecs                   = static_cast<int32_t>(opts.max_matvecs);
             snapshot.inner_max_iters               = static_cast<int32_t>(solver.config.inner_max_iters);
@@ -133,7 +133,6 @@ namespace bench_standard {
         solver.config.nev                           = opts.nev;
         solver.config.ncv                           = opts.ncv;
         solver.config.block_size                    = opts.block_size;
-        solver.config.max_basis_blocks              = opts.max_basis_blocks;
         solver.config.ritz                          = opts.ritz;
         solver.config.residual_correction_type      = opts.residual_correction;
         solver.config.use_refined_rayleigh_ritz     = opts.use_refined_rayleigh_ritz;

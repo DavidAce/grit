@@ -1,54 +1,26 @@
 #pragma once
 
+#include "grit/algo/lanczos.h"
 #include <algorithm>
 #include <stdexcept>
-#include "grit/algo/lanczos.h"
 
 namespace grit::algo {
     template<typename Scalar, grit::Form form_>
-    const typename lanczos<Scalar, form_>::MatrixType &lanczos<Scalar, form_>::default_initial_guess() {
-        static const MatrixType guess;
-        return guess;
-    }
-
-    template<typename Scalar, grit::Form form_>
     lanczos<Scalar, form_>::lanczos(Matvec<Scalar> &A) requires(form_ == grit::Form::STANDARD)
-        : Base(default_initial_guess(), A) {
+        : Base(MatrixType{}, A) {
         this->bind_config(config);
-        config.nev              = 1;
-        config.block_size       = 1;
-        config.ncv              = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
-        config.max_basis_blocks = config.ncv;
+        config.nev        = 1;
+        config.block_size = 1;
+        config.ncv        = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
     }
 
     template<typename Scalar, grit::Form form_>
     lanczos<Scalar, form_>::lanczos(Matvec<Scalar> &A, Matvec<Scalar> &B) requires(form_ == grit::Form::GENERALIZED)
-        : Base(default_initial_guess(), A, B) {
+        : Base(MatrixType{}, A, B) {
         this->bind_config(config);
-        config.nev              = 1;
-        config.block_size       = 1;
-        config.ncv              = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
-        config.max_basis_blocks = config.ncv;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void lanczos<Scalar, form_>::set_initial_guess(const MatrixType &guess) {
-        this->V = guess;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void lanczos<Scalar, form_>::clear_initial_guess() {
-        this->V.resize(0, 0);
-    }
-
-    template<typename Scalar, grit::Form form_>
-    bool lanczos<Scalar, form_>::has_initial_guess() const {
-        return this->V.size() > 0;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    const typename lanczos<Scalar, form_>::MatrixType &lanczos<Scalar, form_>::initial_guess() const {
-        return this->V;
+        config.nev        = 1;
+        config.block_size = 1;
+        config.ncv        = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
     }
 
     template<typename Scalar, grit::Form form_>
@@ -73,23 +45,20 @@ namespace grit::algo {
 
         if(config.nev < 1) throw std::runtime_error("lanczos config error: nev must be at least 1");
         if(config.block_size < 1) throw std::runtime_error("lanczos config error: block_size must be at least 1");
+        if(config.nev > config.block_size) throw std::runtime_error("lanczos config error: nev must not exceed block_size");
         if(config.ncv < config.nev) throw std::runtime_error("lanczos config error: ncv must be at least nev");
         if(config.ncv > this->N) throw std::runtime_error("lanczos config error: ncv must not exceed the operator size");
         if(config.block_size > config.ncv) throw std::runtime_error("lanczos config error: block_size must not exceed ncv");
         if(config.ncv % config.block_size != 0) throw std::runtime_error("lanczos config error: ncv must be divisible by block_size");
-        if(config.max_basis_blocks < 1) throw std::runtime_error("lanczos config error: max_basis_blocks must be at least 1");
-        if(config.max_basis_blocks * config.block_size != config.ncv) {
-            throw std::runtime_error("lanczos config error: max_basis_blocks * block_size must equal ncv");
-        }
         if(config.max_iters == 0) throw std::runtime_error("lanczos config error: max_iters must be positive or negative for unlimited");
         if(config.max_matvecs == 0) throw std::runtime_error("lanczos config error: max_matvecs must be positive or negative for unlimited");
         if(config.tol <= RealScalar{0}) throw std::runtime_error("lanczos config error: tol must be positive");
         if(config.tol_rnorm_relative < RealScalar{0}) throw std::runtime_error("lanczos config error: tol_rnorm_relative must be nonnegative");
         if(config.sat_eigval_threshold < RealScalar{0}) throw std::runtime_error("lanczos config error: sat_eigval_threshold must be nonnegative");
         if(config.sat_rnorm_threshold < RealScalar{0}) throw std::runtime_error("lanczos config error: sat_rnorm_threshold must be nonnegative");
-        if(has_initial_guess()) {
-            if(initial_guess().rows() != this->N) throw std::runtime_error("lanczos config error: initial guess row count must match the operator size");
-            if(initial_guess().cols() < 1) throw std::runtime_error("lanczos config error: initial guess must have at least one column");
+        if(this->has_initial_guess()) {
+            if(this->initial_guess().rows() != this->N) throw std::runtime_error("lanczos config error: initial guess row count must match the operator size");
+            if(this->initial_guess().cols() < 1) throw std::runtime_error("lanczos config error: initial guess must have at least one column");
         }
     }
 
@@ -98,45 +67,53 @@ namespace grit::algo {
         assert_config();
 
         this->setLogger(config.log_level, std::string("grit|") + std::string(this->form_name()));
-        beta_stalled = false;
-        auto initial_guess_copy = this->V;
-        clear_result();
-        this->V = initial_guess_copy;
+        status.stopReason = StopReason::none;
+        status.stopMessage.clear();
+        status.rNorm_below_rnormTol    = false;
+        status.rNorm_below_gap         = false;
+        status.saturation_count_eigVal = 0;
+        status.saturation_count_rNorm  = 0;
+        status.rNorms_history.clear();
+        status.eigVals_history.clear();
+        status.matvecs_history.clear();
 
         status.saturation_count_max = this->cfg().ncv;
-        status.rNorms.setOnes(this->cfg().nev);
-        status.rNorms_init.setOnes(this->cfg().nev);
-        status.eigVal.setOnes(this->cfg().nev);
-        status.oldVal.setOnes(this->cfg().nev);
-        status.absDiff.setOnes(this->cfg().nev);
-        status.relDiff.setOnes(this->cfg().nev);
 
-        Eigen::ColPivHouseholderQR<MatrixType> cpqr;
-        for(long i = 0; i < 2; ++i) {
-            if(V.cols() < this->cfg().block_size) {
-                auto vc = V.cols();
-                V.conservativeResize(N, this->cfg().block_size);
-                auto Vrc = V.rightCols(this->cfg().block_size - vc);
-                for(auto vj : Vrc.colwise()) { vj = Eigen::VectorXf::Random(vj.size()).template cast<Scalar>(); }
-            }
-            cpqr.compute(V);
-            auto rank = std::min<Eigen::Index>(cpqr.rank(), this->cfg().block_size);
-            V         = cpqr.householderQ().setLength(rank) * MatrixType::Identity(N, rank);
-            if(V.cols() == this->cfg().block_size) break;
-        }
+        if(status.iter == 0) {
+            status.rNorms.setOnes(this->cfg().nev);
+            status.rNorms_init.setOnes(this->cfg().nev);
+            status.eigVal.setOnes(this->cfg().nev);
+            status.oldVal.setOnes(this->cfg().nev);
+            status.absDiff.setOnes(this->cfg().nev);
+            status.relDiff.setOnes(this->cfg().nev);
 
-        {
-            auto m       = OrthMeta();
-            m.maskPolicy = Base::MaskPolicy::COMPRESS;
-            if constexpr(form_ == grit::Form::GENERALIZED) {
-                if(this->cfg().use_b_inner_product) {
-                    block_bm_orthonormalize(V, AV, BV, m);
-                } else {
-                    block_l2_orthonormalize(V, AV, BV, m);
+            Eigen::ColPivHouseholderQR<MatrixType> cpqr;
+            for(long i = 0; i < 2; ++i) {
+                if(V.cols() < this->cfg().block_size) {
+                    auto vc = V.cols();
+                    V.conservativeResize(N, this->cfg().block_size);
+                    auto Vrc = V.rightCols(this->cfg().block_size - vc);
+                    for(auto vj : Vrc.colwise()) { vj = Eigen::VectorXf::Random(vj.size()).template cast<Scalar>(); }
                 }
-            } else {
-                block_l2_orthonormalize(V, AV, m);
-                BV = V;
+                cpqr.compute(V);
+                auto rank = std::min<Eigen::Index>(cpqr.rank(), this->cfg().block_size);
+                V         = cpqr.householderQ().setLength(rank) * MatrixType::Identity(N, rank);
+                if(V.cols() == this->cfg().block_size) break;
+            }
+
+            {
+                auto m       = OrthMeta();
+                m.maskPolicy = Base::MaskPolicy::COMPRESS;
+                if constexpr(form_ == grit::Form::GENERALIZED) {
+                    if(this->cfg().use_b_inner_product) {
+                        block_bm_orthonormalize(V, AV, BV, m);
+                    } else {
+                        block_l2_orthonormalize(V, AV, BV, m);
+                    }
+                } else {
+                    block_l2_orthonormalize(V, AV, m);
+                    BV = V;
+                }
             }
         }
 
@@ -158,8 +135,8 @@ namespace grit::algo {
         for(int rep = 0; rep < 2; ++rep) {
             MatrixType QjW;
             for(Eigen::Index j = i; j >= 0; --j) {
-                auto Qj = Q.middleCols(j * this->cfg().block_size, this->cfg().block_size);
-                QjW     = Qj.adjoint() * W;
+                auto Qj      = Q.middleCols(j * this->cfg().block_size, this->cfg().block_size);
+                QjW          = Qj.adjoint() * W;
                 W.noalias() -= Qj * QjW;
             }
         }
@@ -173,15 +150,17 @@ namespace grit::algo {
     template<typename Scalar, grit::Form form_>
     void lanczos<Scalar, form_>::build() {
         const Eigen::Index b = this->cfg().block_size;
-        const Eigen::Index m = config.max_basis_blocks;
+        const Eigen::Index m = this->cfg().ncv / this->cfg().block_size;
 
         beta_stalled = false;
         if(V.cols() != b) throw std::runtime_error("lanczos build error: V must have block_size columns");
 
         Q  = V;
         AQ = AV;
-        if constexpr(form_ == grit::Form::GENERALIZED) BQ = BV;
-        else BQ = Q;
+        if constexpr(form_ == grit::Form::GENERALIZED)
+            BQ = BV;
+        else
+            BQ = Q;
 
         MatrixType Q_prev;
         A_block.resize(b, b);
@@ -192,10 +171,10 @@ namespace grit::algo {
             auto Q_cur = Q.rightCols(b);
             W          = MultA(Q_cur);
 
-            A_block = Q_cur.adjoint() * W;
+            A_block      = Q_cur.adjoint() * W;
             W.noalias() -= Q_cur * A_block;
             if(Q_prev.cols() == b) {
-                B_block = Q_prev.adjoint() * W;
+                B_block      = Q_prev.adjoint() * W;
                 W.noalias() -= Q_prev * B_block.adjoint();
             } else {
                 B_block.setZero();
@@ -209,7 +188,7 @@ namespace grit::algo {
             }
 
             if(A.has_preconditioner_apply() && T_evals.size() >= b) {
-                auto select_b = this->get_ritz_indices(this->cfg().ritz, 0, b, T_evals);
+                auto       select_b = this->get_ritz_indices(this->cfg().ritz, 0, b, T_evals);
                 VectorReal evals(b);
                 for(Eigen::Index j = 0; j < b; ++j) evals(j) = T_evals(select_b[static_cast<size_t>(j)]);
                 W = MultP(W, evals);
@@ -240,7 +219,7 @@ namespace grit::algo {
                 break;
             }
 
-            Q_prev = Q_cur;
+            Q_prev                = Q_cur;
             Eigen::Index old_cols = Q.cols();
             Q.conservativeResize(Eigen::NoChange, old_cols + b);
             AQ.conservativeResize(Eigen::NoChange, old_cols + b);

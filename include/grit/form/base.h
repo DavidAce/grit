@@ -177,7 +177,7 @@ namespace grit::form {
         protected:
         BaseConfig           default_cfg = {};
         BaseConfig          *cfg_ptr     = &default_cfg;
-        Logger::LoggerHandle eiglog;
+        Logger::LoggerHandle log;
         tid::ur              last_log_time = tid::ur();
 
         Eigen::Index qBlocks = 0;
@@ -185,11 +185,15 @@ namespace grit::form {
         void                            bind_config(BaseConfig &cfg);
         [[nodiscard]] BaseConfig       &cfg();
         [[nodiscard]] const BaseConfig &cfg() const;
+        [[nodiscard]] const MatrixType &initial_guess() const;
 
         public:
         virtual ~base() = default;
 
-        void setLogger(spdlog::level::level_enum logLevel, const std::string &name = "");
+        void               setLogger(spdlog::level::level_enum logLevel, const std::string &name = "");
+        void               set_initial_guess(MatrixType V);
+        void               clear_initial_guess();
+        [[nodiscard]] bool has_initial_guess() const;
 
         base(const MatrixType &V, Matvec<Scalar> &A) requires(form_ == grit::Form::STANDARD);
         base(const MatrixType &V, Matvec<Scalar> &A, Matvec<Scalar> &B) requires(form_ == grit::Form::GENERALIZED);
@@ -280,7 +284,6 @@ namespace grit::form {
         virtual void updateStatus();
         void         printStatus();
         virtual void run_user_callback();
-        void         clear_result();
 
         void step();
         void run();

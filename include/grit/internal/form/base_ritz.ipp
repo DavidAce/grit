@@ -36,7 +36,7 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV, MatrixType &S,
-                                          VectorReal &rNorms) {
+                                                 VectorReal &rNorms) {
         MatrixType Z = T_evecs(Eigen::placeholders::all, optIdx);
         VectorReal Y = T_evals(optIdx);
 
@@ -108,8 +108,8 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     typename base<Scalar, form_>::MatrixType base<Scalar, form_>::get_refined_ritz_eigenvectors_std(const Eigen::Ref<const MatrixType> &Z,
-                                                                                      const Eigen::Ref<const VectorReal> &Y, const MatrixType &Q,
-                                                                                      const MatrixType &AQ) {
+                                                                                                    const Eigen::Ref<const VectorReal> &Y, const MatrixType &Q,
+                                                                                                    const MatrixType &AQ) {
         assert(!cfg().use_b_inner_product);
         assert(Z.cols() == Y.size());
         Eigen::JacobiSVD<MatrixType, Eigen::ComputeThinV> svd;
@@ -128,7 +128,7 @@ namespace grit::form {
             } else {
                 Z_ref.col(j)            = Z.col(j);
                 RealScalar refinedRnorm = svd.singularValues()(min_idx);
-                if(eiglog) eiglog->warn("refinement failed on ritz vector {} | refined rnorm={:.5e} | info {} ", j, refinedRnorm, static_cast<int>(svd.info()));
+                if(log) log->warn("refinement failed on ritz vector {} | refined rnorm={:.5e} | info {} ", j, refinedRnorm, static_cast<int>(svd.info()));
             }
         }
         return Z_ref;
@@ -136,9 +136,10 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     typename base<Scalar, form_>::MatrixType base<Scalar, form_>::get_refined_ritz_eigenvectors_gen(const Eigen::Ref<const MatrixType> &Z,
-                                                                                                      const Eigen::Ref<const VectorReal> &Y,
-                                                                                                      const MatrixType &AQ,
-                                                                                                      const MatrixType &BQ) requires(form_ == grit::Form::GENERALIZED) {
+                                                                                                    const Eigen::Ref<const VectorReal> &Y, const MatrixType &AQ,
+                                                                                                    const MatrixType &BQ)
+        requires(form_ == grit::Form::GENERALIZED)
+    {
         assert(Z.cols() == Y.size());
         Eigen::JacobiSVD<MatrixType, Eigen::ComputeThinV> svd;
         MatrixType                                        Z_ref(Z.rows(), Z.cols());
@@ -188,7 +189,7 @@ namespace grit::form {
 
             } else {
                 Z_ref.col(j) = Z.col(j);
-                if(eiglog) eiglog->warn("refinement failed on ritz vector {} | info {} ", j, static_cast<int>(svd.info()));
+                if(log) log->warn("refinement failed on ritz vector {} | info {} ", j, static_cast<int>(svd.info()));
             }
         }
         return Z_ref;
@@ -208,7 +209,7 @@ namespace grit::form {
         const RealScalar Dmax = std::max<RealScalar>(RealScalar{1}, D.cwiseAbs().maxCoeff());
         const RealScalar tau  = RealScalar{10} * eps * Dmax;
 
-        if(D.minCoeff() <= RealScalar{0} && eiglog) eiglog->warn("Projected T2 is numerically indefinite: min eval {:.3e}", D.minCoeff());
+        if(D.minCoeff() <= RealScalar{0} && log) log->warn("Projected T2 is numerically indefinite: min eval {:.3e}", D.minCoeff());
 
         for(Eigen::Index k = 0; k < D.size(); ++k) D(k) = std::max(D(k), tau);
 
@@ -216,8 +217,8 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
-    typename base<Scalar, form_>::MatrixType base<Scalar, form_>::get_optimal_rayleigh_ritz_matrix(const MatrixType &Z_rr, const MatrixType &Z_ref, const MatrixType &T1,
-                                                                                     const MatrixType &T2) {
+    typename base<Scalar, form_>::MatrixType base<Scalar, form_>::get_optimal_rayleigh_ritz_matrix(const MatrixType &Z_rr, const MatrixType &Z_ref,
+                                                                                                   const MatrixType &T1, const MatrixType &T2) {
         assert(Z_rr.size() > 0);
         assert(Z_rr.rows() == Z_ref.rows());
         assert(Z_rr.cols() == Z_ref.cols());
@@ -256,7 +257,7 @@ namespace grit::form {
                 auto v       = ges.eigenvectors().col(select1.at(0));
                 Z.col(k)     = z0 * v(0) + z1 * v(1);
             } else {
-                if(eiglog) eiglog->warn("generalized refined Rayleigh-Ritz 2x2 solve failed");
+                if(log) log->warn("generalized refined Rayleigh-Ritz 2x2 solve failed");
                 Z.col(k) = z0;
             }
         }
@@ -268,7 +269,8 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AQ, MatrixType &BQ, MatrixType &S,
-                                                 VectorReal &rNorms) requires(form_ == grit::Form::GENERALIZED) {
+                                                 VectorReal &rNorms) requires(form_ == grit::Form::GENERALIZED)
+    {
         VectorReal Y     = T_evals(optIdx);
         MatrixType Z_rr  = T_evecs(Eigen::placeholders::all, optIdx);
         MatrixType Z_ref = get_refined_ritz_eigenvectors_gen(Z_rr, Y, AQ, BQ);

@@ -74,8 +74,8 @@ namespace grit {
     template<typename Scalar_>
     typename Matvec<Scalar_>::MatrixType Matvec<Scalar_>::mult(const Eigen::Ref<const MatrixType> &X) const {
         if(!mult_callback) throw std::runtime_error("Matvec::mult callback is not set");
-        auto token_apply = t_mult->tic_token();
-        num_mv += X.cols();
+        auto token_apply  = t_mult->tic_token();
+        num_mv           += X.cols();
         return mult_callback(X);
     }
 

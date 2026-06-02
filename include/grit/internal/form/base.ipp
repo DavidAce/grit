@@ -51,12 +51,33 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::setLogger(spdlog::level::level_enum level, const std::string &name) {
-        eiglog = Logger::getLogger(name.empty() ? "grit" : name);
-        eiglog->set_level(level);
+        log = Logger::getLogger(name.empty() ? "grit" : name);
+        log->set_level(level);
     }
 
     template<typename Scalar, grit::Form form_>
-    base<Scalar, form_>::base(const MatrixType &V, Matvec<Scalar> &A) requires(form_ == grit::Form::STANDARD) : A(A), V(V) {
+    void base<Scalar, form_>::set_initial_guess(MatrixType guess) {
+        V = std::move(guess);
+    }
+
+    template<typename Scalar, grit::Form form_>
+    void base<Scalar, form_>::clear_initial_guess() {
+        V.resize(0, 0);
+    }
+
+    template<typename Scalar, grit::Form form_>
+    bool base<Scalar, form_>::has_initial_guess() const {
+        return V.size() > 0;
+    }
+
+    template<typename Scalar, grit::Form form_>
+    const typename base<Scalar, form_>::MatrixType &base<Scalar, form_>::initial_guess() const {
+        return V;
+    }
+
+    template<typename Scalar, grit::Form form_>
+    base<Scalar, form_>::base(const MatrixType &V, Matvec<Scalar> &A) requires(form_ == grit::Form::STANDARD)
+        : A(A), V(V) {
         setLogger(cfg().log_level, "grit");
         N    = A.get_size();
         size = A.get_size();
@@ -68,7 +89,8 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
-    base<Scalar, form_>::base(const MatrixType &V, Matvec<Scalar> &A, Matvec<Scalar> &B) requires(form_ == grit::Form::GENERALIZED) : A(A), B(B), V(V) {
+    base<Scalar, form_>::base(const MatrixType &V, Matvec<Scalar> &A, Matvec<Scalar> &B) requires(form_ == grit::Form::GENERALIZED)
+        : A(A), B(B), V(V) {
         setLogger(cfg().log_level, "grit");
         N    = A.get_size();
         size = A.get_size();
@@ -81,13 +103,15 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     std::string_view base<Scalar, form_>::form_name() const {
-        if constexpr(form_ == grit::Form::GENERALIZED) return "GENERALIZED";
-        else return "STANDARD";
+        if constexpr(form_ == grit::Form::GENERALIZED)
+            return "GENERALIZED";
+        else
+            return "STANDARD";
     }
 
     template<typename Scalar, grit::Form form_>
     typename base<Scalar, form_>::MatrixType base<Scalar, form_>::get_residuals(const Eigen::Ref<const VectorReal> &Y, const Eigen::Ref<const MatrixType> &AV,
-                                                                  const Eigen::Ref<const MatrixType> &BV, VectorReal &rNorms) {
+                                                                                const Eigen::Ref<const MatrixType> &BV, VectorReal &rNorms) {
         MatrixType S = AV - BV * Y.asDiagonal();
         rNorms       = S.colwise().norm().transpose();
         return S;
@@ -182,14 +206,16 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
-    typename base<Scalar, form_>::MatrixType base<Scalar, form_>::MultB(const Eigen::Ref<const MatrixType> &X) requires(form_ == grit::Form::GENERALIZED) {
+    typename base<Scalar, form_>::MatrixType base<Scalar, form_>::MultB(const Eigen::Ref<const MatrixType> &X) requires(form_ == grit::Form::GENERALIZED)
+    {
         auto token_matvecs  = status.time_matvecs.tic_token();
         status.num_matvecs += X.cols();
         return B->get().mult(X);
     }
 
     template<typename Scalar, grit::Form form_>
-    typename base<Scalar, form_>::MatrixType base<Scalar, form_>::MultB_inner(const Eigen::Ref<const MatrixType> &X) requires(form_ == grit::Form::GENERALIZED) {
+    typename base<Scalar, form_>::MatrixType base<Scalar, form_>::MultB_inner(const Eigen::Ref<const MatrixType> &X) requires(form_ == grit::Form::GENERALIZED)
+    {
         auto token_matvecs        = status.time_matvecs_inner.tic_token();
         status.num_matvecs_inner += X.cols();
         return B->get().mult(X);
@@ -524,7 +550,7 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::printStatus() {
-        if(!eiglog || status.eigVal.size() == 0 || status.rNorms.size() == 0) return;
+        if(!log || status.eigVal.size() == 0 || status.rNorms.size() == 0) return;
 
         auto format_vector = [](const VectorReal &v, std::string_view spec = "{:.8e}") {
             std::string msg = "[";
@@ -564,9 +590,9 @@ namespace grit::form {
         std::string evMsg;
         if constexpr(form_ == grit::Form::GENERALIZED) {
             if(V.cols() > 0 && AV.size() == V.size() && BV.size() == V.size()) {
-            VectorReal VAV = (V.adjoint() * AV).diagonal().real();
-            VectorReal VBV = (V.adjoint() * BV).diagonal().real();
-            evMsg          = fmt::format(" {} / {}", format_vector(VAV, "{:.16f}"), format_vector(VBV, "{:.16f}"));
+                VectorReal VAV = (V.adjoint() * AV).diagonal().real();
+                VectorReal VBV = (V.adjoint() * BV).diagonal().real();
+                evMsg          = fmt::format(" {} / {}", format_vector(VAV, "{:.16f}"), format_vector(VBV, "{:.16f}"));
             }
         }
 
@@ -575,60 +601,28 @@ namespace grit::form {
         bool log_every_ten_it              = status.iter > 0 && status.iter % 10 == 0;
         spdlog::level::level_enum loglevel = spdlog::level::trace;
         if(log_every_ten_it || log_long_time) loglevel = spdlog::level::debug;
-        if(!eiglog->should_log(loglevel)) return;
+        if(!log->should_log(loglevel)) return;
         [[maybe_unused]] auto lap = last_log_time.restart_lap();
 
         const auto active_tols     = rNormTols();
         const auto active_tol_name = "rNormTol";
         const auto rrNorms         = relative_rNorms(status.rNorms);
 
-        eiglog->log(loglevel,
-                    "it {:3} mv {:3} pc {:3} t {:.1e}s dim {} {}eigVal {}{} "
-                    "oErr {:.3e} rNorms {} rrNorms {} {} {} tol {:.2e} (rel {:.2e}) "
-                    "({:9.2e}/mv) sat {}:{}/{} col {:2} block_size {} ritz {} "
-                    "op norm {:.2e} cond {:.2e} sens {:.2e}{}",
-                    status.iter, status.num_matvecs, status.num_precond, status.time_elapsed.get_time(), N, innerMsg,
-                    format_vector(VectorReal(status.eigVal), "{:.16f}"), evMsg, orthError, format_vector(VectorReal(status.rNorms)),
-                    format_vector(VectorReal(rrNorms)), active_tol_name, format_vector(active_tols, "{:.3e}"), cfg().tol, cfg().tol_rnorm_relative,
-                    get_rNorms_log10_change_per_matvec(), status.saturation_count_eigVal, status.saturation_count_rNorm, status.saturation_count_max, Q.cols(),
-                    cfg().block_size, enum2sv(cfg().ritz), op_norm_estimate, status.condition, status.sensitivity, msg_rnorm_gap);
+        log->log(loglevel,
+                 "it {:3} mv {:3} pc {:3} t {:.1e}s dim {} {}eigVal {}{} "
+                 "oErr {:.3e} rNorms {} rrNorms {} {} {} tol {:.2e} (rel {:.2e}) "
+                 "({:9.2e}/mv) sat {}:{}/{} col {:2} block_size {} ritz {} "
+                 "op norm {:.2e} cond {:.2e} sens {:.2e}{}",
+                 status.iter, status.num_matvecs, status.num_precond, status.time_elapsed.get_time(), N, innerMsg,
+                 format_vector(VectorReal(status.eigVal), "{:.16f}"), evMsg, orthError, format_vector(VectorReal(status.rNorms)),
+                 format_vector(VectorReal(rrNorms)), active_tol_name, format_vector(active_tols, "{:.3e}"), cfg().tol, cfg().tol_rnorm_relative,
+                 get_rNorms_log10_change_per_matvec(), status.saturation_count_eigVal, status.saturation_count_rNorm, status.saturation_count_max, Q.cols(),
+                 cfg().block_size, enum2sv(cfg().ritz), op_norm_estimate, status.condition, status.sensitivity, msg_rnorm_gap);
     }
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::run_user_callback() {
         return;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::clear_result() {
-        status                   = Status{};
-        qBlocks                  = 0;
-        T                        = MatrixType{};
-        Aproj                    = MatrixType{};
-        Bproj                    = MatrixType{};
-        W                        = MatrixType{};
-        Q                        = MatrixType{};
-        AQ                       = MatrixType{};
-        BQ                       = MatrixType{};
-        V                        = MatrixType{};
-        AV                       = MatrixType{};
-        BV                       = MatrixType{};
-        V_prev                   = MatrixType{};
-        K                        = MatrixType{};
-        K_prev                   = MatrixType{};
-        S                        = MatrixType{};
-        S1                       = MatrixType{};
-        S2                       = MatrixType{};
-        D                        = MatrixType{};
-        M                        = MatrixType{};
-        AM                       = MatrixType{};
-        BM                       = MatrixType{};
-        T_evals                  = VectorReal{};
-        T1                       = MatrixType{};
-        T2                       = MatrixType{};
-        T_evecs                  = MatrixType{};
-        hhqr                     = Eigen::HouseholderQR<MatrixType>{};
-        auto_residual_correction = AutoResidualCorrectionState{};
     }
 
     template<typename Scalar, grit::Form form_>
@@ -645,11 +639,23 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::run() {
+        status.stopReason = StopReason::none;
+        status.stopMessage.clear();
+        status.rNorm_below_rnormTol    = false;
+        status.rNorm_below_gap         = false;
+        status.saturation_count_eigVal = 0;
+        status.saturation_count_rNorm  = 0;
+        status.rNorms_history.clear();
+        status.eigVals_history.clear();
+        status.matvecs_history.clear();
+
         auto token_elapsed = status.time_elapsed.tic_token();
-        init();
-        printStatus();
-        run_user_callback();
-        status.iter++;
+        if(status.iter == 0) {
+            init();
+            printStatus();
+            run_user_callback();
+            status.iter++;
+        }
         while(true) {
             step();
             if(status.stopReason != StopReason::none) break;
