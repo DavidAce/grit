@@ -20,13 +20,14 @@ jobs:
       CCACHE_SLOPPINESS: include_file_mtime,pch_defines,time_macros
       CCACHE_MAXSIZE: 384M
       INSTALL_DIR: ${{ github.workspace }}/install/github-actions-${{ matrix.manager }}
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { compiler: gcc, compiler_c: gcc-14, compiler_cxx: g++-14, manager: cmake, preset: github-actions-cmake }
-          - { compiler: gcc, compiler_c: gcc-14, compiler_cxx: g++-14, manager: conan, preset: github-actions-conan }
-          - { compiler: clang, compiler_c: clang-18, compiler_cxx: clang++-18, manager: conan, preset: github-actions-conan-clang }
+          - { compiler: gcc, compiler_c: gcc-14, compiler_cxx: g++-14, manager: cmake, preset: github-actions-cmake, coverage: true, coverage_arg: -DCOMPILER_ENABLE_COVERAGE=TRUE }
+          - { compiler: gcc, compiler_c: gcc-14, compiler_cxx: g++-14, manager: conan, preset: github-actions-conan, coverage: false, coverage_arg: -DCOMPILER_ENABLE_COVERAGE=FALSE }
+          - { compiler: clang, compiler_c: clang-18, compiler_cxx: clang++-18, manager: conan, preset: github-actions-conan-clang, coverage: false, coverage_arg: -DCOMPILER_ENABLE_COVERAGE=FALSE }
 
     steps:
       - uses: actions/checkout@v6
@@ -121,11 +122,19 @@ jobs:
         uses: lukka/run-cmake@v10.9
         with:
           configurePreset: '${{ matrix.preset }}'
-          configurePresetAdditionalArgs: "['-DCMAKE_INSTALL_PREFIX=${{ env.INSTALL_DIR }}']"
+          configurePresetAdditionalArgs: "['-DCMAKE_INSTALL_PREFIX=${{ env.INSTALL_DIR }}', '${{ matrix.coverage_arg }}']"
           buildPreset: '${{ matrix.preset }}'
 
       - name: Test
         run: ctest --preset ${{ matrix.preset }} --output-on-failure
+
+      - name: Upload coverage reports to Codecov
+        if: matrix.coverage == true && env.CODECOV_TOKEN != ''
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          plugins: gcov
+          gcov_executable: gcov-14
 
       - name: Install
         run: cmake --install build/${{ matrix.preset }}
