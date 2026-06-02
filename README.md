@@ -1,5 +1,8 @@
 # GRIT
 
+[![Ubuntu 24.04](https://github.com/DavidAce/grit/actions/workflows/ubuntu-24.04.yml/badge.svg)](https://github.com/DavidAce/grit/actions/workflows/ubuntu-24.04.yml)
+[![codecov](https://codecov.io/github/DavidAce/grit/graph/badge.svg?token=PPTM8MBW52)](https://codecov.io/github/DavidAce/grit)
+
 `GRIT` is the Generalized Ritz Iteration Toolkit: a C++23 library for matrix-free
 Ritz iteration eigensolvers. Operators are supplied as Eigen block callbacks.
 
