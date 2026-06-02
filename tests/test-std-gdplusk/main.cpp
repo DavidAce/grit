@@ -52,7 +52,7 @@ TEST_CASE("standard gdplusk matches dense eigensolver") {
     solver.config.nev        = 1;
     solver.config.ncv        = A_matrix.rows();
     solver.config.block_size = 1;
-    solver.config.ritz       = grit::OptRitz::SR;
+    solver.config.ritz       = grit::Ritz::SR;
     solver.config.max_iters  = 20;
     solver.set_initial_guess(Matrix::Identity(A_matrix.rows(), A_matrix.rows()));
     solver.run();
@@ -74,7 +74,7 @@ TEST_CASE("standard gdplusk handles nos4 restart block search") {
     solver.config.nev                      = 2;
     solver.config.ncv                      = 20;
     solver.config.block_size               = 2;
-    solver.config.ritz                     = grit::OptRitz::SR;
+    solver.config.ritz                     = grit::Ritz::SR;
     solver.config.max_iters                = 200;
     solver.config.tol                      = 1e-9;
     solver.config.residual_correction_type = grit::ResidualCorrectionType::CHEAP_OLSEN;
@@ -99,7 +99,7 @@ TEST_CASE("standard gdplusk supports all Ritz targets on nos4") {
     auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
 
     Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
-    for(auto ritz : {grit::OptRitz::SR, grit::OptRitz::LR, grit::OptRitz::SM, grit::OptRitz::LM}) {
+    for(auto ritz : {grit::Ritz::SR, grit::Ritz::LR, grit::Ritz::SM, grit::Ritz::LM}) {
         grit::standard::gdplusk<double> solver(A);
         solver.config.nev                      = 2;
         solver.config.ncv                      = A_matrix.rows();
@@ -133,7 +133,7 @@ TEST_CASE("standard gdplusk converges with an exact zero eigenvalue") {
     solver.config.nev        = 1;
     solver.config.ncv        = A_matrix.rows();
     solver.config.block_size = 1;
-    solver.config.ritz       = grit::OptRitz::SR;
+    solver.config.ritz       = grit::Ritz::SR;
     solver.config.max_iters  = 20;
     solver.config.tol        = 1e-12;
     solver.set_initial_guess(V);
@@ -163,7 +163,7 @@ TEST_CASE("standard gdplusk user callback reports initial and final view") {
     solver.config.nev           = 1;
     solver.config.ncv           = A_matrix.rows();
     solver.config.block_size    = 1;
-    solver.config.ritz          = grit::OptRitz::SR;
+    solver.config.ritz          = grit::Ritz::SR;
     solver.config.max_iters     = 20;
     solver.config.user_callback = [&](const auto &solver_ref) {
         auto view = grit::solver_view<double>(solver_ref);
@@ -209,7 +209,7 @@ TEST_CASE("standard jacobi-davidson correction invokes preconditioner callbacks"
     solver.config.nev                      = 1;
     solver.config.ncv                      = 3;
     solver.config.block_size               = 1;
-    solver.config.ritz                     = grit::OptRitz::SR;
+    solver.config.ritz                     = grit::Ritz::SR;
     solver.config.max_iters                = 100;
     solver.config.inner_max_iters          = 20;
     solver.config.inner_tol                = 1e-8;
@@ -242,7 +242,7 @@ TEST_CASE("standard jacobi-davidson correction defaults to identity precondition
     solver.config.nev                      = 1;
     solver.config.ncv                      = 3;
     solver.config.block_size               = 1;
-    solver.config.ritz                     = grit::OptRitz::SR;
+    solver.config.ritz                     = grit::Ritz::SR;
     solver.config.max_iters                = 100;
     solver.config.inner_max_iters          = 20;
     solver.config.inner_tol                = 1e-8;

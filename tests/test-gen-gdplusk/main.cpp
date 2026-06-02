@@ -55,7 +55,7 @@ TEST_CASE("generalized gdplusk matches dense eigensolver") {
     solver.config.nev        = 1;
     solver.config.ncv        = A_matrix.rows();
     solver.config.block_size = 1;
-    solver.config.ritz       = grit::OptRitz::SR;
+    solver.config.ritz       = grit::Ritz::SR;
     solver.config.max_iters  = 20;
     solver.set_initial_guess(Matrix::Identity(A_matrix.rows(), A_matrix.rows()));
     solver.run();
@@ -80,7 +80,7 @@ TEST_CASE("generalized gdplusk handles nos4 restart block search") {
     solver.config.nev                      = 2;
     solver.config.ncv                      = 20;
     solver.config.block_size               = 2;
-    solver.config.ritz                     = grit::OptRitz::SR;
+    solver.config.ritz                     = grit::Ritz::SR;
     solver.config.max_iters                = 200;
     solver.config.tol                      = 1e-9;
     solver.config.use_b_inner_product      = false;
@@ -109,7 +109,7 @@ TEST_CASE("generalized gdplusk supports all Ritz targets on nos4") {
     auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
 
     Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> exact(A_matrix, B_matrix);
-    for(auto ritz : {grit::OptRitz::SR, grit::OptRitz::LR, grit::OptRitz::SM, grit::OptRitz::LM}) {
+    for(auto ritz : {grit::Ritz::SR, grit::Ritz::LR, grit::Ritz::SM, grit::Ritz::LM}) {
         grit::generalized::gdplusk<double> solver(A, B);
         solver.config.nev                      = 2;
         solver.config.ncv                      = A_matrix.rows();
@@ -148,7 +148,7 @@ TEST_CASE("generalized jacobi-davidson b-only correction supports l2 and bm proj
     cfg.nev             = 1;
     cfg.ncv             = A_matrix.rows();
     cfg.block_size      = 1;
-    cfg.ritz            = grit::OptRitz::SR;
+    cfg.ritz            = grit::Ritz::SR;
     cfg.max_iters       = 20;
     cfg.inner_max_iters = 20;
     cfg.inner_tol       = 1e-8;
@@ -205,7 +205,7 @@ TEST_CASE("generalized gdplusk with B as A squared targets A smallest magnitude 
     solver.config.nev        = 1;
     solver.config.ncv        = A_matrix.rows();
     solver.config.block_size = 1;
-    solver.config.ritz       = grit::OptRitz::LM;
+    solver.config.ritz       = grit::Ritz::LM;
     solver.config.max_iters  = 20;
     solver.set_initial_guess(V);
     solver.run();

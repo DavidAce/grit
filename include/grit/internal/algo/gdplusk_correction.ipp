@@ -104,11 +104,11 @@ namespace grit::algo {
         auto before = status.oldVal(0);
         auto after  = status.eigVal(0);
         switch(cfg().ritz) {
-            case OptRitz::LR: return after - before;
-            case OptRitz::SM: return std::abs(before) - std::abs(after);
-            case OptRitz::LM: return std::abs(after) - std::abs(before);
-            case OptRitz::NONE: [[fallthrough]];
-            case OptRitz::SR: return before - after;
+            case Ritz::LR: return after - before;
+            case Ritz::SM: return std::abs(before) - std::abs(after);
+            case Ritz::LM: return std::abs(after) - std::abs(before);
+            case Ritz::NONE: [[fallthrough]];
+            case Ritz::SR: return before - after;
         }
         return RealScalar{0};
     }

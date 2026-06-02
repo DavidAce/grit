@@ -125,17 +125,17 @@ namespace grit_test {
     }
 
     template<typename VectorReal>
-    std::vector<Eigen::Index> expected_ritz_indices(const VectorReal &evals, grit::OptRitz ritz, Eigen::Index nev) {
+    std::vector<Eigen::Index> expected_ritz_indices(const VectorReal &evals, grit::Ritz ritz, Eigen::Index nev) {
         std::vector<Eigen::Index> idx(static_cast<std::size_t>(evals.size()));
         std::iota(idx.begin(), idx.end(), Eigen::Index{0});
 
         auto less = [&](Eigen::Index i, Eigen::Index j) {
             switch(ritz) {
-                case grit::OptRitz::LR: return evals(i) > evals(j);
-                case grit::OptRitz::LM: return std::abs(evals(i)) > std::abs(evals(j));
-                case grit::OptRitz::SR: return evals(i) < evals(j);
-                case grit::OptRitz::SM: return std::abs(evals(i)) < std::abs(evals(j));
-                case grit::OptRitz::NONE: return evals(i) < evals(j);
+                case grit::Ritz::LR: return evals(i) > evals(j);
+                case grit::Ritz::LM: return std::abs(evals(i)) > std::abs(evals(j));
+                case grit::Ritz::SR: return evals(i) < evals(j);
+                case grit::Ritz::SM: return std::abs(evals(i)) < std::abs(evals(j));
+                case grit::Ritz::NONE: return evals(i) < evals(j);
             }
             return evals(i) < evals(j);
         };
@@ -146,7 +146,7 @@ namespace grit_test {
     }
 
     template<typename VectorReal>
-    VectorReal expected_ritz_values(const VectorReal &evals, grit::OptRitz ritz, Eigen::Index nev) {
+    VectorReal expected_ritz_values(const VectorReal &evals, grit::Ritz ritz, Eigen::Index nev) {
         auto idx = expected_ritz_indices(evals, ritz, nev);
 
         VectorReal expected(nev);

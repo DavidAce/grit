@@ -59,7 +59,7 @@ TEST_CASE("generalized lobpcg matches dense eigensolver") {
     solver.config.block_size                = 1;
     solver.config.max_extra_ritz_history    = 1;
     solver.config.max_ritz_residual_history = 1;
-    solver.config.ritz                      = grit::OptRitz::SR;
+    solver.config.ritz                      = grit::Ritz::SR;
     solver.config.max_iters                 = 20;
     solver.set_initial_guess(V);
     solver.run();
@@ -86,7 +86,7 @@ TEST_CASE("generalized lobpcg handles nos4 restart block search") {
     solver.config.block_size                = 2;
     solver.config.max_extra_ritz_history    = 1;
     solver.config.max_ritz_residual_history = 1;
-    solver.config.ritz                      = grit::OptRitz::SR;
+    solver.config.ritz                      = grit::Ritz::SR;
     solver.config.max_iters                 = 500;
     solver.config.tol                       = 1e-9;
     solver.config.use_b_inner_product       = false;
@@ -114,7 +114,7 @@ TEST_CASE("generalized lobpcg supports all Ritz targets on nos4") {
     auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
 
     Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> exact(A_matrix, B_matrix);
-    for(auto ritz : {grit::OptRitz::SR, grit::OptRitz::LR, grit::OptRitz::SM, grit::OptRitz::LM}) {
+    for(auto ritz : {grit::Ritz::SR, grit::Ritz::LR, grit::Ritz::SM, grit::Ritz::LM}) {
         grit::generalized::lobpcg<double> solver(A, B);
         solver.config.nev                       = 2;
         solver.config.ncv                       = A_matrix.rows();
@@ -174,7 +174,7 @@ TEST_CASE("generalized lobpcg with B as A squared targets A smallest magnitude t
     solver.config.block_size                = 1;
     solver.config.max_extra_ritz_history    = 1;
     solver.config.max_ritz_residual_history = 1;
-    solver.config.ritz                      = grit::OptRitz::LM;
+    solver.config.ritz                      = grit::Ritz::LM;
     solver.config.max_iters                 = 20;
     solver.set_initial_guess(V);
     solver.run();

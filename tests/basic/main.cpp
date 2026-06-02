@@ -22,7 +22,7 @@ TEST_CASE("identity operator converges") {
     solver.config.nev        = 1;
     solver.config.ncv        = 3;
     solver.config.block_size = 1;
-    solver.config.ritz       = grit::OptRitz::SR;
+    solver.config.ritz       = grit::Ritz::SR;
     solver.config.max_iters  = 10;
     solver.set_initial_guess(V);
     solver.run();

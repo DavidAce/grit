@@ -17,7 +17,7 @@ int main() {
     solver.config.nev              = 1;
     solver.config.ncv              = A_matrix.rows();
     solver.config.block_size       = 1;
-    solver.config.ritz             = grit::OptRitz::SR;
+    solver.config.ritz             = grit::Ritz::SR;
     solver.set_initial_guess(Matrix::Identity(A_matrix.rows(), A_matrix.rows()));
     solver.run();
 

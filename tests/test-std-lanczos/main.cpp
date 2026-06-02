@@ -53,7 +53,7 @@ TEST_CASE("standard lanczos matches dense eigensolver") {
     solver.config.nev        = 1;
     solver.config.ncv        = A_matrix.rows();
     solver.config.block_size = 1;
-    solver.config.ritz       = grit::OptRitz::SR;
+    solver.config.ritz       = grit::Ritz::SR;
     solver.config.max_iters  = 20;
     solver.set_initial_guess(V);
     solver.run();
@@ -75,7 +75,7 @@ TEST_CASE("standard lanczos handles nos4 restart block search") {
     solver.config.nev        = 2;
     solver.config.ncv        = 20;
     solver.config.block_size = 2;
-    solver.config.ritz       = grit::OptRitz::SR;
+    solver.config.ritz       = grit::Ritz::SR;
     solver.config.max_iters  = 80;
     solver.config.tol        = 1e-9;
     solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 51));
@@ -99,7 +99,7 @@ TEST_CASE("standard lanczos supports all Ritz targets on nos4") {
     auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
 
     Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
-    for(auto ritz : {grit::OptRitz::SR, grit::OptRitz::LR, grit::OptRitz::SM, grit::OptRitz::LM}) {
+    for(auto ritz : {grit::Ritz::SR, grit::Ritz::LR, grit::Ritz::SM, grit::Ritz::LM}) {
         grit::standard::lanczos<double> solver(A);
         solver.config.nev        = 2;
         solver.config.ncv        = A_matrix.rows();

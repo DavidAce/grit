@@ -30,7 +30,7 @@ namespace bench_standard {
         int           auto_cheap_probe_interval     = 5;     /*!< JD steps before AUTO forces a cheap-Olsen probe. */
         double        auto_cheap_probe_factor = 1.0; /*!< Cheap probe must improve the Ritz value by this factor times max(absolute rnorm^2, roundoff scale). */
         unsigned int  seed                    = 0;
-        grit::OptRitz ritz                    = grit::OptRitz::SR;
+        grit::Ritz ritz                    = grit::Ritz::SR;
         spdlog::level::level_enum log_level   = spdlog::level::warn;
         ResidualCorrection        residual_correction          = ResidualCorrection::NONE;
         bool                      use_refined_rayleigh_ritz    = false;

@@ -53,7 +53,7 @@ namespace grit::form {
             bool         use_refined_rayleigh_ritz               = false; /*!< Use refined Rayleigh-Ritz extraction. */
             bool         use_rayleigh_quotients_instead_of_evals = false; /*!< Replace projected eigenvalues with Rayleigh quotient estimates. */
             bool         use_relative_rnorm_tolerance            = false; /*!< Interpret tol as a derived relative residual-norm tolerance. */
-            OptRitz      ritz                                    = OptRitz::SR;
+            Ritz      ritz                                    = Ritz::SR;
             RealScalar   tol                  = eps * 10000; /*!< Absolute residual-norm convergence tolerance, or relative residual tolerance when enabled. */
             RealScalar   tol_rnorm_relative   = 0;           /*!< Relative-to-initial absolute residual-norm convergence tolerance; zero disables it. */
             Eigen::Index max_iters            = 100l;        /*!< Maximum outer solver iterations; negative means unlimited. */
@@ -140,7 +140,7 @@ namespace grit::form {
             Eigen::Index              saturation_count_max    = 10;
             std::vector<std::string>  stopMessage             = {};
             StopReason                stopReason              = StopReason::none;
-            OptRitz                   ritz_internal           = OptRitz::NONE;
+            Ritz                   ritz_internal           = Ritz::NONE;
         };
 
         struct AutoResidualCorrectionState {
@@ -251,7 +251,7 @@ namespace grit::form {
         MatrixType MultB(const Eigen::Ref<const MatrixType> &X) requires(form_ == grit::Form::GENERALIZED);
         MatrixType MultB_inner(const Eigen::Ref<const MatrixType> &X) requires(form_ == grit::Form::GENERALIZED);
 
-        std::vector<Eigen::Index> get_ritz_indices(OptRitz ritz, Eigen::Index offset, Eigen::Index num, const VectorReal &evals) const;
+        std::vector<Eigen::Index> get_ritz_indices(Ritz ritz, Eigen::Index offset, Eigen::Index num, const VectorReal &evals) const;
 
         void         init();
         virtual void build() = 0;

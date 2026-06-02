@@ -7,7 +7,7 @@
 namespace grit {
     enum class Form { STANDARD, GENERALIZED };
 
-    enum class OptRitz { NONE, LR, LM, SR, SM };
+    enum class Ritz { NONE, LR, LM, SR, SM };
 
     enum class ResidualCorrectionType { NONE, CHEAP_OLSEN, FULL_OLSEN, JACOBI_DAVIDSON, AUTO };
 
@@ -44,13 +44,13 @@ namespace grit {
         return (static_cast<U>(target) & static_cast<U>(check)) == static_cast<U>(check);
     }
 
-    inline std::string_view enum2sv(OptRitz ritz) {
+    inline std::string_view enum2sv(Ritz ritz) {
         switch(ritz) {
-            case OptRitz::NONE: return "NONE";
-            case OptRitz::LR: return "LR";
-            case OptRitz::LM: return "LM";
-            case OptRitz::SR: return "SR";
-            case OptRitz::SM: return "SM";
+            case Ritz::NONE: return "NONE";
+            case Ritz::LR: return "LR";
+            case Ritz::LM: return "LM";
+            case Ritz::SR: return "SR";
+            case Ritz::SM: return "SM";
         }
         return "NONE";
     }

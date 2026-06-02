@@ -26,13 +26,13 @@ namespace bench_standard {
             return values;
         }
 
-        grit::OptRitz parse_ritz(std::string text) {
+        grit::Ritz parse_ritz(std::string text) {
             text = lower_copy(trim_copy(std::move(text)));
-            if(text == "none") return grit::OptRitz::NONE;
-            if(text == "lr") return grit::OptRitz::LR;
-            if(text == "lm") return grit::OptRitz::LM;
-            if(text == "sr") return grit::OptRitz::SR;
-            if(text == "sm") return grit::OptRitz::SM;
+            if(text == "none") return grit::Ritz::NONE;
+            if(text == "lr") return grit::Ritz::LR;
+            if(text == "lm") return grit::Ritz::LM;
+            if(text == "sr") return grit::Ritz::SR;
+            if(text == "sm") return grit::Ritz::SM;
             throw std::runtime_error(std::format("--ritz has invalid value '{}'", text));
         }
 
@@ -166,7 +166,7 @@ namespace bench_standard {
         const auto &inner_iter_values          = cli.inner_max_iters;
         const auto &tol_values                 = cli.tol;
         const auto &inner_tol_values           = cli.inner_tol;
-        const auto  ritz_values                = parse_list_as<grit::OptRitz>(cli.ritz, "--ritz", [](std::string item) { return parse_ritz(std::move(item)); });
+        const auto  ritz_values                = parse_list_as<grit::Ritz>(cli.ritz, "--ritz", [](std::string item) { return parse_ritz(std::move(item)); });
         const auto  residual_correction_values = parse_list_as<ResidualCorrection>(cli.residual_correction, "--residual-correction",
                                                                                    [](std::string item) { return parse_residual_correction(std::move(item)); });
         const auto &refined_rayleigh_ritz_values    = cli.use_refined_rayleigh_ritz;

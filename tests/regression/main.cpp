@@ -118,7 +118,7 @@ namespace {
         solver.config.nev                           = 1;
         solver.config.ncv                           = ncv;
         solver.config.block_size                    = 1;
-        solver.config.ritz                          = grit::OptRitz::SR;
+        solver.config.ritz                          = grit::Ritz::SR;
         solver.config.max_iters                     = -1;
         solver.config.inner_max_iters               = 2000;
         solver.config.tol                           = 1e-12;

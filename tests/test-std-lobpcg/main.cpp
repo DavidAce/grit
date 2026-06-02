@@ -55,7 +55,7 @@ TEST_CASE("standard lobpcg matches dense eigensolver") {
     solver.config.block_size                = 1;
     solver.config.max_extra_ritz_history    = 1;
     solver.config.max_ritz_residual_history = 1;
-    solver.config.ritz                      = grit::OptRitz::SR;
+    solver.config.ritz                      = grit::Ritz::SR;
     solver.config.max_iters                 = 20;
     solver.set_initial_guess(V);
     solver.run();
@@ -79,7 +79,7 @@ TEST_CASE("standard lobpcg handles nos4 restart block search") {
     solver.config.block_size                = 2;
     solver.config.max_extra_ritz_history    = 1;
     solver.config.max_ritz_residual_history = 1;
-    solver.config.ritz                      = grit::OptRitz::SR;
+    solver.config.ritz                      = grit::Ritz::SR;
     solver.config.max_iters                 = 500;
     solver.config.tol                       = 1e-9;
     solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 91));
@@ -103,7 +103,7 @@ TEST_CASE("standard lobpcg supports all Ritz targets on nos4") {
     auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
 
     Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
-    for(auto ritz : {grit::OptRitz::SR, grit::OptRitz::LR, grit::OptRitz::SM, grit::OptRitz::LM}) {
+    for(auto ritz : {grit::Ritz::SR, grit::Ritz::LR, grit::Ritz::SM, grit::Ritz::LM}) {
         grit::standard::lobpcg<double> solver(A);
         solver.config.nev                       = 2;
         solver.config.ncv                       = A_matrix.rows();

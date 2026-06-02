@@ -4,22 +4,22 @@
 
 namespace grit::form {
     template<typename Scalar, grit::Form form_>
-    std::vector<Eigen::Index> base<Scalar, form_>::get_ritz_indices(OptRitz ritz, Eigen::Index offset, Eigen::Index num, const VectorReal &evals) const {
+    std::vector<Eigen::Index> base<Scalar, form_>::get_ritz_indices(Ritz ritz, Eigen::Index offset, Eigen::Index num, const VectorReal &evals) const {
         std::vector<Eigen::Index> indices;
         switch(ritz) {
-            case OptRitz::SR: indices = getIndices(evals, offset, num, std::less<RealScalar>()); break;
-            case OptRitz::LR: indices = getIndices(evals, offset, num, std::greater<RealScalar>()); break;
-            case OptRitz::SM: {
+            case Ritz::SR: indices = getIndices(evals, offset, num, std::less<RealScalar>()); break;
+            case Ritz::LR: indices = getIndices(evals, offset, num, std::greater<RealScalar>()); break;
+            case Ritz::SM: {
                 VectorReal abs_evals = evals.cwiseAbs();
                 indices              = getIndices(abs_evals, offset, num, std::less<RealScalar>());
                 break;
             }
-            case OptRitz::LM: {
+            case Ritz::LM: {
                 VectorReal abs_evals = evals.cwiseAbs();
                 indices              = getIndices(abs_evals, offset, num, std::greater<RealScalar>());
                 break;
             }
-            case OptRitz::NONE: indices = getIndices(evals, offset, num, std::less<RealScalar>()); break;
+            case Ritz::NONE: indices = getIndices(evals, offset, num, std::less<RealScalar>()); break;
         }
         return indices;
     }
