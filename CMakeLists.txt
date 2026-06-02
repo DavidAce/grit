@@ -60,6 +60,7 @@ if(GRIT_PUBLIC_ARCH_OPTIONS)
     target_compile_options(grit PUBLIC $<$<COMPILE_LANGUAGE:CXX>:${GRIT_PUBLIC_ARCH_OPTIONS}>)
 endif()
 grit_apply_scalar_config(grit)
+target_link_libraries(grit PRIVATE grit-config)
 target_link_libraries(grit PUBLIC ${GRIT_PUBLIC_DEPENDENCIES})
 target_enable_static_libgcc(grit)
 
