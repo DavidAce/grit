@@ -27,7 +27,7 @@ jobs:
         include:
           - { compiler: gcc, compiler_c: gcc-14, compiler_cxx: g++-14, manager: cmake, preset: github-actions-cmake, coverage: true, coverage_arg: -DCOMPILER_ENABLE_COVERAGE=TRUE }
           - { compiler: gcc, compiler_c: gcc-14, compiler_cxx: g++-14, manager: conan, preset: github-actions-conan, coverage: false, coverage_arg: -DCOMPILER_ENABLE_COVERAGE=FALSE }
-          - { compiler: clang, compiler_c: clang-18, compiler_cxx: clang++-18, manager: conan, preset: github-actions-conan-clang, coverage: false, coverage_arg: -DCOMPILER_ENABLE_COVERAGE=FALSE }
+          - { compiler: clang, compiler_c: clang-22, compiler_cxx: clang++-22, manager: conan, preset: github-actions-conan-clang, coverage: false, coverage_arg: -DCOMPILER_ENABLE_COVERAGE=FALSE }
 
     steps:
       - uses: actions/checkout@v6
@@ -54,12 +54,21 @@ jobs:
           echo "CC=${{ matrix.compiler_c }}" >> "$GITHUB_ENV"
           echo "CXX=${{ matrix.compiler_cxx }}" >> "$GITHUB_ENV"
 
+      - name: Install Clang
+        if: matrix.compiler == 'clang'
+        id: setup-clang
+        uses: egor-tensin/setup-clang@v2
+        with:
+          version: 22
+          platform: x64
+          cc: 0
+
       - name: Setup Clang
         if: matrix.compiler == 'clang'
         run: |
-          sudo apt-get install clang-18 libomp-18-dev -y
-          echo "CC=${{ matrix.compiler_c }}" >> "$GITHUB_ENV"
-          echo "CXX=${{ matrix.compiler_cxx }}" >> "$GITHUB_ENV"
+          sudo apt-get install libomp-22-dev -y
+          echo "CC=${{ steps.setup-clang.outputs.clang }}" >> "$GITHUB_ENV"
+          echo "CXX=${{ steps.setup-clang.outputs.clangxx }}" >> "$GITHUB_ENV"
 
       - name: Setup build tools
         run: sudo apt-get install ccache ninja-build mold -y
