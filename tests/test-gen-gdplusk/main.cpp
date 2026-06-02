@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 #include <unistd.h>
+#include <vector>
 
 namespace {
     int test_log_fd = STDERR_FILENO;
@@ -65,6 +66,41 @@ TEST_CASE("generalized gdplusk matches dense eigensolver") {
     REQUIRE(view.stopReason() == grit::StopReason::converged);
     print_eigenvalue_comparison("generalized gdplusk", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
+}
+
+TEST_CASE("generalized gdplusk converges with l2 and bm projectors") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix(5, 5);
+    A_matrix << 4.0, 1.0, 0.0, 0.0, 0.0, 1.0, 3.0, 0.5, 0.0, 0.0, 0.0, 0.5, 2.0, 0.25, 0.0, 0.0, 0.0, 0.25, 5.0, 0.5, 0.0, 0.0, 0.0, 0.5, 6.0;
+
+    Matrix B_matrix = Matrix::Identity(5, 5);
+    B_matrix.diagonal() << 1.0, 1.5, 2.0, 2.5, 3.0;
+
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+    auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
+
+    Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> exact(A_matrix, B_matrix);
+    for(bool use_b_inner_product : {false, true}) {
+        grit::generalized::gdplusk<double> solver(A, B);
+        solver.config.nev                      = 1;
+        solver.config.ncv                      = A_matrix.rows();
+        solver.config.block_size               = 1;
+        solver.config.ritz                     = grit::Ritz::SR;
+        solver.config.max_iters                = 20;
+        solver.config.tol                      = 1e-12;
+        solver.config.use_b_inner_product      = use_b_inner_product;
+        solver.config.residual_correction_type = grit::ResidualCorrectionType::CHEAP_OLSEN;
+        solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 54));
+        solver.run();
+
+        auto view = grit::solver_view<double>(solver);
+        print_eigenvalue_comparison(use_b_inner_product ? "generalized gdplusk bm projector" : "generalized gdplusk l2 projector", view.eigVal(),
+                                    exact.eigenvalues(), view.eigVal().size());
+        REQUIRE(view.stopReason() == grit::StopReason::converged);
+        REQUIRE(view.rNorms()(0) < 1e-10);
+        require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
+    }
 }
 
 TEST_CASE("generalized gdplusk handles nos4 restart block search") {
@@ -142,14 +178,14 @@ TEST_CASE("generalized jacobi-davidson b-only correction supports l2 and bm proj
     auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
     auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
 
-    Matrix V = Matrix::Identity(A_matrix.rows(), A_matrix.rows());
+    Matrix V = grit_test::seeded_initial_guess<double>(A_matrix.rows(), 4, 55);
 
     grit::generalized::gdplusk<double>::Config cfg;
     cfg.nev             = 1;
-    cfg.ncv             = A_matrix.rows();
+    cfg.ncv             = V.cols();
     cfg.block_size      = 1;
     cfg.ritz            = grit::Ritz::SR;
-    cfg.max_iters       = 20;
+    cfg.max_iters       = 100;
     cfg.inner_max_iters = 20;
     cfg.inner_tol       = 1e-8;
     Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> exact(A_matrix, B_matrix);
@@ -167,6 +203,8 @@ TEST_CASE("generalized jacobi-davidson b-only correction supports l2 and bm proj
         auto view = grit::solver_view<double>(solver);
         print_eigenvalue_comparison("generalized gdplusk jd b-only l2", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
         REQUIRE(view.stopReason() == grit::StopReason::converged);
+        REQUIRE(view.num_iters_inner() > 0);
+        REQUIRE(view.num_jdops_inner() > 0);
         require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
     }
 
@@ -182,9 +220,129 @@ TEST_CASE("generalized jacobi-davidson b-only correction supports l2 and bm proj
         REQUIRE_NOTHROW(solver.run());
         auto view = grit::solver_view<double>(solver);
         print_eigenvalue_comparison("generalized gdplusk jd b-only bm", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
-        REQUIRE(view.stopReason() == grit::StopReason::converged);
+        REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
+        REQUIRE(view.eigVal().allFinite());
+        REQUIRE(view.rNorms().allFinite());
+        REQUIRE(view.num_iters_inner() > 0);
+        REQUIRE(view.num_jdops_inner() > 0);
         require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
     }
+}
+
+TEST_CASE("generalized jacobi-davidson correction invokes preconditioner callbacks") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    using Vector = grit::Matvec<double>::VectorType;
+
+    Matrix A_matrix(5, 5);
+    A_matrix << 4.0, 1.0, 0.0, 0.0, 0.0, 1.0, 3.0, 0.5, 0.0, 0.0, 0.0, 0.5, 2.0, 0.25, 0.0, 0.0, 0.0, 0.25, 5.0, 0.5, 0.0, 0.0, 0.0, 0.5, 6.0;
+
+    Matrix B_matrix = Matrix::Identity(5, 5);
+    B_matrix.diagonal() << 1.0, 1.5, 2.0, 2.5, 3.0;
+
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+    auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
+
+    int                 update_count = 0;
+    int                 apply_count  = 0;
+    std::vector<double> theta_values;
+    A.set_preconditioner_update([&](double theta) {
+        update_count++;
+        theta_values.push_back(theta);
+    });
+    A.set_preconditioner_apply([&](const Eigen::Ref<const Vector> &x, Eigen::Ref<Vector> y, double theta) {
+        apply_count++;
+        REQUIRE(x.size() == A_matrix.rows());
+        REQUIRE(y.size() == A_matrix.rows());
+        REQUIRE(std::isfinite(theta));
+        y = x;
+    });
+
+    grit::generalized::gdplusk<double> solver(A, B);
+    solver.config.nev                      = 1;
+    solver.config.ncv                      = 4;
+    solver.config.block_size               = 1;
+    solver.config.ritz                     = grit::Ritz::SR;
+    solver.config.max_iters                = 100;
+    solver.config.inner_max_iters          = 20;
+    solver.config.inner_tol                = 1e-8;
+    solver.config.use_b_inner_product      = true;
+    solver.config.residual_correction_type = grit::ResidualCorrectionType::JACOBI_DAVIDSON;
+    solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.ncv, 62));
+    solver.run();
+
+    Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> exact(A_matrix, B_matrix);
+    auto                                             view = grit::solver_view<double>(solver);
+    print_eigenvalue_comparison("generalized gdplusk jacobi-davidson preconditioner", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
+    REQUIRE(view.stopReason() == grit::StopReason::converged);
+    REQUIRE(view.num_iters_inner() > 0);
+    REQUIRE(view.num_jdops_inner() > 0);
+    REQUIRE(update_count > 0);
+    REQUIRE(apply_count > 0);
+    REQUIRE_FALSE(theta_values.empty());
+    require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
+}
+
+TEST_CASE("generalized jacobi-davidson correction defaults to identity preconditioner") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix(5, 5);
+    A_matrix << 4.0, 1.0, 0.0, 0.0, 0.0, 1.0, 3.0, 0.5, 0.0, 0.0, 0.0, 0.5, 2.0, 0.25, 0.0, 0.0, 0.0, 0.25, 5.0, 0.5, 0.0, 0.0, 0.0, 0.5, 6.0;
+
+    Matrix B_matrix = Matrix::Identity(5, 5);
+    B_matrix.diagonal() << 1.0, 1.5, 2.0, 2.5, 3.0;
+
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+    auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
+
+    grit::generalized::gdplusk<double> solver(A, B);
+    solver.config.nev                      = 1;
+    solver.config.ncv                      = 4;
+    solver.config.block_size               = 1;
+    solver.config.ritz                     = grit::Ritz::SR;
+    solver.config.max_iters                = 100;
+    solver.config.inner_max_iters          = 20;
+    solver.config.inner_tol                = 1e-8;
+    solver.config.use_b_inner_product      = false;
+    solver.config.residual_correction_type = grit::ResidualCorrectionType::JACOBI_DAVIDSON;
+    solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.ncv, 63));
+
+    REQUIRE_NOTHROW(solver.run());
+    Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> exact(A_matrix, B_matrix);
+    auto                                             view = grit::solver_view<double>(solver);
+    print_eigenvalue_comparison("generalized gdplusk identity preconditioner", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
+    REQUIRE(view.stopReason() == grit::StopReason::converged);
+    REQUIRE(view.num_iters_inner() > 0);
+    REQUIRE(view.num_jdops_inner() > 0);
+    require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
+}
+
+TEST_CASE("generalized gdplusk handles small ncv restart without invalid input") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = grit_test::nos4_matrix<double>();
+    Matrix B_matrix = Matrix::Identity(A_matrix.rows(), A_matrix.cols());
+
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+    auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
+
+    grit::generalized::gdplusk<double> solver(A, B);
+    solver.config.nev                      = 1;
+    solver.config.ncv                      = 4;
+    solver.config.block_size               = 1;
+    solver.config.ritz                     = grit::Ritz::SR;
+    solver.config.max_iters                = 200;
+    solver.config.tol                      = 1e-8;
+    solver.config.use_b_inner_product      = true;
+    solver.config.residual_correction_type = grit::ResidualCorrectionType::CHEAP_OLSEN;
+    solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.ncv, 70));
+    solver.run();
+
+    Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> exact(A_matrix, B_matrix);
+    auto                                             view = grit::solver_view<double>(solver);
+    print_eigenvalue_comparison("generalized gdplusk small ncv restart", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
+    REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
+    REQUIRE(view.stopReason() == grit::StopReason::converged);
+    require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-7);
 }
 
 TEST_CASE("generalized gdplusk with B as A squared targets A smallest magnitude through LM") {

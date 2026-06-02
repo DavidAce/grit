@@ -64,6 +64,32 @@ TEST_CASE("standard gdplusk matches dense eigensolver") {
     require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
 }
 
+TEST_CASE("standard gdplusk owns temporary initial guess") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix(5, 5);
+    A_matrix << 4.0, 1.0, 0.0, 0.0, 0.0, 1.0, 3.0, 0.5, 0.0, 0.0, 0.0, 0.5, 2.0, 0.25, 0.0, 0.0, 0.0, 0.25, 5.0, 0.5, 0.0, 0.0, 0.0, 0.5, 6.0;
+
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev                      = 1;
+    solver.config.ncv                      = 3;
+    solver.config.block_size               = 1;
+    solver.config.ritz                     = grit::Ritz::SR;
+    solver.config.max_iters                = 100;
+    solver.config.tol                      = 1e-12;
+    solver.config.residual_correction_type = grit::ResidualCorrectionType::CHEAP_OLSEN;
+    solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.ncv, 10));
+    solver.run();
+
+    Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
+    auto                                  view = grit::solver_view<double>(solver);
+    print_eigenvalue_comparison("standard gdplusk temporary initial guess", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
+    REQUIRE(view.stopReason() == grit::StopReason::converged);
+    require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
+}
+
 TEST_CASE("standard gdplusk handles nos4 restart block search") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
@@ -90,6 +116,31 @@ TEST_CASE("standard gdplusk handles nos4 restart block search") {
     REQUIRE(std::abs(exact.eigenvalues()(exact.eigenvalues().size() - 1) / exact.eigenvalues()(0) - grit_test::nos4_condition) < 1e-8);
     print_eigenvalue_comparison("standard gdplusk nos4 restart", view.eigVal(), expected, view.eigVal().size());
     require_close(view.eigVal(), expected, 1e-7);
+}
+
+TEST_CASE("standard gdplusk handles small ncv restart without invalid input") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = grit_test::nos4_matrix<double>();
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev                      = 1;
+    solver.config.ncv                      = 4;
+    solver.config.block_size               = 1;
+    solver.config.ritz                     = grit::Ritz::SR;
+    solver.config.max_iters                = 200;
+    solver.config.tol                      = 1e-8;
+    solver.config.residual_correction_type = grit::ResidualCorrectionType::CHEAP_OLSEN;
+    solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.ncv, 12));
+    solver.run();
+
+    Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
+    auto                                  view = grit::solver_view<double>(solver);
+    print_eigenvalue_comparison("standard gdplusk small ncv restart", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
+    REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
+    REQUIRE(view.eigVal().allFinite());
+    REQUIRE(view.rNorms().allFinite());
 }
 
 TEST_CASE("standard gdplusk supports all Ritz targets on nos4") {
@@ -311,6 +362,63 @@ TEST_CASE("standard auto residual correction does not start Jacobi-Davidson unle
 
     REQUIRE(solver.auto_residual_correction.active == Correction::CHEAP_OLSEN);
     REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_iters.empty());
+}
+
+TEST_CASE("standard auto residual correction switches to Jacobi-Davidson when residuals are small") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = Matrix::Identity(4, 4);
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev                           = 1;
+    solver.config.ncv                           = 4;
+    solver.config.block_size                    = 1;
+    solver.config.residual_correction_type      = grit::ResidualCorrectionType::AUTO;
+    solver.config.auto_min_dwell_iters          = 10;
+    solver.config.auto_jd_start_rnorm_threshold = 1e-4;
+    solver.auto_residual_correction.active      = grit::ResidualCorrectionType::CHEAP_OLSEN;
+    solver.auto_residual_correction.step_method = grit::ResidualCorrectionType::CHEAP_OLSEN;
+    solver.auto_residual_correction.dwell       = 0;
+    solver.status.iter                          = 7;
+    solver.status.eigVal                        = grit::form::base<double>::VectorReal::Constant(1, 1.0);
+    solver.status.rNorms                        = grit::form::base<double>::VectorReal::Constant(1, 1.0e-6);
+
+    solver.update_auto_residual_correction_state();
+
+    REQUIRE(solver.auto_residual_correction.active == grit::ResidualCorrectionType::JACOBI_DAVIDSON);
+    REQUIRE(solver.auto_residual_correction.dwell == 0);
+    REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_iters.size() == 1);
+    REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_iters.front() == solver.status.iter);
+}
+
+TEST_CASE("standard auto residual correction returns to cheap Olsen after productive probe") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = Matrix::Identity(4, 4);
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev                                    = 1;
+    solver.config.ncv                                    = 4;
+    solver.config.block_size                             = 1;
+    solver.config.residual_correction_type               = grit::ResidualCorrectionType::AUTO;
+    solver.config.auto_cheap_probe_factor                = 1.0;
+    solver.auto_residual_correction.active               = grit::ResidualCorrectionType::JACOBI_DAVIDSON;
+    solver.auto_residual_correction.step_method          = grit::ResidualCorrectionType::CHEAP_OLSEN;
+    solver.auto_residual_correction.jd_steps_since_probe = 3;
+    solver.status.iter                                   = 11;
+    solver.status.oldVal                                 = grit::form::base<double>::VectorReal::Constant(1, 2.0);
+    solver.status.eigVal                                 = grit::form::base<double>::VectorReal::Constant(1, 1.9);
+    solver.status.rNorms                                 = grit::form::base<double>::VectorReal::Constant(1, 1.0e-6);
+
+    solver.update_auto_residual_correction_state();
+
+    REQUIRE(solver.auto_residual_correction.active == grit::ResidualCorrectionType::CHEAP_OLSEN);
+    REQUIRE(solver.auto_residual_correction.dwell == 0);
+    REQUIRE(solver.auto_residual_correction.jd_steps_since_probe == 0);
+    REQUIRE(solver.auto_residual_correction.jd_to_cheap_switch_iters.size() == 1);
+    REQUIRE(solver.auto_residual_correction.jd_to_cheap_switch_iters.front() == solver.status.iter);
 }
 
 TEST_CASE("standard auto eigenvalue saturation is relative to average eigenvalue magnitude") {
