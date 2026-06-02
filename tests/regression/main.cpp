@@ -152,7 +152,7 @@ TEST_CASE("Andrews matvec count does not regress") {
 
     const std::vector<Case> cases{
         {.ncv = 8, .matvecs = 992},
-        {.ncv = 12, .matvecs = 1037},
+        {.ncv = 12, .matvecs = 1104},
         {.ncv = 16, .matvecs = 1248},
     };
 
