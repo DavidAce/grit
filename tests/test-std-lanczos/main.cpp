@@ -92,6 +92,31 @@ TEST_CASE("standard lanczos handles nos4 restart block search") {
     require_close(view.eigVal(), expected, 1e-7);
 }
 
+TEST_CASE("standard lanczos supports retained restart basis on nos4") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = grit_test::nos4_matrix<double>();
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::lanczos<double> solver(A);
+    solver.config.nev             = 2;
+    solver.config.ncv             = 20;
+    solver.config.block_size      = 2;
+    solver.config.maxRetainBlocks = 3;
+    solver.config.ritz            = grit::Ritz::SR;
+    solver.config.max_iters       = 80;
+    solver.config.tol             = 1e-9;
+    solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 151));
+    solver.run();
+
+    Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
+    auto                                  expected = grit_test::expected_ritz_values(exact.eigenvalues(), solver.config.ritz, solver.config.nev);
+    auto                                  view     = grit::solver_view<double>(solver);
+    REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
+    print_eigenvalue_comparison("standard lanczos nos4 retained restart", view.eigVal(), expected, view.eigVal().size());
+    require_close(view.eigVal(), expected, 1e-3);
+}
+
 TEST_CASE("standard lanczos supports all Ritz targets on nos4") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
@@ -130,6 +155,21 @@ TEST_CASE("standard lanczos rejects nev larger than block_size") {
     solver.config.ncv        = 20;
 
     REQUIRE_THROWS_WITH(solver.run(), Catch::Matchers::Contains("lanczos config error: nev must not exceed block_size"));
+}
+
+TEST_CASE("standard lanczos rejects maxRetainBlocks larger than number of blocks") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = grit_test::nos4_matrix<double>();
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::lanczos<double> solver(A);
+    solver.config.nev             = 2;
+    solver.config.block_size      = 2;
+    solver.config.ncv             = 20;
+    solver.config.maxRetainBlocks = 11;
+
+    REQUIRE_THROWS_WITH(solver.run(), Catch::Matchers::Contains("lanczos config error: maxRetainBlocks must not exceed ncv / block_size"));
 }
 
 int main(int argc, char **argv) {

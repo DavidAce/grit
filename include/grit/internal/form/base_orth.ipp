@@ -191,7 +191,10 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::block_l2_orthogonalize(const MatrixType &X, const MatrixType &AX, MatrixType &Y, MatrixType &AY, OrthMeta &m) {
+    void base<Scalar, form_>::block_l2_orthogonalize(const MatrixType &X, const MatrixType &AX, MatrixType &Y, MatrixType &AY, OrthMeta &m,
+                                                     RefreshMult refresh_mult) {
+        auto           token_orthogonalize = status.time_orthogonalize.tic_token();
+        constexpr auto inv_sqrt_2          = std::numbers::sqrt2_v<RealScalar> / 2;
         if(X.cols() == 0 || Y.cols() == 0) {
             AY.resizeLike(Y);
             return;
@@ -204,36 +207,62 @@ namespace grit::form {
 
         if(std::isnan(m.orthTol)) m.orthTol = normTol * static_cast<RealScalar>(Y.cols());
 
-        m.Gram      = X.adjoint() * Y;
-        m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
-        m.orthError = m.Gram.size() > 0 ? m.Gram.norm() : 0;
+        {
+            auto token_orth_project = status.time_orth_project.tic_token();
+            m.Gram                  = X.adjoint() * Y;
+            m.Rdiag                 = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
+            m.orthError             = m.Gram.size() > 0 ? m.Gram.norm() : 0;
+        }
 
-        MatrixType Gxx = X.adjoint() * X;
+        MatrixType Gxx;
+        {
+            auto token_orth_project = status.time_orth_project.tic_token();
+            Gxx                     = X.adjoint() * X;
+        }
 
-        Eigen::Index maxReps = 2;
+        VectorReal   ynorms0 = Y.colwise().norm().transpose();
         Eigen::Index rep     = 0;
-        for(rep = 0; rep < maxReps; ++rep) {
-            MatrixType W  = Gxx.ldlt().solve(m.Gram);
-            Y.noalias()  -= X * W;
+        for(rep = 0; rep < 2; ++rep) {
+            MatrixType W;
+            {
+                auto token_orth_factor = status.time_orth_factor.tic_token();
+                W                      = Gxx.ldlt().solve(m.Gram);
+            }
+            {
+                auto token_orth_update  = status.time_orth_update.tic_token();
+                Y.noalias()            -= X * W;
+            }
 
-            m.Gram      = X.adjoint() * Y;
-            m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
-            m.orthError = m.Gram.size() > 0 ? m.Gram.norm() : 0;
+            VectorReal ynorms1 = Y.colwise().norm().transpose();
+            {
+                auto token_orth_project = status.time_orth_project.tic_token();
+                m.Gram                  = X.adjoint() * Y;
+                m.Rdiag                 = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
+                m.orthError             = m.Gram.size() > 0 ? m.Gram.norm() : 0;
+            }
 
             bool orth_converged = m.orthError < m.orthTol;
-            if(orth_converged || Y.cols() == 0) break;
+            bool need_reorth    = (ynorms1.array() < inv_sqrt_2 * ynorms0.array()).any();
+            if(rep == 0 && !need_reorth) break;
+            if(orth_converged || Y.cols() == 0 || rep == 1) break;
+            ynorms0 = ynorms1;
         }
         if constexpr(settings::debug_ortho) {
             if(log && log->should_log(spdlog::level::trace))
                 log->trace("rep {} orthError after l2 orthogonalization: {:.3e} | orthTol {:.3e}", rep, m.orthError, m.orthTol);
         }
         assert_l2_orthogonal(X, Y, m);
-        AY = MultA(Y);
+        if(refresh_mult == RefreshMult::YES) {
+            auto token_orth_refresh = status.time_orth_refresh.tic_token();
+            AY                      = MultA(Y);
+        }
     }
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::block_l2_orthogonalize(const MatrixType &X, const MatrixType &AX, const MatrixType &BX, MatrixType &Y, MatrixType &AY,
-                                                     MatrixType &BY, OrthMeta &m) {
+                                                     MatrixType &BY, OrthMeta &m, RefreshMult refresh_mult) {
+        auto           token_orthogonalize = status.time_orthogonalize.tic_token();
+        constexpr auto inv_sqrt_2          = std::numbers::sqrt2_v<RealScalar> / 2;
         if(X.cols() == 0 || Y.cols() == 0) {
             AY.resizeLike(Y);
             BY.resizeLike(Y);
@@ -247,41 +276,67 @@ namespace grit::form {
         assert_allFinite(Y);
 
         if(std::isnan(m.orthTol)) m.orthTol = orthTol * static_cast<RealScalar>(Y.cols());
-        m.orthTol   = std::max(m.orthTol, orthTol * static_cast<RealScalar>(Y.cols()));
-        m.Gram      = X.adjoint() * Y;
-        m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
-        m.orthError = m.Gram.size() > 0 ? m.Gram.norm() : 0;
+        m.orthTol = std::max(m.orthTol, orthTol * static_cast<RealScalar>(Y.cols()));
+        {
+            auto token_orth_project = status.time_orth_project.tic_token();
+            m.Gram                  = X.adjoint() * Y;
+            m.Rdiag                 = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
+            m.orthError             = m.Gram.size() > 0 ? m.Gram.norm() : 0;
+        }
 
-        MatrixType Gxx = X.adjoint() * X;
+        MatrixType Gxx;
+        {
+            auto token_orth_project = status.time_orth_project.tic_token();
+            Gxx                     = X.adjoint() * X;
+        }
 
-        Eigen::Index maxReps = 2;
+        VectorReal   ynorms0 = Y.colwise().norm().transpose();
         Eigen::Index rep     = 0;
-        for(rep = 0; rep < maxReps; ++rep) {
-            MatrixType W  = Gxx.ldlt().solve(m.Gram);
-            Y.noalias()  -= X * W;
+        for(rep = 0; rep < 2; ++rep) {
+            MatrixType W;
+            {
+                auto token_orth_factor = status.time_orth_factor.tic_token();
+                W                      = Gxx.ldlt().solve(m.Gram);
+            }
+            {
+                auto token_orth_update  = status.time_orth_update.tic_token();
+                Y.noalias()            -= X * W;
+            }
 
-            m.Gram      = X.adjoint() * Y;
-            m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
-            m.orthError = m.Gram.size() > 0 ? m.Gram.norm() : 0;
+            VectorReal ynorms1 = Y.colwise().norm().transpose();
+            {
+                auto token_orth_project = status.time_orth_project.tic_token();
+                m.Gram                  = X.adjoint() * Y;
+                m.Rdiag                 = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
+                m.orthError             = m.Gram.size() > 0 ? m.Gram.norm() : 0;
+            }
 
             bool orth_converged = m.orthError < m.orthTol;
-            if(orth_converged || Y.cols() == 0) break;
+            bool need_reorth    = (ynorms1.array() < inv_sqrt_2 * ynorms0.array()).any();
+            if(rep == 0 && !need_reorth) break;
+            if(orth_converged || Y.cols() == 0 || rep == 1) break;
+            ynorms0 = ynorms1;
         }
         if(log && log->should_log(spdlog::level::trace))
             log->trace("rep {} orthError after l2 orthogonalization: {:.3e} | orthTol {:.3e}", rep, m.orthError, m.orthTol);
         assert_l2_orthogonal(X, Y, m);
 
-        AY = MultA(Y);
-        if constexpr(form_ == grit::Form::GENERALIZED)
-            BY = MultB(Y);
-        else
-            BY = Y;
+        if(refresh_mult == RefreshMult::YES) {
+            auto token_orth_refresh = status.time_orth_refresh.tic_token();
+            AY                      = MultA(Y);
+            if constexpr(form_ == grit::Form::GENERALIZED)
+                BY = MultB(Y);
+            else
+                BY = Y;
+        }
     }
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::block_bm_orthogonalize(const MatrixType &X, const MatrixType &AX, const MatrixType &BX, MatrixType &Y, MatrixType &AY,
-                                                     MatrixType &BY, OrthMeta &m) requires(form_ == grit::Form::GENERALIZED)
+                                                     MatrixType &BY, OrthMeta &m, RefreshMult refresh_mult) requires(form_ == grit::Form::GENERALIZED)
     {
+        auto token_orthogonalize = status.time_orthogonalize.tic_token();
+        constexpr RealScalar inv_sqrt_2 = static_cast<RealScalar>(0.70710678118654752440);
         if(X.cols() == 0 || Y.cols() == 0) {
             AY.resizeLike(Y);
             BY.resizeLike(Y);
@@ -304,27 +359,48 @@ namespace grit::form {
 
         bool has_refreshed_by = false;
         if(m.refresh_by || Y.size() != BY.size()) {
-            BY               = MultB(Y);
-            has_refreshed_by = true;
+            auto token_orth_refresh = status.time_orth_refresh.tic_token();
+            BY                      = MultB(Y);
+            has_refreshed_by        = true;
             if(log && log->should_log(spdlog::level::trace)) log->trace("block_bm_orthogonalize: refreshed BY");
         } else {
             assert_allFinite(BY);
         }
 
-        m.analyze_bm_orthogonality(X, BX, Y, BY);
+        {
+            auto token_orth_project = status.time_orth_project.tic_token();
+            m.analyze_bm_orthogonality(X, BX, Y, BY);
+        }
 
-        MatrixType Gyy = Y.adjoint() * BY;
-        Gyy            = (Gyy + Gyy.adjoint()).eval() * half;
-        RealScalar Eyy = (Gyy - MatrixType::Identity(Gyy.cols(), Gyy.rows())).norm();
+        MatrixType Gyy;
+        RealScalar Eyy;
+        {
+            auto token_orth_project = status.time_orth_project.tic_token();
+            Gyy                     = Y.adjoint() * BY;
+            Gyy                     = (Gyy + Gyy.adjoint()).eval() * half;
+            Eyy                     = (Gyy - MatrixType::Identity(Gyy.cols(), Gyy.rows())).norm();
+        }
 
-        MatrixType Gxx = X.adjoint() * BX;
-        Gxx            = (Gxx + Gxx.adjoint()).eval() * half;
-        RealScalar Exx = (Gxx - MatrixType::Identity(Gxx.cols(), Gxx.rows())).norm();
+        MatrixType Gxx;
+        RealScalar Exx;
+        {
+            auto token_orth_project = status.time_orth_project.tic_token();
+            Gxx                     = X.adjoint() * BX;
+            Gxx                     = (Gxx + Gxx.adjoint()).eval() * half;
+            Exx                     = (Gxx - MatrixType::Identity(Gxx.cols(), Gxx.rows())).norm();
+        }
 
         if(m.skewError > std::sqrt(m.orthTol) && !has_refreshed_by) {
-            MatrixType BY_new = MultB(Y);
-            OrthMeta   m_new  = m;
-            m_new.analyze_bm_orthogonality(X, BX, Y, BY_new);
+            MatrixType BY_new;
+            {
+                auto token_orth_refresh = status.time_orth_refresh.tic_token();
+                BY_new                  = MultB(Y);
+            }
+            OrthMeta m_new = m;
+            {
+                auto token_orth_project = status.time_orth_project.tic_token();
+                m_new.analyze_bm_orthogonality(X, BX, Y, BY_new);
+            }
             if(m_new.skewError < m.skewError) {
                 BY.swap(BY_new);
                 m                = m_new;
@@ -333,7 +409,10 @@ namespace grit::form {
         }
 
         if(std::isfinite(m.orthTol) && std::max(m.symmError, m.skewError) < m.orthTol) {
-            if(has_refreshed_by || m.refresh_by || Y.size() != AY.size()) AY = MultA(Y);
+            if(has_refreshed_by || m.refresh_by || Y.size() != AY.size()) {
+                auto token_orth_refresh = status.time_orth_refresh.tic_token();
+                AY                      = MultA(Y);
+            }
             if(log && log->should_log(spdlog::level::trace))
                 log->trace("block_bm_orthogonalize: no need: orthError {:.4e} symmError {:.4e} skewError {:.4e} Eyy {:.4e} orthTol {:.4e}", m.orthError,
                            m.symmError, m.skewError, Eyy, m.orthTol);
@@ -344,36 +423,62 @@ namespace grit::form {
         if(Exx > m.orthTol && log && log->should_log(spdlog::level::debug))
             log->debug("block_bm_orthogonalize: X is not sufficiently B-orthonormal: error {:.4e}", Exx);
 
-        Eigen::Index maxReps = 2;
-        Eigen::Index rep     = 0;
-        for(rep = 0; rep < maxReps; ++rep) {
+        VectorReal ynorms0 = VectorReal::Zero(Y.cols());
+        for(Eigen::Index j = 0; j < Y.cols(); ++j) {
+            RealScalar ynorm_sq = std::real(Y.col(j).dot(BY.col(j)));
+            ynorms0(j)          = std::sqrt(std::max<RealScalar>(0, ynorm_sq));
+        }
+
+        Eigen::Index rep = 0;
+        for(rep = 0; rep < 2; ++rep) {
             if(m.mask.size() != Y.cols()) m.mask = VectorIdxT::Ones(Y.cols());
             if(m.proj_sum_a.size() != Y.cols()) m.proj_sum_a = VectorReal::Zero(Y.cols());
             if(m.proj_sum_b.size() != Y.cols()) m.proj_sum_b = VectorReal::Zero(Y.cols());
             if(m.scale_log.size() != Y.cols()) m.scale_log = VectorReal::Zero(Y.cols());
 
-            MatrixType W = Gxx.ldlt().solve(m.Gram_symm);
-
-            Y.noalias()  -= X * W;
-            BY.noalias() -= BX * W;
-
-            m.analyze_bm_orthogonality(X, BX, Y, BY);
-            if(rep >= 1) {
-                bool orth_converged = std::max(m.symmError, m.skewError) < m.orthTol;
-                if(orth_converged) break;
+            MatrixType W;
+            {
+                auto token_orth_factor = status.time_orth_factor.tic_token();
+                W                      = Gxx.ldlt().solve(m.Gram_symm);
             }
+
+            {
+                auto token_orth_update  = status.time_orth_update.tic_token();
+                Y.noalias()            -= X * W;
+                BY.noalias()           -= BX * W;
+            }
+
+            VectorReal ynorms1 = VectorReal::Zero(Y.cols());
+            for(Eigen::Index j = 0; j < Y.cols(); ++j) {
+                RealScalar ynorm_sq = std::real(Y.col(j).dot(BY.col(j)));
+                ynorms1(j)          = std::sqrt(std::max<RealScalar>(0, ynorm_sq));
+            }
+
+            {
+                auto token_orth_project = status.time_orth_project.tic_token();
+                m.analyze_bm_orthogonality(X, BX, Y, BY);
+            }
+            bool orth_converged = std::max(m.symmError, m.skewError) < m.orthTol;
+            bool need_reorth    = (ynorms1.array() < inv_sqrt_2 * ynorms0.array()).any();
+            if(rep == 0 && !need_reorth) break;
+            if(orth_converged || rep == 1) break;
+            ynorms0 = ynorms1;
         }
         if(log && log->should_log(spdlog::level::trace))
             log->trace("rep {} orthError after bm orthogonalization: {:.3e} | symm {:.3e} | skew {:.3e} | orthTol {:.3e}", rep, m.orthError, m.symmError,
                        m.skewError, m.orthTol);
 
-        AY = MultA(Y);
+        if(refresh_mult == RefreshMult::YES) {
+            auto token_orth_refresh = status.time_orth_refresh.tic_token();
+            AY                      = MultA(Y);
+        }
         assert_bm_orthogonal(X, BY, m);
         assert_bm_orthogonal(BX, Y, m);
     }
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::block_l2_orthonormalize(MatrixType &Y, MatrixType &AY, OrthMeta &m) {
+        auto token_orthonormalize = status.time_orthonormalize.tic_token();
         if(Y.cols() == 0) {
             AY.resizeLike(Y);
             return;
@@ -415,15 +520,21 @@ namespace grit::form {
                 yj.setZero();
             }
         }
-        handle_masked_columns();
+        {
+            auto token_orth_mask = status.time_orth_mask.tic_token();
+            handle_masked_columns();
+        }
         if(Y.cols() == 0) {
             AY.resizeLike(Y);
             return;
         }
 
-        hhqr.compute(Y);
-        Y       = hhqr.householderQ().setLength(Y.cols()) * MatrixType::Identity(Y.rows(), Y.cols());
-        m.Rdiag = hhqr.matrixQR().diagonal().cwiseAbs().topRows(Y.cols());
+        {
+            auto token_orth_factor = status.time_orth_factor.tic_token();
+            hhqr.compute(Y);
+            Y       = hhqr.householderQ().setLength(Y.cols()) * MatrixType::Identity(Y.rows(), Y.cols());
+            m.Rdiag = hhqr.matrixQR().diagonal().cwiseAbs().topRows(Y.cols());
+        }
 
         for(Eigen::Index j = 0; j < Y.cols(); ++j) {
             auto       yj   = Y.col(j);
@@ -434,9 +545,15 @@ namespace grit::form {
                 yj.setZero();
             }
         }
-        handle_masked_columns();
+        {
+            auto token_orth_mask = status.time_orth_mask.tic_token();
+            handle_masked_columns();
+        }
 
-        AY = MultA(Y);
+        {
+            auto token_orth_refresh = status.time_orth_refresh.tic_token();
+            AY                      = MultA(Y);
+        }
         m.analyze_l2_orthonormality(Y);
         assert_l2_orthonormal(Y, m);
     }
@@ -449,15 +566,19 @@ namespace grit::form {
             BY.resizeLike(Y);
             return;
         }
-        if constexpr(form_ == grit::Form::GENERALIZED)
-            BY = MultB(Y);
-        else
-            BY = Y;
+        {
+            auto token_orth_refresh = status.time_orth_refresh.tic_token();
+            if constexpr(form_ == grit::Form::GENERALIZED)
+                BY = MultB(Y);
+            else
+                BY = Y;
+        }
     }
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::block_bm_orthonormalize(MatrixType &Y, MatrixType &AY, MatrixType &BY, OrthMeta &m) requires(form_ == grit::Form::GENERALIZED)
     {
+        auto token_orthonormalize = status.time_orthonormalize.tic_token();
         if(Y.cols() == 0) {
             AY.resizeLike(Y);
             BY.resizeLike(Y);
@@ -483,8 +604,14 @@ namespace grit::form {
                     for(Eigen::Index j = 0; j < Y.cols(); ++j) {
                         if(m.mask(j) == 0) Y.col(j) = Eigen::VectorXf::Random(Y.col(j).size()).template cast<Scalar>();
                     }
-                    BY = MultB(Y);
-                    m.analyze_bm_orthonormality(Y, BY);
+                    {
+                        auto token_orth_refresh = status.time_orth_refresh.tic_token();
+                        BY                      = MultB(Y);
+                    }
+                    {
+                        auto token_orth_project = status.time_orth_project.tic_token();
+                        m.analyze_bm_orthonormality(Y, BY);
+                    }
                     break;
             }
         };
@@ -495,9 +622,15 @@ namespace grit::form {
         if(std::isnan(m.maskTol)) m.maskTol = normTol * static_cast<RealScalar>(Y.cols());
         if(std::isnan(m.orthTol)) m.orthTol = normTol * static_cast<RealScalar>(Y.cols());
 
-        if(m.refresh_by || Y.cols() != BY.cols() || Y.rows() != BY.rows()) BY = MultB(Y);
+        if(m.refresh_by || Y.cols() != BY.cols() || Y.rows() != BY.rows()) {
+            auto token_orth_refresh = status.time_orth_refresh.tic_token();
+            BY                      = MultB(Y);
+        }
         m.refresh_by = false;
-        m.analyze_bm_orthonormality(Y, BY);
+        {
+            auto token_orth_project = status.time_orth_project.tic_token();
+            m.analyze_bm_orthonormality(Y, BY);
+        }
         assert_allFinite(BY);
 
         m.Rdiag = VectorReal::Zero(Y.cols());
@@ -514,7 +647,10 @@ namespace grit::form {
                 byj.setZero();
             }
         }
-        handle_masked_columns();
+        {
+            auto token_orth_mask = status.time_orth_mask.tic_token();
+            handle_masked_columns();
+        }
         if(Y.cols() == 0) {
             AY.resizeLike(Y);
             BY.resizeLike(Y);
@@ -542,13 +678,23 @@ namespace grit::form {
                         have(i)    = 1;
                     }
 
-                    RealScalar normSq  = normSqs(i);
-                    Scalar     proj1   = yi.dot(byj);
-                    Scalar     proj2   = byi.dot(yj);
-                    Scalar     proj_ij = normSq > std::numeric_limits<RealScalar>::min() ? (proj1 + proj2) / (RealScalar{2} * normSq) : Scalar{0};
+                    RealScalar normSq;
+                    Scalar     proj1;
+                    Scalar     proj2;
+                    Scalar     proj_ij;
+                    {
+                        auto token_orth_project = status.time_orth_project.tic_token();
+                        normSq                  = normSqs(i);
+                        proj1                   = yi.dot(byj);
+                        proj2                   = byi.dot(yj);
+                        proj_ij                 = normSq > std::numeric_limits<RealScalar>::min() ? (proj1 + proj2) / (RealScalar{2} * normSq) : Scalar{0};
+                    }
 
-                    yj.noalias()  -= yi * proj_ij;
-                    byj.noalias() -= byi * proj_ij;
+                    {
+                        auto token_orth_update  = status.time_orth_update.tic_token();
+                        yj.noalias()           -= yi * proj_ij;
+                        byj.noalias()          -= byi * proj_ij;
+                    }
                 }
 
                 RealScalar normSq = std::real(yj.dot(byj));
@@ -566,8 +712,14 @@ namespace grit::form {
                 normSqs(j)  = std::max<RealScalar>(0, std::real(yj.dot(byj)));
             }
 
-            m.analyze_bm_orthonormality(Y, BY);
-            handle_masked_columns();
+            {
+                auto token_orth_project = status.time_orth_project.tic_token();
+                m.analyze_bm_orthonormality(Y, BY);
+            }
+            {
+                auto token_orth_mask = status.time_orth_mask.tic_token();
+                handle_masked_columns();
+            }
             if(Y.cols() == 0) {
                 AY.resizeLike(Y);
                 BY.resizeLike(Y);
@@ -579,7 +731,10 @@ namespace grit::form {
             if(m.orthError < m.orthTol) break;
         }
 
-        AY = MultA(Y);
+        {
+            auto token_orth_refresh = status.time_orth_refresh.tic_token();
+            AY                      = MultA(Y);
+        }
         assert_bm_orthonormal(Y, BY, m);
     }
 }

@@ -26,6 +26,7 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &S, VectorReal &rNorms) {
+        auto token_extract_ritz = status.time_extract_ritz.tic_token();
         MatrixType Z = T_evecs(Eigen::placeholders::all, optIdx);
         VectorReal Y = T_evals(optIdx);
 
@@ -37,6 +38,7 @@ namespace grit::form {
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV, MatrixType &S,
                                                  VectorReal &rNorms) {
+        auto token_extract_ritz = status.time_extract_ritz.tic_token();
         MatrixType Z = T_evecs(Eigen::placeholders::all, optIdx);
         VectorReal Y = T_evals(optIdx);
 
@@ -271,6 +273,7 @@ namespace grit::form {
     void base<Scalar, form_>::refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AQ, MatrixType &BQ, MatrixType &S,
                                                  VectorReal &rNorms) requires(form_ == grit::Form::GENERALIZED)
     {
+        auto token_extract_ritz = status.time_extract_ritz.tic_token();
         VectorReal Y     = T_evals(optIdx);
         MatrixType Z_rr  = T_evecs(Eigen::placeholders::all, optIdx);
         MatrixType Z_ref = get_refined_ritz_eigenvectors_gen(Z_rr, Y, AQ, BQ);
@@ -292,6 +295,7 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AQ, MatrixType &S, VectorReal &rNorms) {
+        auto token_extract_ritz = status.time_extract_ritz.tic_token();
         MatrixType Z     = T_evecs(Eigen::placeholders::all, optIdx);
         VectorReal Y     = T_evals(optIdx);
         MatrixType Z_ref = get_refined_ritz_eigenvectors_std(Z, Y, Q, this->AQ);

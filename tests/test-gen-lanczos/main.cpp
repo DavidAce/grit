@@ -100,6 +100,35 @@ TEST_CASE("generalized lanczos handles nos4 restart block search") {
     require_close(view.eigVal(), expected, 1e-7);
 }
 
+TEST_CASE("generalized lanczos supports retained restart basis on nos4") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = grit_test::nos4_matrix<double>();
+    Matrix B_matrix = Matrix::Identity(A_matrix.rows(), A_matrix.cols());
+
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+    auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
+
+    grit::generalized::lanczos<double> solver(A, B);
+    solver.config.nev                 = 2;
+    solver.config.ncv                 = 20;
+    solver.config.block_size          = 2;
+    solver.config.maxRetainBlocks     = 3;
+    solver.config.ritz                = grit::Ritz::SR;
+    solver.config.max_iters           = 80;
+    solver.config.tol                 = 1e-9;
+    solver.config.use_b_inner_product = false;
+    solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 171));
+    solver.run();
+
+    Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> exact(A_matrix, B_matrix);
+    auto                                             expected = grit_test::expected_ritz_values(exact.eigenvalues(), solver.config.ritz, solver.config.nev);
+    auto                                             view     = grit::solver_view<double>(solver);
+    REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
+    print_eigenvalue_comparison("generalized lanczos nos4 retained restart", view.eigVal(), expected, view.eigVal().size());
+    require_close(view.eigVal(), expected, 1e-3);
+}
+
 TEST_CASE("generalized lanczos supports all Ritz targets on nos4") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 

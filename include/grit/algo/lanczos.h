@@ -45,17 +45,24 @@ namespace grit::algo {
         using Base::block_l2_orthonormalize;
         using Base::cfg;
         using Base::eps;
+        using Base::get_bm_normalizer_for_the_projected_pencil;
+        using Base::get_optimal_rayleigh_ritz_matrix;
+        using Base::get_refined_ritz_eigenvectors_gen;
+        using Base::get_refined_ritz_eigenvectors_std;
         using Base::hhqr;
         using Base::log;
         using Base::MultA;
         using Base::MultB;
         using Base::MultP;
         using Base::N;
+        using Base::normTol;
+        using Base::orthonormalize_Z;
         using Base::qBlocks;
         using Base::status;
 
         struct Config : BaseConfig {
             static constexpr RealScalar                         eps = std::numeric_limits<RealScalar>::epsilon();
+            Eigen::Index                                        maxRetainBlocks = 2;
             std::function<void(const lanczos<Scalar, form_> &)> user_callback;
         };
 
@@ -68,6 +75,7 @@ namespace grit::algo {
 
         private:
         MatrixType A_block, B_block;
+        MatrixType AK, BK;
         bool       beta_stalled = false;
 
         void write_Q_next_B_DGKS(Eigen::Index i);

@@ -86,6 +86,56 @@ namespace grit {
     }
 
     template<typename Scalar_>
+    typename solver_view<Scalar_>::RealScalar solver_view<Scalar_>::seconds_orthogonalize() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_orthogonalize.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename solver_view<Scalar_>::RealScalar solver_view<Scalar_>::seconds_orthonormalize() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_orthonormalize.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename solver_view<Scalar_>::RealScalar solver_view<Scalar_>::seconds_orth_project() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_orth_project.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename solver_view<Scalar_>::RealScalar solver_view<Scalar_>::seconds_orth_factor() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_orth_factor.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename solver_view<Scalar_>::RealScalar solver_view<Scalar_>::seconds_orth_update() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_orth_update.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename solver_view<Scalar_>::RealScalar solver_view<Scalar_>::seconds_orth_refresh() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_orth_refresh.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename solver_view<Scalar_>::RealScalar solver_view<Scalar_>::seconds_orth_mask() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_orth_mask.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename solver_view<Scalar_>::RealScalar solver_view<Scalar_>::seconds_diagonalize() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_diagonalize.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename solver_view<Scalar_>::RealScalar solver_view<Scalar_>::seconds_extract_ritz() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_extract_ritz.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename solver_view<Scalar_>::RealScalar solver_view<Scalar_>::seconds_restart() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_restart.get_time()); });
+    }
+
+    template<typename Scalar_>
     typename solver_view<Scalar_>::RealScalar solver_view<Scalar_>::inner_error_last() const {
         return internal::visit_solver_source(source, [](const auto &src) { return src.status.inner_error_last; });
     }

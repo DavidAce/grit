@@ -240,6 +240,7 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::diagonalizeT() {
+        auto token_diagonalize = status.time_diagonalize.tic_token();
         T1 = Q.adjoint() * AQ;
         T1 = (T1 + T1.adjoint()) * half;
         if constexpr(form_ == grit::Form::GENERALIZED) {
@@ -648,6 +649,16 @@ namespace grit::form {
         status.rNorms_history.clear();
         status.eigVals_history.clear();
         status.matvecs_history.clear();
+        status.time_orthogonalize.reset();
+        status.time_orthonormalize.reset();
+        status.time_orth_project.reset();
+        status.time_orth_factor.reset();
+        status.time_orth_update.reset();
+        status.time_orth_refresh.reset();
+        status.time_orth_mask.reset();
+        status.time_diagonalize.reset();
+        status.time_extract_ritz.reset();
+        status.time_restart.reset();
 
         auto token_elapsed = status.time_elapsed.tic_token();
         if(status.iter == 0) {

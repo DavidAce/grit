@@ -41,6 +41,16 @@ namespace grit {
         [[nodiscard]] Eigen::Index                     num_precond_inner() const;
         [[nodiscard]] Eigen::Index                     num_precond_total() const;
         [[nodiscard]] RealScalar                       seconds() const;
+        [[nodiscard]] RealScalar                       seconds_orthogonalize() const;
+        [[nodiscard]] RealScalar                       seconds_orthonormalize() const;
+        [[nodiscard]] RealScalar                       seconds_orth_project() const;
+        [[nodiscard]] RealScalar                       seconds_orth_factor() const;
+        [[nodiscard]] RealScalar                       seconds_orth_update() const;
+        [[nodiscard]] RealScalar                       seconds_orth_refresh() const;
+        [[nodiscard]] RealScalar                       seconds_orth_mask() const;
+        [[nodiscard]] RealScalar                       seconds_diagonalize() const;
+        [[nodiscard]] RealScalar                       seconds_extract_ritz() const;
+        [[nodiscard]] RealScalar                       seconds_restart() const;
         [[nodiscard]] RealScalar                       inner_error_last() const;
         [[nodiscard]] RealScalar                       inner_tol_last() const;
         [[nodiscard]] Eigen::Index                     saturation_count_eigval() const;

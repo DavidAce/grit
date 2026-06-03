@@ -40,6 +40,7 @@ namespace grit::form {
 
         using ResidualCorrectionType = grit::ResidualCorrectionType;
         enum class MaskPolicy { COMPRESS, RANDOMIZE };
+        enum class RefreshMult { YES, NO };
 
         static constexpr auto eps  = std::numeric_limits<RealScalar>::epsilon();
         static constexpr auto half = RealScalar{1} / RealScalar{2};
@@ -125,6 +126,16 @@ namespace grit::form {
             tid::ur                   time_precond_inner;
             tid::ur                   time_precond_total;
             tid::ur                   time_jdops_inner;
+            tid::ur                   time_orthogonalize;
+            tid::ur                   time_orthonormalize;
+            tid::ur                   time_orth_project;
+            tid::ur                   time_orth_factor;
+            tid::ur                   time_orth_update;
+            tid::ur                   time_orth_refresh;
+            tid::ur                   time_orth_mask;
+            tid::ur                   time_diagonalize;
+            tid::ur                   time_extract_ritz;
+            tid::ur                   time_restart;
             RealScalar                inner_error_last     = RealScalar{0};
             RealScalar                inner_tol_last       = RealScalar{0};
             bool                      rNorm_below_rnormTol = false;
@@ -301,12 +312,14 @@ namespace grit::form {
         VectorReal get_standard_deviations(const std::deque<VectorReal> &v, bool apply_log10);
         bool       rNorms_have_saturated();
         bool       eigVals_have_saturated();
-        void       block_l2_orthogonalize(const MatrixType &X, const MatrixType &AX, MatrixType &Y, MatrixType &AY, OrthMeta &m);
+        void       block_l2_orthogonalize(const MatrixType &X, const MatrixType &AX, MatrixType &Y, MatrixType &AY, OrthMeta &m,
+                                          RefreshMult refresh_mult = RefreshMult::YES);
         void       block_l2_orthogonalize(const MatrixType &X, const MatrixType &AX, const MatrixType &BX, MatrixType &Y, MatrixType &AY, MatrixType &BY,
-                                          OrthMeta &m);
+                                          OrthMeta &m, RefreshMult refresh_mult = RefreshMult::YES);
         void       block_l2_orthonormalize(MatrixType &Y, MatrixType &AY, OrthMeta &m);
         void       block_l2_orthonormalize(MatrixType &Y, MatrixType &AY, MatrixType &BY, OrthMeta &m);
-        void block_bm_orthogonalize(const MatrixType &X, const MatrixType &AX, const MatrixType &BX, MatrixType &Y, MatrixType &AY, MatrixType &BY, OrthMeta &m)
+        void block_bm_orthogonalize(const MatrixType &X, const MatrixType &AX, const MatrixType &BX, MatrixType &Y, MatrixType &AY, MatrixType &BY, OrthMeta &m,
+                                    RefreshMult refresh_mult = RefreshMult::YES)
             requires(form_ == grit::Form::GENERALIZED);
         void block_bm_orthonormalize(MatrixType &Y, MatrixType &AY, MatrixType &BY, OrthMeta &m) requires(form_ == grit::Form::GENERALIZED);
     };

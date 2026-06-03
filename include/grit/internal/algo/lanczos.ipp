@@ -11,7 +11,7 @@ namespace grit::algo {
         this->bind_config(config);
         config.nev        = 1;
         config.block_size = 1;
-        config.ncv        = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
+        config.ncv        = std::min<Eigen::Index>(16, std::max<Eigen::Index>(1, this->N));
     }
 
     template<typename Scalar, grit::Form form_>
@@ -20,7 +20,7 @@ namespace grit::algo {
         this->bind_config(config);
         config.nev        = 1;
         config.block_size = 1;
-        config.ncv        = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
+        config.ncv        = std::min<Eigen::Index>(16, std::max<Eigen::Index>(1, this->N));
     }
 
     template<typename Scalar, grit::Form form_>
@@ -50,6 +50,9 @@ namespace grit::algo {
         if(config.ncv > this->N) throw std::runtime_error("lanczos config error: ncv must not exceed the operator size");
         if(config.block_size > config.ncv) throw std::runtime_error("lanczos config error: block_size must not exceed ncv");
         if(config.ncv % config.block_size != 0) throw std::runtime_error("lanczos config error: ncv must be divisible by block_size");
+        if(config.maxRetainBlocks < 1) throw std::runtime_error("lanczos config error: maxRetainBlocks must be at least 1");
+        if(config.maxRetainBlocks > config.ncv / config.block_size)
+            throw std::runtime_error("lanczos config error: maxRetainBlocks must not exceed ncv / block_size");
         if(config.max_iters == 0) throw std::runtime_error("lanczos config error: max_iters must be positive or negative for unlimited");
         if(config.max_matvecs == 0) throw std::runtime_error("lanczos config error: max_matvecs must be positive or negative for unlimited");
         if(config.tol <= RealScalar{0}) throw std::runtime_error("lanczos config error: tol must be positive");
@@ -76,6 +79,16 @@ namespace grit::algo {
         status.rNorms_history.clear();
         status.eigVals_history.clear();
         status.matvecs_history.clear();
+        status.time_orthogonalize.reset();
+        status.time_orthonormalize.reset();
+        status.time_orth_project.reset();
+        status.time_orth_factor.reset();
+        status.time_orth_update.reset();
+        status.time_orth_refresh.reset();
+        status.time_orth_mask.reset();
+        status.time_diagonalize.reset();
+        status.time_extract_ritz.reset();
+        status.time_restart.reset();
 
         status.saturation_count_max = this->cfg().ncv;
 
@@ -155,19 +168,114 @@ namespace grit::algo {
         beta_stalled = false;
         if(V.cols() != b) throw std::runtime_error("lanczos build error: V must have block_size columns");
 
-        Q  = V;
-        AQ = AV;
-        if constexpr(form_ == grit::Form::GENERALIZED)
-            BQ = BV;
-        else
-            BQ = Q;
+        if(K.cols() > 0) {
+            Q  = K;
+            AQ = AK;
+            if constexpr(form_ == grit::Form::GENERALIZED)
+                BQ = BK;
+            else
+                BQ = Q;
+        } else {
+            Q  = V;
+            AQ = AV;
+            if constexpr(form_ == grit::Form::GENERALIZED)
+                BQ = BV;
+            else
+                BQ = Q;
+        }
+
+        auto restart_basis = [&]() {
+            auto token_restart = status.time_restart.tic_token();
+            Eigen::Index cols_ks = 0;
+
+            if constexpr(form_ == grit::Form::GENERALIZED) {
+                MatrixType T1 = Q.adjoint() * AQ;
+                MatrixType T2 = Q.adjoint() * BQ;
+                T1            = (T1 + T1.adjoint()) * Base::half;
+                T2            = (T2 + T2.adjoint()) * Base::half;
+
+                auto [W, Winv] = get_bm_normalizer_for_the_projected_pencil(T2);
+                cols_ks        = std::clamp(std::min(config.maxRetainBlocks * this->cfg().block_size, W.cols()), this->cfg().block_size, W.cols());
+
+                MatrixType WT1W = W.adjoint() * T1 * W;
+                MatrixType WT2W = W.adjoint() * T2 * W;
+                WT1W            = (WT1W + WT1W.adjoint()) * Base::half;
+                WT2W            = (WT2W + WT2W.adjoint()) * Base::half;
+
+                Eigen::GeneralizedSelfAdjointEigenSolver<MatrixType> ges(WT1W, WT2W, Eigen::Ax_lBx);
+                if(ges.info() != Eigen::Success) throw std::runtime_error("lanczos restart: generalized eigensolver failed");
+                cols_ks        = std::min(cols_ks, ges.eigenvalues().size());
+                auto selectIdx = this->get_ritz_indices(this->cfg().ritz, 0, cols_ks, ges.eigenvalues());
+
+                VectorReal Y    = ges.eigenvalues()(selectIdx);
+                MatrixType Z_rr = ges.eigenvectors()(Eigen::placeholders::all, selectIdx);
+                MatrixType Z;
+                if(this->cfg().use_refined_rayleigh_ritz) {
+                    MatrixType Z_ref = get_refined_ritz_eigenvectors_gen(Z_rr, Y, AQ, BQ);
+                    MatrixType Z_opt = get_optimal_rayleigh_ritz_matrix(Z_rr, Z_ref, WT1W, WT2W);
+                    Z                = W * Z_opt;
+                } else {
+                    Z = W * Z_rr;
+                }
+                orthonormalize_Z(Z, T2);
+
+                MatrixType Q_ks  = Q * Z;
+                MatrixType AQ_ks = AQ * Z;
+                MatrixType BQ_ks = BQ * Z;
+                Q                = Q_ks;
+                AQ               = AQ_ks;
+                BQ               = BQ_ks;
+
+                OrthMeta m;
+                m.Gram       = config.use_b_inner_product ? Q.adjoint() * BQ : Q.adjoint() * Q;
+                m.Gram       = (m.Gram + m.Gram.adjoint()).eval() * Base::half;
+                m.orthError  = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
+                m.maskPolicy = Base::MaskPolicy::COMPRESS;
+                if(config.use_b_inner_product) {
+                    block_bm_orthonormalize(Q, AQ, BQ, m);
+                } else {
+                    block_l2_orthonormalize(Q, AQ, BQ, m);
+                }
+            } else {
+                MatrixType T = Q.adjoint() * AQ;
+                T            = (T + T.adjoint()) * Base::half;
+                Eigen::SelfAdjointEigenSolver<MatrixType> es(T, Eigen::ComputeEigenvectors);
+                if(es.info() != Eigen::Success) throw std::runtime_error("lanczos restart: eigensolver failed");
+                cols_ks        = std::clamp(std::min(config.maxRetainBlocks * this->cfg().block_size, Q.cols()), this->cfg().block_size, Q.cols());
+                cols_ks        = std::min(cols_ks, es.eigenvalues().size());
+                auto selectIdx = this->get_ritz_indices(this->cfg().ritz, 0, cols_ks, es.eigenvalues());
+
+                VectorReal Y    = es.eigenvalues()(selectIdx);
+                MatrixType Z_rr = es.eigenvectors()(Eigen::placeholders::all, selectIdx);
+                MatrixType Z    = this->cfg().use_refined_rayleigh_ritz ? get_refined_ritz_eigenvectors_std(Z_rr, Y, Q, AQ) : Z_rr;
+                orthonormalize_Z(Z, T);
+
+                MatrixType Q_ks  = Q * Z;
+                MatrixType AQ_ks = AQ * Z;
+                Q                = Q_ks;
+                AQ               = AQ_ks;
+                BQ = Q;
+
+                OrthMeta m;
+                m.Gram       = Q.adjoint() * Q;
+                m.Gram       = (m.Gram + m.Gram.adjoint()).eval() * Base::half;
+                m.orthError  = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
+                m.maskPolicy = Base::MaskPolicy::COMPRESS;
+                block_l2_orthonormalize(Q, AQ, m);
+                BQ = Q;
+            }
+
+            status.iter_last_restart = status.iter;
+        };
 
         MatrixType Q_prev;
+        if(Q.cols() > b) restart_basis();
+        if(Q.cols() >= 2 * b) Q_prev = Q.middleCols(Q.cols() - 2 * b, b);
         A_block.resize(b, b);
         B_block.resize(b, b);
         T.setZero(std::min(N, m * b), std::min(N, m * b));
 
-        for(Eigen::Index i = 0; i + 1 < m && Q.cols() + b <= N; ++i) {
+        for(Eigen::Index i = 0; Q.cols() + b <= std::min(N, m * b); ++i) {
             auto Q_cur = Q.rightCols(b);
             W          = MultA(Q_cur);
 
@@ -194,22 +302,21 @@ namespace grit::algo {
                 W = MultP(W, evals);
             }
 
-            MatrixType AW = MultA(W);
+            MatrixType AW = MatrixType();
             MatrixType BW = MatrixType();
             OrthMeta   meta;
             meta.maskPolicy = Base::MaskPolicy::COMPRESS;
 
             if constexpr(form_ == grit::Form::GENERALIZED) {
-                BW = MultB(W);
                 if(config.use_b_inner_product) {
-                    block_bm_orthogonalize(Q, AQ, BQ, W, AW, BW, meta);
+                    block_bm_orthogonalize(Q, AQ, BQ, W, AW, BW, meta, Base::RefreshMult::NO);
                     block_bm_orthonormalize(W, AW, BW, meta);
                 } else {
-                    block_l2_orthogonalize(Q, AQ, BQ, W, AW, BW, meta);
+                    block_l2_orthogonalize(Q, AQ, BQ, W, AW, BW, meta, Base::RefreshMult::NO);
                     block_l2_orthonormalize(W, AW, BW, meta);
                 }
             } else {
-                block_l2_orthogonalize(Q, AQ, W, AW, meta);
+                block_l2_orthogonalize(Q, AQ, W, AW, meta, Base::RefreshMult::NO);
                 block_l2_orthonormalize(W, AW, meta);
                 BW = W;
             }
@@ -241,8 +348,8 @@ namespace grit::algo {
             return;
         }
 
-        Eigen::Index k     = std::min<Eigen::Index>(this->cfg().block_size, T_evals.size());
-        Eigen::Index nritz = std::min<Eigen::Index>(T_evals.size(), std::max({this->cfg().nev, this->cfg().block_size, k}));
+        Eigen::Index k     = std::min(config.maxRetainBlocks * this->cfg().block_size, T_evals.size());
+        Eigen::Index nritz = std::max({this->cfg().nev, this->cfg().block_size, k});
         status.optIdx      = this->get_ritz_indices(this->cfg().ritz, 0, nritz, T_evals);
         if(status.optIdx.empty()) {
             status.stopReason |= StopReason::subspace_exhausted;
@@ -250,15 +357,38 @@ namespace grit::algo {
             return;
         }
 
-        if constexpr(form_ == grit::Form::GENERALIZED) {
-            Base::extractRitzVectors(status.optIdx, V, AV, BV, S, status.rNorms);
+        if(this->cfg().use_refined_rayleigh_ritz) {
+            if constexpr(form_ == grit::Form::GENERALIZED) {
+                Base::refinedRitzVectors(status.optIdx, V, AV, BV, S, status.rNorms);
+            } else {
+                Base::refinedRitzVectors(status.optIdx, V, AV, S, status.rNorms);
+                BV = V;
+            }
         } else {
-            Base::extractRitzVectors(status.optIdx, V, AV, S, status.rNorms);
-            BV = V;
+            if constexpr(form_ == grit::Form::GENERALIZED) {
+                Base::extractRitzVectors(status.optIdx, V, AV, BV, S, status.rNorms);
+            } else {
+                Base::extractRitzVectors(status.optIdx, V, AV, S, status.rNorms);
+                BV = V;
+            }
         }
 
         K_prev = K;
         K      = V.leftCols(k);
+        AK     = AV.leftCols(k);
+        if constexpr(form_ == grit::Form::GENERALIZED)
+            BK = BV.leftCols(k);
+        else
+            BK = K;
+
+        if(k > this->cfg().block_size) {
+            V.conservativeResize(Eigen::NoChange, this->cfg().block_size);
+            AV.conservativeResize(Eigen::NoChange, this->cfg().block_size);
+            BV.conservativeResize(Eigen::NoChange, this->cfg().block_size);
+            S.conservativeResize(Eigen::NoChange, this->cfg().block_size);
+            status.rNorms.conservativeResize(this->cfg().block_size);
+        }
+
         if(status.rNorms_init.size() != status.rNorms.size()) status.rNorms_init = status.rNorms;
     }
 
