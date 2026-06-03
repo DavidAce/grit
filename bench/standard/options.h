@@ -7,6 +7,7 @@
 namespace bench_standard {
     struct Options {
         int           case_id     = 1;
+        Algo          algo        = Algo::gdplusk;
         std::string   matrix_path = "Please provide a path to a matrix in .mtx format";
         std::string   initial_guess;
         std::string   save_eigvec;
@@ -14,6 +15,7 @@ namespace bench_standard {
         int           nev                           = 1;     /*!< Number of requested eigenpairs. */
         int           ncv                           = 8;     /*!< Maximum search-space columns. */
         int           block_size                    = 1;     /*!< Number of vectors in each solver block. */
+        int           maxRetainBlocks              = 1;     /*!< Retained restart blocks for lanczos. */
         int           max_iters                     = 100;   /*!< Maximum outer solver iterations; negative means unlimited. */
         int           max_matvecs                   = -1;    /*!< Maximum total matrix-vector products; negative means unlimited. */
         int           inner_max_iters               = 1000;  /*!< Maximum iterations for the inner correction solver. */

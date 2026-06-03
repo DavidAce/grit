@@ -1,8 +1,13 @@
 # Standard Eigenvalue Benchmark
 
 This benchmark reads a local Matrix Market file, builds a sparse matrix-vector
-callback, and runs `grit::standard::gdplusk` for the smallest algebraic
-eigenpair.
+callback, and runs one of:
+
+- `grit::standard::gdplusk`
+- `grit::standard::lanczos`
+- `grit::standard::lobpcg`
+
+for the smallest algebraic eigenpair.
 
 ## Example Matrix
 
@@ -81,10 +86,38 @@ cmake --build --preset kraken --target grit-bench-standard
 
 ```bash
 ./build/Release/bench/standard/grit-bench-standard \
+  --algo gdplusk \
   --matrix-path bench/data/finance256/finance256.mtx
 ```
 
 Use any full or relative path to a compatible Matrix Market file.
+
+## Algorithm Selection
+
+Use `--algo` to select the solver:
+
+```bash
+./build/Release/bench/standard/grit-bench-standard \
+  --algo lanczos \
+  --matrix-path bench/data/finance256/finance256.mtx
+```
+
+Supported values are:
+
+- `gdplusk`
+- `lanczos`
+- `lobpcg`
+
+`gdplusk` is the default.
+
+The following options are `gdplusk`-only and will be rejected for `lanczos` and
+`lobpcg`:
+
+- `--residual-correction`
+- `--inner-max-iters`
+- `--inner-tol`
+- `--use-adaptive-inner-tolerance`
+- all `--auto-*` options
 
 ## AUTO Residual Correction
 
@@ -119,6 +152,7 @@ Save a partial cheap-Olsen solution:
 
 ```bash
 ./build/Release/bench/standard/grit-bench-standard \
+  --algo gdplusk \
   --matrix-path bench/data/finance256/finance256.mtx \
   --residual-correction=cheap-olsen \
   --tol=1e-3 \
@@ -129,6 +163,7 @@ Use it as the initial guess in a later run:
 
 ```bash
 ./build/Release/bench/standard/grit-bench-standard \
+  --algo gdplusk \
   --matrix-path bench/data/finance256/finance256.mtx \
   --initial-guess=bench/data/finance256/warmstart.h5 \
   --residual-correction=jacobi-davidson \
@@ -136,4 +171,6 @@ Use it as the initial guess in a later run:
   --refined-rayleigh-ritz
 ```
 
-The HDF5 dataset path is `/grit/standard/eigvecs`.
+The benchmark now stores saved eigvecs under `/grit/standard/<algo>/eigvecs`.
+When loading an initial guess, it also accepts the legacy dataset path
+`/grit/standard/eigvecs`.

@@ -1,11 +1,13 @@
 #pragma once
 
+#include "aliases.h"
 #include <spdlog/spdlog.h>
 #include <string>
 #include <vector>
 
 namespace bench_standard {
     struct CliOptions {
+        bench_standard::Algo algo        = bench_standard::Algo::gdplusk;
         std::string         matrix_path = "Please provide a path to an matrix in .mtx format";
         std::string         initial_guess;
         std::string         save_eigvec;
@@ -14,6 +16,7 @@ namespace bench_standard {
         int                 nev                  = 1;       /*!< Number of requested eigenpairs. */
         std::vector<int>    ncv                  = {8};     /*!< Maximum search-space columns, optionally as a sweep list. */
         std::vector<int>    block_size           = {1};     /*!< Solver block size, optionally as a sweep list. */
+        std::vector<int>    max_retain_blocks    = {1};     /*!< Retained restart blocks for lanczos, optionally as a sweep list. */
         int                 max_iters            = 100;     /*!< Maximum outer solver iterations; negative means unlimited. */
         int                 max_matvecs          = -1;      /*!< Maximum total matrix-vector products; negative means unlimited. */
         std::vector<int>    inner_max_iters      = {1000};  /*!< Maximum inner correction iterations, optionally as a sweep list. */
@@ -36,5 +39,17 @@ namespace bench_standard {
         std::vector<bool>         use_refined_rayleigh_ritz    = {false};
         bool                      use_relative_rnorm_tolerance = false;   /*!< Interpret tol as a derived relative residual-norm tolerance. */
         std::vector<bool>         use_adaptive_inner_tolerance = {false}; /*!< Adapt inner_tol from previous inner-solver work. */
+
+        bool explicit_inner_max_iters          = false;
+        bool explicit_max_retain_blocks        = false;
+        bool explicit_inner_tol                = false;
+        bool explicit_residual_correction      = false;
+        bool explicit_auto_min_dwell_iters     = false;
+        bool explicit_auto_sat_eigval_threshold = false;
+        bool explicit_auto_sat_rnorm_threshold = false;
+        bool explicit_auto_jd_start_rnorm_threshold = false;
+        bool explicit_auto_cheap_probe_interval = false;
+        bool explicit_auto_cheap_probe_factor   = false;
+        bool explicit_use_adaptive_inner_tolerance = false;
     };
 }

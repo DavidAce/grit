@@ -4,6 +4,7 @@
 #include <format>
 #include <print>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace bench_standard {
@@ -59,47 +60,30 @@ namespace bench_standard {
         return "warn";
     }
 
-    void print_solver_config(const Options &opts, const Solver::Config &cfg) {
-        std::println("solver:");
-        std::println("  problem: standard | outer iteration: gdplusk | ritz: {}", grit::enum2sv(cfg.ritz));
-        std::println("  residual correction: {}", residual_correction_name(opts.residual_correction));
-        std::println("  refined Rayleigh-Ritz: {} | relative rnorm tolerance: {} | adaptive inner tolerance: {}", bool_text(opts.use_refined_rayleigh_ritz),
-                     bool_text(opts.use_relative_rnorm_tolerance), bool_text(opts.use_adaptive_inner_tolerance));
-        std::println("  nev: {} | ncv: {} | block size: {} | max-iters: {} | max-matvecs: {}", cfg.nev, cfg.ncv, cfg.block_size, limit_text(cfg.max_iters),
-                     limit_text(cfg.max_matvecs));
-        std::println("  tol: {:.4e} | tol rnorm relative: {:.4e} | inner tol: {:.4e} | inner max iters: {}", cfg.tol, cfg.tol_rnorm_relative, cfg.inner_tol,
-                     cfg.inner_max_iters);
-        std::println("  initial guess: {} | seed: {} | Eigen threads: {} | log level: {}",
-                     opts.initial_guess.empty() ? "random(seed + rep - 1)" : opts.initial_guess, opts.seed, Eigen::nbThreads(), log_level_name(cfg.log_level));
-        std::println("  history: extra ritz {} | ritz residual {} | basis blocks {} | retain blocks {}", cfg.max_extra_ritz_history,
-                     cfg.max_ritz_residual_history, cfg.ncv / cfg.block_size, cfg.maxRetainBlocks);
-        if(opts.residual_correction == ResidualCorrection::AUTO) {
-            std::println("  auto correction: cheap min dwell iters {} | eigval saturation {:.3e} | rrnorm saturation {:.3e} | jd start rrnorm {:.3e} | cheap "
-                         "probe interval {} | "
-                         "cheap probe factor {:.3e}",
-                         cfg.auto_min_dwell_iters, cfg.auto_sat_eigval_threshold, cfg.auto_sat_rnorm_threshold, cfg.auto_jd_start_rnorm_threshold,
-                         cfg.auto_cheap_probe_interval, cfg.auto_cheap_probe_factor);
-        }
-        std::println("  matvec: Eigen row-major sparse * dense");
-    }
-
     void print_sweep_config(const CliOptions &opts, std::size_t cases) {
         std::println("sweep:");
+        std::println("  algo: {}", algo_name(opts.algo));
         std::println("  cases: {} | reps: {} | seed: {} | seed per repetition: seed + rep - 1", cases, opts.reps, opts.seed);
         std::println("  limits: max-iters {} | max-matvecs {} | tol rnorm relative {:.4e} | relative rnorm tolerance: {} | eigval saturation {:.4e} | rrnorm "
                      "saturation {:.4e}",
                      limit_text(opts.max_iters), limit_text(opts.max_matvecs), opts.tol_rnorm_relative, bool_text(opts.use_relative_rnorm_tolerance),
                      opts.sat_eigval_threshold, opts.sat_rnorm_threshold);
-        std::println("  sweep axes: ncv {} | block-size {} | ritz {} | residual correction {}", list_text(opts.ncv), list_text(opts.block_size), opts.ritz,
-                     opts.residual_correction);
-        std::println("  sweep axes: tol {} | inner tol {} | inner max iters {} | refined {} | adaptive {}", list_text(opts.tol), list_text(opts.inner_tol),
-                     list_text(opts.inner_max_iters), bool_list_text(opts.use_refined_rayleigh_ritz), bool_list_text(opts.use_adaptive_inner_tolerance));
-        if(opts.residual_correction.find("auto") != std::string::npos || opts.residual_correction.find("AUTO") != std::string::npos) {
-            std::println("  auto correction: cheap min dwell iters {} | eigval saturation {:.3e} | rrnorm saturation {:.3e} | jd start rrnorm {:.3e} | cheap "
-                         "probe interval {} | "
-                         "cheap probe factor {:.3e}",
-                         opts.auto_min_dwell_iters, opts.auto_sat_eigval_threshold, opts.auto_sat_rnorm_threshold, opts.auto_jd_start_rnorm_threshold,
-                         opts.auto_cheap_probe_interval, opts.auto_cheap_probe_factor);
+        std::println("  sweep axes: ncv {} | block-size {} | ritz {}", list_text(opts.ncv), list_text(opts.block_size), opts.ritz);
+        std::println("  sweep axes: tol {}", list_text(opts.tol));
+        if(opts.algo == Algo::gdplusk) {
+            std::println("  sweep axes: residual correction {} | inner tol {} | inner max iters {} | refined {} | adaptive {}",
+                         opts.residual_correction, list_text(opts.inner_tol), list_text(opts.inner_max_iters),
+                         bool_list_text(opts.use_refined_rayleigh_ritz), bool_list_text(opts.use_adaptive_inner_tolerance));
+            if(opts.residual_correction.find("auto") != std::string::npos || opts.residual_correction.find("AUTO") != std::string::npos) {
+                std::println("  auto correction: cheap min dwell iters {} | eigval saturation {:.3e} | rrnorm saturation {:.3e} | jd start rrnorm {:.3e} | cheap "
+                             "probe interval {} | cheap probe factor {:.3e}",
+                             opts.auto_min_dwell_iters, opts.auto_sat_eigval_threshold, opts.auto_sat_rnorm_threshold, opts.auto_jd_start_rnorm_threshold,
+                             opts.auto_cheap_probe_interval, opts.auto_cheap_probe_factor);
+            }
+        } else if(opts.algo == Algo::lanczos) {
+            std::println("  sweep axes: max retain blocks {} | refined {}", list_text(opts.max_retain_blocks), bool_list_text(opts.use_refined_rayleigh_ritz));
+        } else {
+            std::println("  sweep axes: refined {}", bool_list_text(opts.use_refined_rayleigh_ritz));
         }
         std::println("  initial guess: {}", opts.initial_guess.empty() ? "random" : opts.initial_guess);
         if(!opts.save_eigvec.empty()) std::println("  save eigvec: {}", opts.save_eigvec);
@@ -108,23 +92,59 @@ namespace bench_standard {
         std::println("  matvec: Eigen row-major sparse * dense");
     }
 
-    void print_result_header() {
-        std::println("{:<5} {:<5} {:>5} {:>5} {:<4} {:<17} {:<7} {:<8} {:>10} {:>10} {:>7} {:<24} {:>18} {:>12} {:>12} {:>8} {:>8} {:>8} {:>8} {:>8} {:>9} "
-                     "{:>12} {:>12} {:>12} {:>12}",
-                     "case", "rep", "ncv", "blk", "ritz", "correction", "refined", "adaptive", "tol", "inner_tol", "inner", "stop", "eigval", "rnorm", "rrnorm",
-                     "iter", "matvec", "outer", "inner", "jdops", "jd_switch", "time[s]", "VmRSS", "VmHWM", "VmPeak");
+    void print_result_header(Algo algo) {
+        if(algo == Algo::gdplusk) {
+            std::println("{:<5} {:<5} {:>5} {:>5} {:<4} {:<17} {:<7} {:<8} {:>10} {:>10} {:>7} {:<24} {:>18} {:>12} {:>12} {:>8} {:>8} {:>8} {:>8} {:>8} "
+                         "{:>9} {:>12} {:>12} {:>12} {:>12}",
+                         "case", "rep", "ncv", "blk", "ritz", "correction", "refined", "adaptive", "tol", "inner_tol", "inner", "stop", "eigval", "rnorm",
+                         "rrnorm", "iter", "matvec", "outer", "inner", "jdops", "jd_switch", "time[s]", "VmRSS", "VmHWM", "VmPeak");
+            return;
+        }
+
+        if(algo == Algo::lanczos) {
+            std::println("{:<5} {:<5} {:<8} {:>5} {:>5} {:>6} {:<4} {:<7} {:>10} {:<24} {:>18} {:>12} {:>12} {:>8} {:>8} {:>8} {:>12} {:>12} {:>12}",
+                         "case", "rep", "algo", "ncv", "blk", "retain", "ritz", "refined", "tol", "stop", "eigval", "rnorm", "rrnorm", "iter", "matvec",
+                         "outer", "time[s]", "VmRSS", "VmHWM");
+            return;
+        }
+
+        std::println("{:<5} {:<5} {:<8} {:>5} {:>5} {:<4} {:<7} {:>10} {:<24} {:>18} {:>12} {:>12} {:>8} {:>8} {:>8} {:>12} {:>12} {:>12}",
+                     "case", "rep", "algo", "ncv", "blk", "ritz", "refined", "tol", "stop", "eigval", "rnorm", "rrnorm", "iter", "matvec", "outer",
+                     "time[s]", "VmRSS", "VmHWM");
     }
 
     void print_result_row(const SolveResult &result) {
-        const auto &snapshot  = result.final;
-        const auto  jd_switch = snapshot.first_cheap_to_jd_iter < 0 ? std::string{"n/a"} : std::format("{}", snapshot.first_cheap_to_jd_iter);
-        std::println("{:<5} {:<5} {:>5} {:>5} {:<4} {:<17} {:<7} {:<8} {:>10.2e} {:>10.2e} {:>7} {:<24} {:>18.10e} {:>12.4e} {:>12.4e} {:>8} {:>8} {:>8} {:>8} "
-                     "{:>8} {:>9} {:>12.6f} {:>12} {:>12} {:>12}",
-                     snapshot.case_id, snapshot.rep, snapshot.ncv, snapshot.block_size, std::string_view(snapshot.ritz),
-                     std::string_view(snapshot.residual_correction), bool_text(snapshot.use_refined_rayleigh_ritz),
-                     bool_text(snapshot.use_adaptive_inner_tolerance), snapshot.tol, snapshot.inner_tol, snapshot.inner_max_iters,
-                     std::string_view(snapshot.stop_reason), snapshot.eigenvalue, snapshot.rnorm, snapshot.rrnorm, snapshot.iterations, snapshot.matvecs,
-                     snapshot.outer_matvecs, snapshot.inner_matvecs, snapshot.jdops_inner, jd_switch, snapshot.seconds, mem_size(snapshot.vmrss_mib),
-                     mem_size(snapshot.vmhwm_mib), mem_size(snapshot.vmpeak_mib));
+        std::visit(
+            [&](const auto &typed_result) {
+                const auto &snapshot = typed_result.final;
+                using ResultType     = std::remove_cvref_t<decltype(typed_result)>;
+                if constexpr(std::is_same_v<ResultType, GdpluskSolveResult>) {
+                    const auto jd_switch =
+                        snapshot.first_cheap_to_jd_iter < 0 ? std::string{"n/a"} : std::format("{}", snapshot.first_cheap_to_jd_iter);
+                    std::println("{:<5} {:<5} {:>5} {:>5} {:<4} {:<17} {:<7} {:<8} {:>10.2e} {:>10.2e} {:>7} {:<24} {:>18.10e} {:>12.4e} {:>12.4e} {:>8} {:>8} "
+                                 "{:>8} {:>8} {:>8} {:>9} {:>12.6f} {:>12} {:>12} {:>12}",
+                                 snapshot.case_id, snapshot.rep, snapshot.ncv, snapshot.block_size, std::string_view(snapshot.ritz),
+                                 std::string_view(snapshot.residual_correction), bool_text(snapshot.use_refined_rayleigh_ritz),
+                                 bool_text(snapshot.use_adaptive_inner_tolerance), snapshot.tol, snapshot.inner_tol, snapshot.inner_max_iters,
+                                 std::string_view(snapshot.stop_reason), snapshot.eigenvalue, snapshot.rnorm, snapshot.rrnorm, snapshot.iterations, snapshot.matvecs,
+                                 snapshot.outer_matvecs, snapshot.inner_matvecs, snapshot.jdops_inner, jd_switch, snapshot.seconds, mem_size(snapshot.vmrss_mib),
+                                 mem_size(snapshot.vmhwm_mib), mem_size(snapshot.vmpeak_mib));
+                } else if constexpr(std::is_same_v<ResultType, LanczosSolveResult>) {
+                    std::println("{:<5} {:<5} {:<8} {:>5} {:>5} {:>6} {:<4} {:<7} {:>10.2e} {:<24} {:>18.10e} {:>12.4e} {:>12.4e} {:>8} {:>8} {:>8} {:>12.6f} "
+                                 "{:>12} {:>12}",
+                                 snapshot.case_id, snapshot.rep, std::string_view(snapshot.algo), snapshot.ncv, snapshot.block_size, snapshot.max_retain_blocks,
+                                 std::string_view(snapshot.ritz), bool_text(snapshot.use_refined_rayleigh_ritz), snapshot.tol,
+                                 std::string_view(snapshot.stop_reason), snapshot.eigenvalue, snapshot.rnorm, snapshot.rrnorm, snapshot.iterations, snapshot.matvecs,
+                                 snapshot.outer_matvecs, snapshot.seconds, mem_size(snapshot.vmrss_mib), mem_size(snapshot.vmhwm_mib));
+                } else {
+                    std::println("{:<5} {:<5} {:<8} {:>5} {:>5} {:<4} {:<7} {:>10.2e} {:<24} {:>18.10e} {:>12.4e} {:>12.4e} {:>8} {:>8} {:>8} {:>12.6f} {:>12} "
+                                 "{:>12}",
+                                 snapshot.case_id, snapshot.rep, std::string_view(snapshot.algo), snapshot.ncv, snapshot.block_size,
+                                 std::string_view(snapshot.ritz), bool_text(snapshot.use_refined_rayleigh_ritz), snapshot.tol,
+                                 std::string_view(snapshot.stop_reason), snapshot.eigenvalue, snapshot.rnorm, snapshot.rrnorm, snapshot.iterations, snapshot.matvecs,
+                                 snapshot.outer_matvecs, snapshot.seconds, mem_size(snapshot.vmrss_mib), mem_size(snapshot.vmhwm_mib));
+                }
+            },
+            result);
     }
 }

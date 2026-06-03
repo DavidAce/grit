@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
         bench_standard::normalize_options(opts);
         if(opts.print_summary) {
             if(opts.save_results.empty()) throw std::runtime_error("--print-summary requires --save-results=<file>");
-            bench_standard::print_results_summary_hdf5(opts.save_results);
+            bench_standard::print_results_summary_hdf5(opts.save_results, opts.algo);
             return 0;
         }
 
@@ -32,12 +32,12 @@ int main(int argc, char **argv) {
         auto                        matrix      = bench_standard::read_matrix_market(matrix_path);
         auto                        cases       = bench_standard::expand_sweep(opts, matrix.rows());
         bench_standard::validate_hdf5_options(opts, cases.size());
-        if(!opts.save_results.empty()) bench_standard::initialize_results_hdf5(opts.save_results);
+        if(!opts.save_results.empty()) bench_standard::initialize_results_hdf5(opts.save_results, opts.algo);
 
         std::println("matrix: {} ({})", opts.matrix_path, matrix_path.string());
-        std::println("shape: {} x {} | nonzeros: {} | nev: {}", matrix.rows(), matrix.cols(), matrix.nonZeros(), opts.nev);
+        std::println("shape: {} x {} | nonzeros: {} | nev: {} | algo: {}", matrix.rows(), matrix.cols(), matrix.nonZeros(), opts.nev, bench_standard::algo_name(opts.algo));
         bench_standard::print_sweep_config(opts, cases.size());
-        bench_standard::print_result_header();
+        bench_standard::print_result_header(opts.algo);
 
         for(const auto &case_opts : cases) {
             for(int rep = 1; rep <= opts.reps; ++rep) {
@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if(!opts.save_results.empty()) bench_standard::print_results_summary_hdf5(opts.save_results);
+        if(!opts.save_results.empty()) bench_standard::print_results_summary_hdf5(opts.save_results, opts.algo);
     } catch(const std::exception &ex) {
         std::println(stderr, "grit-bench-standard: {}", ex.what());
         return 1;
