@@ -71,14 +71,11 @@ namespace grit::algo {
         void run();
 
         private:
-        Eigen::Index max_wBlocks = 1;
-        Eigen::Index max_mBlocks = 1;
-        Eigen::Index max_sBlocks = 1;
-        Eigen::Index wBlocks     = 0;
-        Eigen::Index mBlocks     = 0;
-        Eigen::Index rBlocks     = 0;
-        Eigen::Index sBlocks     = 0;
-        MatrixType   G;
+        Eigen::Index x_blocks = 1;
+        Eigen::Index w_blocks = 0;
+        Eigen::Index p_blocks = 0;
+        MatrixType   AW, BW;
+        MatrixType   P, AP, BP;
 
         void shift_blocks_right(Eigen::Ref<MatrixType> matrix, Eigen::Index offset_old, Eigen::Index offset_new, Eigen::Index extent);
         void roll_blocks_left(Eigen::Ref<MatrixType> matrix, Eigen::Index offset, Eigen::Index extent);

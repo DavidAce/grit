@@ -73,8 +73,6 @@ namespace grit::algo {
         assert_config();
 
         this->setLogger(config.log_level, std::string("grit|") + std::string(this->form_name()));
-        max_mBlocks = config.max_extra_ritz_history;
-        max_sBlocks = config.max_ritz_residual_history;
         Base::run();
     }
 
@@ -158,133 +156,81 @@ namespace grit::algo {
         const Eigen::Index b = this->cfg().block_size;
         const Eigen::Index N = this->N;
 
-        MatrixType Q_prev_basis = Q;
+        x_blocks = 1;
+        w_blocks = S.cols() == b ? 1 : 0;
+        p_blocks = P.cols() == b && AP.cols() == b ? 1 : 0;
 
-        Eigen::Index qBlocks_old = qBlocks;
-        Eigen::Index wBlocks_old = wBlocks;
-        Eigen::Index mBlocks_old = mBlocks;
-        Eigen::Index sBlocks_old = sBlocks;
-        Eigen::Index rBlocks_old = rBlocks;
-
-        auto get_total_blocks = [&]() { return qBlocks + wBlocks + mBlocks + sBlocks + rBlocks; };
-
-        qBlocks = status.iter <= 1 ? 1 : 2;
-        wBlocks = std::min(max_wBlocks, wBlocks_old + 1);
-        mBlocks = T_evals.size() >= 2 * b ? std::min(max_mBlocks, mBlocks_old + 1) : 0;
-        sBlocks = S.cols() == b ? std::min(max_sBlocks, sBlocks_old + 1) : 0;
-        rBlocks = (config.inject_randomness && status.iter > 20 && status.iter % 20 == 0 && get_total_blocks() * b <= N) ? 1 : 0;
-
-        while(N < get_total_blocks() * b) {
-            if(rBlocks > 0) {
-                rBlocks--;
-                continue;
-            }
-            if(mBlocks > 0) {
-                mBlocks--;
-                continue;
-            }
-            if(wBlocks > 0) {
-                wBlocks--;
-                continue;
-            }
-            if(sBlocks > 1) {
-                sBlocks--;
-                continue;
-            }
-            break;
-        }
-
-        Q.conservativeResize(N, get_total_blocks() * b);
-
-        if(status.iter <= 1) {
-            Q.leftCols(b) = V;
-        } else {
-            if(qBlocks_old != qBlocks && wBlocks_old + mBlocks_old + sBlocks_old + rBlocks_old > 0) {
-                shift_blocks_right(Q, qBlocks_old, qBlocks, wBlocks_old + mBlocks_old + sBlocks_old + rBlocks_old);
-            }
-            if(wBlocks_old != wBlocks && mBlocks_old + sBlocks_old + rBlocks_old > 0) {
-                shift_blocks_right(Q, qBlocks + wBlocks_old, qBlocks + wBlocks,
-                                   std::min(mBlocks_old, mBlocks) + std::min(sBlocks_old, sBlocks) + std::min(rBlocks_old, rBlocks));
-            }
-            if(mBlocks_old < mBlocks && sBlocks_old + rBlocks_old > 0) {
-                shift_blocks_right(Q, qBlocks + wBlocks + mBlocks_old, qBlocks + wBlocks + mBlocks,
-                                   std::min(sBlocks_old, sBlocks) + std::min(rBlocks_old, rBlocks));
-            }
-            if(sBlocks_old < sBlocks && rBlocks_old > 0) {
-                shift_blocks_right(Q, qBlocks + wBlocks + mBlocks + sBlocks_old, qBlocks + wBlocks + mBlocks + sBlocks, std::min(rBlocks_old, rBlocks));
-            }
-
-            if(qBlocks == 2) Q.middleCols(0, b) = Q.middleCols(b, b);
-            Q.middleCols((qBlocks - 1) * b, b) = V;
-
-            if(wBlocks > 0) roll_blocks_left(Q, qBlocks, wBlocks);
-            if(mBlocks > 0) roll_blocks_left(Q, qBlocks + wBlocks, mBlocks);
-            if(sBlocks > 0) roll_blocks_left(Q, qBlocks + wBlocks + mBlocks, sBlocks);
-        }
-
-        Eigen::Index wOffset = qBlocks;
-        Eigen::Index mOffset = qBlocks + wBlocks;
-        Eigen::Index sOffset = qBlocks + wBlocks + mBlocks;
-        Eigen::Index rOffset = qBlocks + wBlocks + mBlocks + sBlocks;
-
-        if(wBlocks > 0) {
-            MatrixType W_block  = MultA(V);
-            MatrixType A_block  = V.adjoint() * W_block;
-            W_block.noalias()  -= V * A_block;
-            if(V_prev.rows() == N && V_prev.cols() == b) {
-                MatrixType B_block  = V_prev.adjoint() * W_block;
-                W_block.noalias()  -= V_prev * B_block.adjoint();
-            }
-            if(A.has_preconditioner_apply() && T_evals.size() >= b) {
-                auto       select_b = this->get_ritz_indices(this->cfg().ritz, 0, b, T_evals);
+        W.resize(0, 0);
+        AW.resize(0, 0);
+        BW.resize(0, 0);
+        if(w_blocks == 1) {
+            W = S;
+            if(A.has_preconditioner_apply() && T_evals.size() >= b && status.optIdx.size() >= static_cast<size_t>(b)) {
                 VectorReal evals(b);
-                for(Eigen::Index j = 0; j < b; ++j) evals(j) = T_evals(select_b[static_cast<size_t>(j)]);
-                W_block = MultP(W_block, evals);
+                for(Eigen::Index j = 0; j < b; ++j) evals(j) = T_evals(status.optIdx.at(static_cast<size_t>(j)));
+                W = MultP(W, evals);
             }
-            Q.middleCols(wOffset * b, b) = W_block;
+            AW = MultA(W);
+            if constexpr(form_ == grit::Form::GENERALIZED) BW = MultB(W);
         }
 
-        if(mBlocks > 0 && T_evals.size() >= 2 * b && Q_prev_basis.cols() == T_evecs.rows()) {
-            auto       top_2b_indices    = this->get_ritz_indices(this->cfg().ritz, b, b, T_evals);
-            MatrixType Z                 = T_evecs(Eigen::placeholders::all, top_2b_indices);
-            Q.middleCols(mOffset * b, b) = Q_prev_basis * Z;
+        Q.resize(N, (x_blocks + w_blocks + p_blocks) * b);
+        AQ.resize(N, Q.cols());
+
+        Eigen::Index offset       = 0;
+        Q.middleCols(offset, b)   = V;
+        AQ.middleCols(offset, b)  = AV;
+        offset                   += b;
+
+        if(w_blocks == 1) {
+            Q.middleCols(offset, b)   = W;
+            AQ.middleCols(offset, b)  = AW;
+            offset                   += b;
         }
 
-        if(sBlocks > 0 && S.cols() == b) Q.middleCols(sOffset * b, b) = S;
-        if(rBlocks > 0) Q.middleCols(rOffset * b, b) = Eigen::MatrixXf::Random(N, b).template cast<Scalar>();
+        if(p_blocks == 1) {
+            Q.middleCols(offset, b)  = P;
+            AQ.middleCols(offset, b) = AP;
+        }
 
-        AQ = MultA(Q);
         if constexpr(form_ == grit::Form::GENERALIZED) {
-            BQ = MultB(Q);
+            offset = 0;
+            BQ.resize(N, Q.cols());
+            BQ.middleCols(offset, b)  = BV;
+            offset                   += b;
+            if(w_blocks == 1) {
+                BQ.middleCols(offset, b)  = BW;
+                offset                   += b;
+            }
+            if(p_blocks == 1) BQ.middleCols(offset, b) = BP;
+
             if(config.use_b_inner_product) {
-                if(qBlocks * b > 0) {
-                    MatrixType              QL  = Q.leftCols(qBlocks * b);
-                    MatrixType              AQL = AQ.leftCols(qBlocks * b);
-                    MatrixType              BQL = BQ.leftCols(qBlocks * b);
-                    typename Base::OrthMeta mQL;
-                    mQL.maskPolicy = Base::MaskPolicy::COMPRESS;
-                    block_bm_orthonormalize(QL, AQL, BQL, mQL);
-                    if(Q.cols() > QL.cols()) {
-                        MatrixType              QR  = Q.rightCols(Q.cols() - QL.cols());
-                        MatrixType              AQR = AQ.rightCols(AQ.cols() - AQL.cols());
-                        MatrixType              BQR = BQ.rightCols(BQ.cols() - BQL.cols());
-                        typename Base::OrthMeta mQR;
-                        mQR.maskPolicy = Base::MaskPolicy::COMPRESS;
-                        block_bm_orthogonalize(QL, AQL, BQL, QR, AQR, BQR, mQR);
-                        Q.resize(Eigen::NoChange, QL.cols() + QR.cols());
-                        AQ.resize(Eigen::NoChange, AQL.cols() + AQR.cols());
-                        BQ.resize(Eigen::NoChange, BQL.cols() + BQR.cols());
-                        Q.leftCols(QL.cols())    = QL;
-                        AQ.leftCols(AQL.cols())  = AQL;
-                        BQ.leftCols(BQL.cols())  = BQL;
-                        Q.rightCols(QR.cols())   = QR;
-                        AQ.rightCols(AQR.cols()) = AQR;
-                        BQ.rightCols(BQR.cols()) = BQR;
-                    } else {
-                        Q  = QL;
-                        AQ = AQL;
-                        BQ = BQL;
-                    }
+                MatrixType              QL  = Q.leftCols(b);
+                MatrixType              AQL = AQ.leftCols(b);
+                MatrixType              BQL = BQ.leftCols(b);
+                typename Base::OrthMeta mQL;
+                mQL.maskPolicy = Base::MaskPolicy::COMPRESS;
+                block_bm_orthonormalize(QL, AQL, BQL, mQL);
+                if(Q.cols() > QL.cols()) {
+                    MatrixType              QR  = Q.rightCols(Q.cols() - QL.cols());
+                    MatrixType              AQR = AQ.rightCols(AQ.cols() - AQL.cols());
+                    MatrixType              BQR = BQ.rightCols(BQ.cols() - BQL.cols());
+                    typename Base::OrthMeta mQR;
+                    mQR.maskPolicy = Base::MaskPolicy::COMPRESS;
+                    block_bm_orthogonalize(QL, AQL, BQL, QR, AQR, BQR, mQR);
+                    Q.resize(Eigen::NoChange, QL.cols() + QR.cols());
+                    AQ.resize(Eigen::NoChange, AQL.cols() + AQR.cols());
+                    BQ.resize(Eigen::NoChange, BQL.cols() + BQR.cols());
+                    Q.leftCols(QL.cols())    = QL;
+                    AQ.leftCols(AQL.cols())  = AQL;
+                    BQ.leftCols(BQL.cols())  = BQL;
+                    Q.rightCols(QR.cols())   = QR;
+                    AQ.rightCols(AQR.cols()) = AQR;
+                    BQ.rightCols(BQR.cols()) = BQR;
+                } else {
+                    Q  = QL;
+                    AQ = AQL;
+                    BQ = BQL;
                 }
                 typename Base::OrthMeta meta;
                 meta.maskPolicy = Base::MaskPolicy::COMPRESS;
@@ -295,28 +241,26 @@ namespace grit::algo {
                 block_l2_orthonormalize(Q, AQ, BQ, meta);
             }
         } else {
-            if(qBlocks * b > 0) {
-                MatrixType              QL  = Q.leftCols(qBlocks * b);
-                MatrixType              AQL = AQ.leftCols(qBlocks * b);
-                typename Base::OrthMeta mQL;
-                mQL.maskPolicy = Base::MaskPolicy::COMPRESS;
-                block_l2_orthonormalize(QL, AQL, mQL);
-                if(Q.cols() > QL.cols()) {
-                    MatrixType              QR  = Q.rightCols(Q.cols() - QL.cols());
-                    MatrixType              AQR = AQ.rightCols(AQ.cols() - AQL.cols());
-                    typename Base::OrthMeta mQR;
-                    mQR.maskPolicy = Base::MaskPolicy::COMPRESS;
-                    block_l2_orthogonalize(QL, AQL, QR, AQR, mQR);
-                    Q.resize(Eigen::NoChange, QL.cols() + QR.cols());
-                    AQ.resize(Eigen::NoChange, AQL.cols() + AQR.cols());
-                    Q.leftCols(QL.cols())    = QL;
-                    AQ.leftCols(AQL.cols())  = AQL;
-                    Q.rightCols(QR.cols())   = QR;
-                    AQ.rightCols(AQR.cols()) = AQR;
-                } else {
-                    Q  = QL;
-                    AQ = AQL;
-                }
+            MatrixType              QL  = Q.leftCols(b);
+            MatrixType              AQL = AQ.leftCols(b);
+            typename Base::OrthMeta mQL;
+            mQL.maskPolicy = Base::MaskPolicy::COMPRESS;
+            block_l2_orthonormalize(QL, AQL, mQL);
+            if(Q.cols() > QL.cols()) {
+                MatrixType              QR  = Q.rightCols(Q.cols() - QL.cols());
+                MatrixType              AQR = AQ.rightCols(AQ.cols() - AQL.cols());
+                typename Base::OrthMeta mQR;
+                mQR.maskPolicy = Base::MaskPolicy::COMPRESS;
+                block_l2_orthogonalize(QL, AQL, QR, AQR, mQR);
+                Q.resize(Eigen::NoChange, QL.cols() + QR.cols());
+                AQ.resize(Eigen::NoChange, AQL.cols() + AQR.cols());
+                Q.leftCols(QL.cols())    = QL;
+                AQ.leftCols(AQL.cols())  = AQL;
+                Q.rightCols(QR.cols())   = QR;
+                AQ.rightCols(AQR.cols()) = AQR;
+            } else {
+                Q  = QL;
+                AQ = AQL;
             }
             typename Base::OrthMeta meta;
             meta.maskPolicy = Base::MaskPolicy::COMPRESS;
@@ -332,14 +276,40 @@ namespace grit::algo {
         }
         qBlocks = Q.cols() / b;
         if(qBlocks < 1) throw std::runtime_error("lobpcg build error: basis lost all complete blocks");
-        auto [active_mask, change_mask] = selective_orthonormalize();
-        static_cast<void>(active_mask);
-        static_cast<void>(change_mask);
     }
 
     template<typename Scalar, grit::Form form_>
     void lobpcg<Scalar, form_>::extractRitzVectors() {
         V_prev = V;
+        if(status.stopReason != StopReason::none) return;
+        if(T_evals.size() < cfg().block_size) return;
+
+        Eigen::Index k     = std::min(cfg().block_size, T_evals.size());
+        Eigen::Index nritz = std::max({cfg().nev, cfg().block_size, k});
+
+        status.optIdx = this->get_ritz_indices(cfg().ritz, 0, nritz, T_evals);
+        MatrixType Z  = T_evecs(Eigen::placeholders::all, status.optIdx);
+
+        const Eigen::Index x_cols      = cfg().block_size;
+        const Eigen::Index search_cols = Q.cols() - x_cols;
+
+        P.resize(0, 0);
+        AP.resize(0, 0);
+        BP.resize(0, 0);
+
+        if(search_cols > 0 && Z.cols() >= k) {
+            MatrixType Z_search = Z.bottomRows(search_cols).leftCols(k);
+            P.resize(this->N, k);
+            AP.resize(this->N, k);
+            P.noalias()  = Q.rightCols(search_cols) * Z_search;
+            AP.noalias() = AQ.rightCols(search_cols) * Z_search;
+
+            if constexpr(form_ == grit::Form::GENERALIZED) {
+                BP.resize(this->N, k);
+                BP.noalias() = BQ.rightCols(search_cols) * Z_search;
+            }
+        }
+
         Base::extractRitzVectors();
     }
 

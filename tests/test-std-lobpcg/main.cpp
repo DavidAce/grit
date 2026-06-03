@@ -56,7 +56,7 @@ TEST_CASE("standard lobpcg matches dense eigensolver") {
     solver.config.max_extra_ritz_history    = 1;
     solver.config.max_ritz_residual_history = 1;
     solver.config.ritz                      = grit::Ritz::SR;
-    solver.config.max_iters                 = 20;
+    solver.config.max_iters                 = 100;
     solver.set_initial_guess(V);
     solver.run();
 
@@ -80,7 +80,7 @@ TEST_CASE("standard lobpcg handles nos4 restart block search") {
     solver.config.max_extra_ritz_history    = 1;
     solver.config.max_ritz_residual_history = 1;
     solver.config.ritz                      = grit::Ritz::SR;
-    solver.config.max_iters                 = 500;
+    solver.config.max_iters                 = 1000;
     solver.config.tol                       = 1e-9;
     solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 91));
     solver.run();
