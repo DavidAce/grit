@@ -10,7 +10,7 @@ int main() {
     solver.config.nev        = 1;
     solver.config.ncv        = 2;
     solver.config.block_size = 1;
-    solver.config.ritz       = grit::OptRitz::SR;
+    solver.config.ritz       = grit::Ritz::SR;
     solver.set_initial_guess(V);
     solver.run();
     return grit::solver_view<double>(solver).stopReason() == grit::StopReason::converged ? 0 : 1;
