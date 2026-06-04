@@ -1,22 +1,20 @@
-# GRIT
 
 [![Ubuntu 24.04](https://github.com/DavidAce/grit/actions/workflows/ubuntu-24.04.yml/badge.svg)](https://github.com/DavidAce/grit/actions/workflows/ubuntu-24.04.yml)
 [![codecov](https://codecov.io/github/DavidAce/grit/graph/badge.svg?token=PPTM8MBW52)](https://codecov.io/github/DavidAce/grit)
 
-`GRIT` is the Generalized Ritz Iteration Toolkit: a C++23 library for matrix-free
-Ritz iteration eigensolvers. Operators are supplied as Eigen block callbacks.
+# GRIT
+**Generalized Ritz Iteration Toolkit**
+
+`GRIT` is a C++23 library for matrix-free Ritz iteration eigensolvers.
 
 ## Requirements
 
-  * CMake 3.24 or newer.
-  * A C++23 compiler.
-  * Eigen 3.4 or later, before Eigen 6.
-  * fmt.
-  * spdlog.
-  * OpenMP.
+  * CMake 3.24 or newer
+  * A C++23 compiler with support for OpenMP
+  * Eigen 3.4 or later
+  * spdlog (and fmt)
 
-The default build enables `double` and `std::complex<double>`. Other scalar
-widths can be enabled with CMake options.
+The default build enables `double` and `std::complex<double>`. Other scalar types can be enabled with CMake options.
 
 ## Examples
 
@@ -29,19 +27,19 @@ Standard Hermitian problem:
 #include <print>
 
 int main() {
-    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
-
-    Matrix A_matrix(4, 4);
+    // Find the smallest real eigenpair
+    
+    auto A_matrix = Eigen::MatrixXd(4, 4);
     A_matrix << 1.0, 0.1, 0.0, 0.0,
-        0.1, 2.0, 0.2, 0.0,
-        0.0, 0.2, 3.0, 0.3,
-        0.0, 0.0, 0.3, 4.0;
+                0.1, 2.0, 0.2, 0.0,
+                0.0, 0.2, 3.0, 0.3,
+                0.0, 0.0, 0.3, 4.0;
 
-    auto A = grit::matvec<double>(A_matrix.rows(), [&](const auto &X) {
+    auto A_matvec = grit::matvec<double>(A_matrix.rows(), [&](const auto &X) {
         return A_matrix * X;
     });
 
-    grit::standard::gdplusk<double> solver(A);
+    auto solver = grit::standard::gdplusk<double>(A_matvec);
     solver.config.nev              = 1;
     solver.config.ncv              = A_matrix.rows();
     solver.config.block_size       = 1;
@@ -65,24 +63,25 @@ Generalized Hermitian problem:
 #include <print>
 
 int main() {
-    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    // Find the eigenpair closest to 0
 
-    Matrix A_matrix(4, 4);
+
+    auto A_matrix = Eigen::MatrixXd(4, 4);
     A_matrix << 1.0, 0.1, 0.0, 0.0,
-        0.1, 2.0, 0.2, 0.0,
-        0.0, 0.2, 3.0, 0.3,
-        0.0, 0.0, 0.3, 4.0;
+                0.1, 2.0, 0.2, 0.0,
+                0.0, 0.2, 3.0, 0.3,
+                0.0, 0.0, 0.3, 4.0;
 
-    Matrix B_matrix = A_matrix * A_matrix;
+    Eigen::MatrixXd B_matrix = A_matrix * A_matrix; 
 
-    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) {
+    auto A_matvec = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) {
         return A_matrix * X;
     });
-    auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) {
+    auto B_matvec = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) {
         return B_matrix * X;
     });
 
-    grit::generalized::lanczos<double> solver(A, B);
+    grit::generalized::lanczos<double> solver(A_matvec, B_matvec);
     solver.config.nev              = 1;
     solver.config.ncv              = A_matrix.rows();
     solver.config.block_size       = 1;
@@ -123,11 +122,11 @@ OpenMP are already visible to CMake.
 
 ## Presets
 
-| Preset          | Dependency mode | Description                                              |
-|:----------------|:----------------|:---------------------------------------------------------|
-| `release-find`  | `find`          | Use dependencies already visible to `find_package`.      |
+| Preset          | Dependency mode | Description                                                         |
+|:----------------|:----------------|:--------------------------------------------------------------------|
+| `release-find`  | `find`          | Use dependencies already visible to `find_package`.                 |
 | `release-cmake` | `cmake`         | Build and install CMake-provided dependencies during configuration. |
-| `release-conan` | `conan`         | Install dependencies with Conan during configuration.                |
+| `release-conan` | `conan`         | Install dependencies with Conan during configuration.               |
 
 For example:
 
