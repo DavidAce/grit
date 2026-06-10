@@ -29,6 +29,12 @@ namespace bench_standard {
             text += "]";
             return text;
         }
+
+        std::string relative_rnorm_tolerance_text(const CliOptions &opts) {
+            if(!opts.use_relative_rnorm_tolerance) return std::format("{:.4e}", opts.tol_rnorm_relative);
+            if(opts.tol_rnorm_relative > 0.0) return std::format("{:.4e}", opts.tol_rnorm_relative);
+            return list_text(opts.tol);
+        }
     }
 
     std::string_view bool_text(bool value) { return value ? "true" : "false"; }
@@ -64,9 +70,9 @@ namespace bench_standard {
         std::println("sweep:");
         std::println("  algo: {}", algo_name(opts.algo));
         std::println("  cases: {} | reps: {} | seed: {} | seed per repetition: seed + rep - 1", cases, opts.reps, opts.seed);
-        std::println("  limits: max-iters {} | max-matvecs {} | tol rnorm relative {:.4e} | relative rnorm tolerance: {} | eigval saturation {:.4e} | rrnorm "
+        std::println("  limits: max-iters {} | max-matvecs {} | tol rnorm relative {} | relative rnorm tolerance: {} | eigval saturation {:.4e} | rrnorm "
                      "saturation {:.4e}",
-                     limit_text(opts.max_iters), limit_text(opts.max_matvecs), opts.tol_rnorm_relative, bool_text(opts.use_relative_rnorm_tolerance),
+                     limit_text(opts.max_iters), limit_text(opts.max_matvecs), relative_rnorm_tolerance_text(opts), bool_text(opts.use_relative_rnorm_tolerance),
                      opts.sat_eigval_threshold, opts.sat_rnorm_threshold);
         std::println("  sweep axes: ncv {} | block-size {} | ritz {}", list_text(opts.ncv), list_text(opts.block_size), opts.ritz);
         std::println("  sweep axes: tol {}", list_text(opts.tol));

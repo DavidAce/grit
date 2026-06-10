@@ -129,6 +129,8 @@ namespace grit::algo {
         void                               update_auto_residual_correction_state();
         [[nodiscard]] RealScalar           get_auto_rnorm_scalar(const VectorReal &rnorms) const;
         [[nodiscard]] RealScalar           get_auto_probe_eigval_improvement() const;
+        [[nodiscard]] RealScalar           get_auto_probe_eigval_relative_improvement() const;
+        [[nodiscard]] RealScalar           get_auto_ritz_value_relative_change() const;
         [[nodiscard]] AutoSaturationInfo   get_auto_eigval_saturation_info();
         [[nodiscard]] AutoSaturationInfo   get_auto_rnorm_saturation_info();
         [[nodiscard]] AutoSaturationStatus get_auto_saturation_status();

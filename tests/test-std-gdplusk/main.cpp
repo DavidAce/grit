@@ -364,7 +364,36 @@ TEST_CASE("standard auto residual correction does not start Jacobi-Davidson unle
     REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_iters.empty());
 }
 
-TEST_CASE("standard auto residual correction switches to Jacobi-Davidson when residuals are small") {
+TEST_CASE("standard auto residual correction switches to Jacobi-Davidson when residuals are small and Ritz values are stable") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = Matrix::Identity(4, 4);
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev                           = 1;
+    solver.config.ncv                           = 4;
+    solver.config.block_size                    = 1;
+    solver.config.residual_correction_type      = grit::ResidualCorrectionType::AUTO;
+    solver.config.auto_min_dwell_iters          = 10;
+    solver.config.auto_jd_start_rnorm_threshold = 1e-4;
+    solver.auto_residual_correction.active      = grit::ResidualCorrectionType::CHEAP_OLSEN;
+    solver.auto_residual_correction.step_method = grit::ResidualCorrectionType::CHEAP_OLSEN;
+    solver.auto_residual_correction.dwell       = solver.config.auto_min_dwell_iters;
+    solver.status.iter                          = 7;
+    solver.status.oldVal                        = grit::form::base<double>::VectorReal::Constant(1, 1.0 + 1.0e-6);
+    solver.status.eigVal                        = grit::form::base<double>::VectorReal::Constant(1, 1.0);
+    solver.status.rNorms                        = grit::form::base<double>::VectorReal::Constant(1, 1.0e-6);
+
+    solver.update_auto_residual_correction_state();
+
+    REQUIRE(solver.auto_residual_correction.active == grit::ResidualCorrectionType::JACOBI_DAVIDSON);
+    REQUIRE(solver.auto_residual_correction.dwell == 0);
+    REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_iters.size() == 1);
+    REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_iters.front() == solver.status.iter);
+}
+
+TEST_CASE("standard auto residual correction does not let residual threshold bypass dwell") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
     Matrix A_matrix = Matrix::Identity(4, 4);
@@ -381,15 +410,14 @@ TEST_CASE("standard auto residual correction switches to Jacobi-Davidson when re
     solver.auto_residual_correction.step_method = grit::ResidualCorrectionType::CHEAP_OLSEN;
     solver.auto_residual_correction.dwell       = 0;
     solver.status.iter                          = 7;
+    solver.status.oldVal                        = grit::form::base<double>::VectorReal::Constant(1, 1.0 + 1.0e-6);
     solver.status.eigVal                        = grit::form::base<double>::VectorReal::Constant(1, 1.0);
     solver.status.rNorms                        = grit::form::base<double>::VectorReal::Constant(1, 1.0e-6);
 
     solver.update_auto_residual_correction_state();
 
-    REQUIRE(solver.auto_residual_correction.active == grit::ResidualCorrectionType::JACOBI_DAVIDSON);
-    REQUIRE(solver.auto_residual_correction.dwell == 0);
-    REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_iters.size() == 1);
-    REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_iters.front() == solver.status.iter);
+    REQUIRE(solver.auto_residual_correction.active == grit::ResidualCorrectionType::CHEAP_OLSEN);
+    REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_iters.empty());
 }
 
 TEST_CASE("standard auto residual correction returns to cheap Olsen after productive probe") {
@@ -411,6 +439,36 @@ TEST_CASE("standard auto residual correction returns to cheap Olsen after produc
     solver.status.oldVal                                 = grit::form::base<double>::VectorReal::Constant(1, 2.0);
     solver.status.eigVal                                 = grit::form::base<double>::VectorReal::Constant(1, 1.9);
     solver.status.rNorms                                 = grit::form::base<double>::VectorReal::Constant(1, 1.0e-6);
+
+    solver.update_auto_residual_correction_state();
+
+    REQUIRE(solver.auto_residual_correction.active == grit::ResidualCorrectionType::CHEAP_OLSEN);
+    REQUIRE(solver.auto_residual_correction.dwell == 0);
+    REQUIRE(solver.auto_residual_correction.jd_steps_since_probe == 0);
+    REQUIRE(solver.auto_residual_correction.jd_to_cheap_switch_iters.size() == 1);
+    REQUIRE(solver.auto_residual_correction.jd_to_cheap_switch_iters.front() == solver.status.iter);
+}
+
+TEST_CASE("standard auto residual correction keeps cheap Olsen after relative Ritz progress") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = Matrix::Identity(4, 4);
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev                                    = 1;
+    solver.config.ncv                                    = 4;
+    solver.config.block_size                             = 1;
+    solver.config.residual_correction_type               = grit::ResidualCorrectionType::AUTO;
+    solver.config.auto_sat_eigval_threshold              = 1.0e-3;
+    solver.config.auto_cheap_probe_factor                = 1.0;
+    solver.auto_residual_correction.active               = grit::ResidualCorrectionType::JACOBI_DAVIDSON;
+    solver.auto_residual_correction.step_method          = grit::ResidualCorrectionType::CHEAP_OLSEN;
+    solver.auto_residual_correction.jd_steps_since_probe = 3;
+    solver.status.iter                                   = 11;
+    solver.status.oldVal                                 = grit::form::base<double>::VectorReal::Constant(1, 100.0);
+    solver.status.eigVal                                 = grit::form::base<double>::VectorReal::Constant(1, 90.0);
+    solver.status.rNorms                                 = grit::form::base<double>::VectorReal::Constant(1, 1.0e4);
 
     solver.update_auto_residual_correction_state();
 

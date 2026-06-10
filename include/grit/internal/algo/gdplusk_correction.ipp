@@ -114,6 +114,29 @@ namespace grit::algo {
     }
 
     template<typename Scalar, grit::Form form_>
+    typename gdplusk<Scalar, form_>::RealScalar gdplusk<Scalar, form_>::get_auto_probe_eigval_relative_improvement() const {
+        if(status.oldVal.size() == 0 || status.eigVal.size() == 0) return RealScalar{0};
+        auto before      = status.oldVal(0);
+        auto after       = status.eigVal(0);
+        auto improvement = std::max(RealScalar{0}, get_auto_probe_eigval_improvement());
+        auto scale       = std::max({std::abs(before), std::abs(after), RealScalar{1}});
+        return improvement / scale;
+    }
+
+    template<typename Scalar, grit::Form form_>
+    typename gdplusk<Scalar, form_>::RealScalar gdplusk<Scalar, form_>::get_auto_ritz_value_relative_change() const {
+        auto rows = std::min({cfg().nev, status.oldVal.size(), status.eigVal.size()});
+        if(rows <= 0) return std::numeric_limits<RealScalar>::infinity();
+
+        RealScalar rel_change = RealScalar{0};
+        for(Eigen::Index i = 0; i < rows; ++i) {
+            auto scale = std::max({std::abs(status.oldVal(i)), std::abs(status.eigVal(i)), RealScalar{1}});
+            rel_change = std::max(rel_change, std::abs(status.eigVal(i) - status.oldVal(i)) / scale);
+        }
+        return rel_change;
+    }
+
+    template<typename Scalar, grit::Form form_>
     typename gdplusk<Scalar, form_>::AutoSaturationInfo gdplusk<Scalar, form_>::get_auto_rnorm_saturation_info() {
         AutoSaturationInfo info;
         info.enabled      = config.auto_sat_rnorm_threshold > RealScalar{0};
@@ -190,8 +213,13 @@ namespace grit::algo {
 
     template<typename Scalar, grit::Form form_>
     bool gdplusk<Scalar, form_>::auto_jd_start_ready() {
-        return get_auto_saturation_status().ready || (config.auto_jd_start_rnorm_threshold > RealScalar{0} && status.rNorms.size() > 0 &&
-                                                      get_auto_rnorm_scalar(relative_rNorms(status.rNorms)) <= config.auto_jd_start_rnorm_threshold);
+        auto saturation        = get_auto_saturation_status();
+        auto ritz_rel_change   = get_auto_ritz_value_relative_change();
+        bool ritz_progress_low = config.auto_sat_eigval_threshold <= RealScalar{0} || ritz_rel_change <= config.auto_sat_eigval_threshold;
+        bool dwell_ready       = auto_residual_correction.dwell >= config.auto_min_dwell_iters;
+        bool rrnorm_ready      = config.auto_jd_start_rnorm_threshold > RealScalar{0} && status.rNorms.size() > 0 &&
+                            get_auto_rnorm_scalar(relative_rNorms(status.rNorms)) <= config.auto_jd_start_rnorm_threshold;
+        return saturation.ready || (dwell_ready && rrnorm_ready && ritz_progress_low);
     }
 
     template<typename Scalar, grit::Form form_>
@@ -221,8 +249,15 @@ namespace grit::algo {
             auto probe_scale_floor = eps * op_norm_estimate;
             auto probe_scale       = std::max(rnorm_squared, probe_scale_floor);
             auto improvement       = get_auto_probe_eigval_improvement();
+            auto relative_improvement = get_auto_probe_eigval_relative_improvement();
             auto threshold         = config.auto_cheap_probe_factor * probe_scale;
-            bool keep_cheap        = improvement > threshold;
+            auto relative_threshold =
+                config.auto_sat_eigval_threshold > RealScalar{0}
+                    ? config.auto_cheap_probe_factor * config.auto_sat_eigval_threshold
+                    : std::numeric_limits<RealScalar>::infinity();
+            bool keep_cheap_absolute = improvement > threshold;
+            bool keep_cheap_relative = relative_improvement > relative_threshold;
+            bool keep_cheap          = keep_cheap_absolute || keep_cheap_relative;
 
             if(keep_cheap) {
                 auto_residual_correction.active               = ResidualCorrectionType::CHEAP_OLSEN;
@@ -235,14 +270,16 @@ namespace grit::algo {
             }
 
             if(log) {
-                log->debug("auto residual correction cheap probe: {} -> {} | eigval {:.16e}->{:.16e} improvement {:.6e} threshold {:.6e} factor {:.6e} "
-                           "abs rnorm {:.6e} abs rnorm2 {:.6e} scale_floor {:.6e} interval {} decision {} | mv {} outer {} inner {} inner_iters {} jdops {} "
-                           "time {:.6e}s",
+                log->debug("auto residual correction cheap probe: {} -> {} | eigval {:.16e}->{:.16e} improvement {:.6e} threshold {:.6e} "
+                           "relative improvement {:.6e} threshold {:.6e} factor {:.6e} abs rnorm {:.6e} abs rnorm2 {:.6e} scale_floor {:.6e} interval {} "
+                           "decision {} reason {} | mv {} outer {} inner {} inner_iters {} jdops {} time {:.6e}s",
                            method_name(ResidualCorrectionType::JACOBI_DAVIDSON), method_name(ResidualCorrectionType::CHEAP_OLSEN),
                            status.oldVal.size() > 0 ? status.oldVal(0) : RealScalar{0}, status.eigVal.size() > 0 ? status.eigVal(0) : RealScalar{0},
-                           improvement, threshold, config.auto_cheap_probe_factor, rnorm, rnorm_squared, probe_scale_floor, config.auto_cheap_probe_interval,
-                           keep_cheap ? "keep CHEAP_OLSEN" : "return JACOBI_DAVIDSON", status.num_matvecs + status.num_matvecs_inner, status.num_matvecs,
-                           status.num_matvecs_inner, status.num_iters_inner, status.num_jdops_inner, step_seconds);
+                           improvement, threshold, relative_improvement, relative_threshold, config.auto_cheap_probe_factor, rnorm, rnorm_squared,
+                           probe_scale_floor, config.auto_cheap_probe_interval, keep_cheap ? "keep CHEAP_OLSEN" : "return JACOBI_DAVIDSON",
+                           keep_cheap_relative ? "relative ritz progress" : (keep_cheap_absolute ? "absolute residual scale" : "insufficient progress"),
+                           status.num_matvecs + status.num_matvecs_inner, status.num_matvecs, status.num_matvecs_inner, status.num_iters_inner,
+                           status.num_jdops_inner, step_seconds);
             }
             return;
         }
@@ -261,20 +298,24 @@ namespace grit::algo {
         auto_residual_correction.dwell++;
         auto saturation             = get_auto_saturation_status();
         auto rrnorm                 = get_auto_rnorm_scalar(relative_rNorms(status.rNorms));
+        auto ritz_rel_change        = get_auto_ritz_value_relative_change();
         bool jd_start_rnorm_enabled = config.auto_jd_start_rnorm_threshold > RealScalar{0};
-        bool jd_start_rnorm_ready   = jd_start_rnorm_enabled && status.rNorms.size() > 0 && rrnorm <= config.auto_jd_start_rnorm_threshold;
+        bool ritz_progress_low      = config.auto_sat_eigval_threshold <= RealScalar{0} || ritz_rel_change <= config.auto_sat_eigval_threshold;
+        bool jd_start_rnorm_ready =
+            jd_start_rnorm_enabled && status.rNorms.size() > 0 && rrnorm <= config.auto_jd_start_rnorm_threshold && ritz_progress_low;
         bool jd_start_ready         = saturation.ready || jd_start_rnorm_ready;
         if(log) {
             log->trace("auto residual correction start check: cheap dwell {}/{} ready {} | eigval sat {} ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} "
                        "value {:.6e} hist {} enough {} | rrnorm sat {} ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} value {:.6e} hist {} "
-                       "enough {} | jd start rrnorm ready {} threshold {:.6e} value {:.6e}",
+                       "enough {} | jd start rrnorm ready {} threshold {:.6e} value {:.6e} | ritz rel change {:.6e} threshold {:.6e} low {}",
                        auto_residual_correction.dwell, config.auto_min_dwell_iters, jd_start_ready, saturation.eigval.saturated, saturation.eigval.ratio,
                        saturation.eigval.threshold, saturation.eigval.stddev, saturation.eigval.scale, saturation.eigval.value, saturation.eigval.history_size,
                        saturation.eigval.enough_history, saturation.rnorm.saturated, saturation.rnorm.ratio, saturation.rnorm.threshold,
                        saturation.rnorm.stddev, saturation.rnorm.scale, saturation.rnorm.value, saturation.rnorm.history_size, saturation.rnorm.enough_history,
-                       jd_start_rnorm_ready, config.auto_jd_start_rnorm_threshold, rrnorm);
+                       jd_start_rnorm_ready, config.auto_jd_start_rnorm_threshold, rrnorm, ritz_rel_change, config.auto_sat_eigval_threshold,
+                       ritz_progress_low);
         }
-        if(auto_residual_correction.dwell < config.auto_min_dwell_iters && !jd_start_rnorm_ready) return;
+        if(auto_residual_correction.dwell < config.auto_min_dwell_iters) return;
 
         if(jd_start_ready) {
             auto_residual_correction.active               = ResidualCorrectionType::JACOBI_DAVIDSON;
@@ -286,14 +327,15 @@ namespace grit::algo {
                 log->debug(
                     "auto residual correction switch: {} -> {} | reason {} | eigval ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} value {:.6e} | "
                     "rrnorm ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} value {:.6e} | probe interval {} probe factor {:.6e} | "
-                    "jd start rrnorm threshold {:.6e} rrnorm {:.6e} | "
+                    "jd start rrnorm threshold {:.6e} rrnorm {:.6e} ritz rel change {:.6e} threshold {:.6e} | "
                     "mv {} outer {} inner {} inner_iters {} jdops {} time {:.6e}s",
                     method_name(ResidualCorrectionType::CHEAP_OLSEN), method_name(ResidualCorrectionType::JACOBI_DAVIDSON),
-                    jd_start_rnorm_ready ? "rrnorm threshold" : "saturation", saturation.eigval.ratio, saturation.eigval.threshold, saturation.eigval.stddev,
+                    jd_start_rnorm_ready ? "rrnorm threshold and ritz progress" : "saturation", saturation.eigval.ratio, saturation.eigval.threshold, saturation.eigval.stddev,
                     saturation.eigval.scale, saturation.eigval.value, saturation.rnorm.ratio, saturation.rnorm.threshold, saturation.rnorm.stddev,
                     saturation.rnorm.scale, saturation.rnorm.value, config.auto_cheap_probe_interval, config.auto_cheap_probe_factor,
-                    config.auto_jd_start_rnorm_threshold, rrnorm, status.num_matvecs + status.num_matvecs_inner, status.num_matvecs, status.num_matvecs_inner,
-                    status.num_iters_inner, status.num_jdops_inner, step_seconds);
+                    config.auto_jd_start_rnorm_threshold, rrnorm, ritz_rel_change, config.auto_sat_eigval_threshold,
+                    status.num_matvecs + status.num_matvecs_inner, status.num_matvecs, status.num_matvecs_inner, status.num_iters_inner,
+                    status.num_jdops_inner, step_seconds);
             }
         }
     }
