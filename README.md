@@ -5,10 +5,10 @@
 # GRIT
 **Generalized Ritz Iteration Toolkit**
 
-`GRIT` is a C++23 library for matrix-free Ritz iteration eigensolvers.
+`GRIT` is a C++23 library for matrix-free iterative eigensolvers.
 
 ## Requirements
-
+  * Symmetric or hermitian matrices
   * CMake 3.24 or newer
   * A C++23 compiler with support for OpenMP
   * Eigen 3.4 or later
