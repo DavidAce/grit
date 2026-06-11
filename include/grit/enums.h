@@ -5,45 +5,93 @@
 #include <type_traits>
 
 namespace grit {
-    enum class Form { STANDARD, GENERALIZED };
+    /*! Eigenvalue problem type. */
+    enum class Form {
+        STANDARD,   /*!< Solve A x = lambda x. */
+        GENERALIZED /*!< Solve A x = lambda B x. */
+    };
 
-    enum class Ritz { NONE, LR, LM, SR, SM };
+    /*! Which part of the Ritz spectrum to select. */
+    enum class Ritz {
+        NONE, /*!< Do not select Ritz values. */
+        LR,   /*!< Largest real part. */
+        LM,   /*!< Largest magnitude. */
+        SR,   /*!< Smallest real part. */
+        SM    /*!< Smallest magnitude. */
+    };
 
-    enum class ResidualCorrectionType { NONE, CHEAP_OLSEN, FULL_OLSEN, JACOBI_DAVIDSON, AUTO };
+    /*! Residual correction used to expand the search space. */
+    enum class ResidualCorrectionType {
+        NONE,            /*!< Use the raw residual as correction. */
+        CHEAP_OLSEN,     /*!< Use the cheap Olsen correction. */
+        FULL_OLSEN,      /*!< Use the full Olsen correction. */
+        JACOBI_DAVIDSON, /*!< Use a Jacobi-Davidson correction equation. */
+        AUTO             /*!< Let the solver switch between cheap Olsen and Jacobi-Davidson. */
+    };
 
+    /*! Reason why an eigensolver stopped. */
     enum class StopReason : int {
-        none                  = 0,
-        converged             = 1,
-        ritz_residual_stalled = 2,
-        subspace_exhausted    = 4,
-        ritz_value_stalled    = 16,
-        max_iters             = 32,
-        max_matvecs           = 64,
-        lanczos_beta_stalled  = 128,
-        invalid_input         = 256,
+        none                  = 0,   /*!< Solver has not stopped. */
+        converged             = 1,   /*!< Requested Ritz pairs reached the residual tolerance. */
+        ritz_residual_stalled = 2,   /*!< Ritz residuals stopped changing enough to continue. */
+        subspace_exhausted    = 4,   /*!< No useful new search-space vector could be added. */
+        ritz_value_stalled    = 16,  /*!< Ritz values stopped changing enough to continue. */
+        max_iters             = 32,  /*!< Maximum outer iterations reached. */
+        max_matvecs           = 64,  /*!< Maximum matrix-vector products reached. */
+        lanczos_beta_stalled  = 128, /*!< Lanczos recurrence beta became too small. */
+        invalid_input         = 256, /*!< Configuration or input operators are invalid. */
         allow_bitops
     };
 
+    /*!
+     * Combine two stop reasons.
+     * @param lhs First stop reason.
+     * @param rhs Second stop reason.
+     * @return Combined stop reason.
+     */
     constexpr auto operator|(StopReason lhs, StopReason rhs) noexcept -> StopReason {
         using U = std::underlying_type_t<StopReason>;
         return static_cast<StopReason>(static_cast<U>(lhs) | static_cast<U>(rhs));
     }
 
+    /*!
+     * Intersect two stop reasons.
+     * @param lhs First stop reason.
+     * @param rhs Second stop reason.
+     * @return Common stop reason flags.
+     */
     constexpr auto operator&(StopReason lhs, StopReason rhs) noexcept -> StopReason {
         using U = std::underlying_type_t<StopReason>;
         return static_cast<StopReason>(static_cast<U>(lhs) & static_cast<U>(rhs));
     }
 
+    /*!
+     * Add a stop reason flag in place.
+     * @param lhs Stop reason updated in place.
+     * @param rhs Stop reason flag to add.
+     * @return Updated stop reason.
+     */
     constexpr auto operator|=(StopReason &lhs, StopReason rhs) noexcept -> StopReason {
         lhs = lhs | rhs;
         return lhs;
     }
 
+    /*!
+     * Check whether a stop reason contains a given flag.
+     * @param target Stop reason to inspect.
+     * @param check Stop reason flag to check.
+     * @return True when target contains check.
+     */
     inline bool has_flag(StopReason target, StopReason check) noexcept {
         using U = std::underlying_type_t<StopReason>;
         return (static_cast<U>(target) & static_cast<U>(check)) == static_cast<U>(check);
     }
 
+    /*!
+     * Return the short name of a Ritz selector.
+     * @param ritz Ritz selector.
+     * @return Short name.
+     */
     inline std::string_view enum2sv(Ritz ritz) {
         switch(ritz) {
             case Ritz::NONE: return "NONE";
@@ -55,6 +103,11 @@ namespace grit {
         return "NONE";
     }
 
+    /*!
+     * Return the short name of a single stop reason.
+     * @param reason Stop reason.
+     * @return Short name.
+     */
     inline std::string_view enum2sv(StopReason reason) {
         switch(reason) {
             case StopReason::none: return "none";
@@ -71,6 +124,11 @@ namespace grit {
         return "multiple";
     }
 
+    /*!
+     * Return the short name of a possibly combined stop reason.
+     * @param reason Stop reason.
+     * @return Short name.
+     */
     inline std::string enum2s(StopReason reason) {
         if(reason == StopReason::none) return std::string(enum2sv(reason));
 

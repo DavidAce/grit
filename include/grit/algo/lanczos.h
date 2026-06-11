@@ -9,18 +9,19 @@
 #include <type_traits>
 
 namespace grit::algo {
+    /*! Block Lanczos solver for symmetric or Hermitian eigenvalue problems. */
     template<typename Scalar_, grit::Form form_>
     class lanczos : public form::base<Scalar_, form_> {
         public:
-        using Base       = form::base<Scalar_, form_>;
-        using Scalar     = typename Base::Scalar;
-        using RealScalar = typename Base::RealScalar;
-        using MatrixType = typename Base::MatrixType;
-        using VectorType = typename Base::VectorType;
-        using VectorReal = typename Base::VectorReal;
-        using VectorIdxT = typename Base::VectorIdxT;
-        using OrthMeta   = typename Base::OrthMeta;
-        using BaseConfig = typename Base::BaseConfig;
+        using Base       = form::base<Scalar_, form_>; /*!< Base form for the selected problem type. */
+        using Scalar     = typename Base::Scalar;      /*!< Scalar type of vectors and operators. */
+        using RealScalar = typename Base::RealScalar;  /*!< Real scalar type used for Ritz values and norms. */
+        using MatrixType = typename Base::MatrixType;  /*!< Dense block of vectors. */
+        using VectorType = typename Base::VectorType;  /*!< Dense single vector. */
+        using VectorReal = typename Base::VectorReal;  /*!< Real-valued vector. */
+        using VectorIdxT = typename Base::VectorIdxT;  /*!< Vector of column indices. */
+        using OrthMeta   = typename Base::OrthMeta;    /*!< Orthogonalization diagnostics. */
+        using BaseConfig = typename Base::BaseConfig;  /*!< Shared solver configuration. */
 
         using Base::A;
         using Base::AQ;
@@ -60,17 +61,28 @@ namespace grit::algo {
         using Base::qBlocks;
         using Base::status;
 
+        /*! Configuration for block Lanczos. */
         struct Config : BaseConfig {
-            static constexpr RealScalar                         eps = std::numeric_limits<RealScalar>::epsilon();
-            Eigen::Index                                        maxRetainBlocks = 2;
-            std::function<void(const lanczos<Scalar, form_> &)> user_callback;
+            static constexpr RealScalar                         eps             = std::numeric_limits<RealScalar>::epsilon(); /*!< Machine epsilon. */
+            Eigen::Index                                        maxRetainBlocks = 2; /*!< Number of old Lanczos blocks kept on restart. */
+            std::function<void(const lanczos<Scalar, form_> &)> user_callback;       /*!< Callback called after each outer iteration. */
         };
 
-        Config config;
+        Config config; /*!< User-facing Lanczos configuration. */
 
+        /*!
+         * Construct a standard Lanczos solver.
+         * @param A Matrix-free operator A.
+         */
         lanczos(Matvec<Scalar> &A) requires(form_ == grit::Form::STANDARD);
+        /*!
+         * Construct a generalized Lanczos solver.
+         * @param A Matrix-free operator A.
+         * @param B Matrix-free operator B.
+         */
         lanczos(Matvec<Scalar> &A, Matvec<Scalar> &B) requires(form_ == grit::Form::GENERALIZED);
 
+        /*! Run the solver until convergence or a stop condition is reached. */
         void run();
 
         private:
@@ -87,6 +99,7 @@ namespace grit::algo {
         void run_user_callback() final;
 
         public:
+        /*! Expand or restart the Lanczos search space. */
         void build() final;
     };
 }

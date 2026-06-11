@@ -9,22 +9,23 @@
 #include <type_traits>
 
 namespace grit::algo {
+    /*! Generalized Davidson plus Krylov correction solver. */
     template<typename Scalar_, grit::Form form_>
     class gdplusk : public form::base<Scalar_, form_> {
         public:
-        using Base                   = form::base<Scalar_, form_>;
-        using Scalar                 = typename Base::Scalar;
-        using RealScalar             = typename Base::RealScalar;
-        using MatrixType             = typename Base::MatrixType;
-        using VectorType             = typename Base::VectorType;
-        using VectorReal             = typename Base::VectorReal;
-        using VectorIdxT             = typename Base::VectorIdxT;
-        using fMultP_t               = typename Base::fMultP_t;
-        using OrthMeta               = typename Base::OrthMeta;
-        using BaseConfig             = typename Base::BaseConfig;
-        using ResidualCorrectionType = typename Base::ResidualCorrectionType;
-        using AutoSaturationInfo     = typename Base::AutoSaturationInfo;
-        using AutoSaturationStatus   = typename Base::AutoSaturationStatus;
+        using Base                   = form::base<Scalar_, form_>;            /*!< Base form for the selected problem type. */
+        using Scalar                 = typename Base::Scalar;                 /*!< Scalar type of vectors and operators. */
+        using RealScalar             = typename Base::RealScalar;             /*!< Real scalar type used for Ritz values and norms. */
+        using MatrixType             = typename Base::MatrixType;             /*!< Dense block of vectors. */
+        using VectorType             = typename Base::VectorType;             /*!< Dense single vector. */
+        using VectorReal             = typename Base::VectorReal;             /*!< Real-valued vector. */
+        using VectorIdxT             = typename Base::VectorIdxT;             /*!< Vector of column indices. */
+        using fMultP_t               = typename Base::fMultP_t;               /*!< Preconditioner callback type. */
+        using OrthMeta               = typename Base::OrthMeta;               /*!< Orthogonalization diagnostics. */
+        using BaseConfig             = typename Base::BaseConfig;             /*!< Shared solver configuration. */
+        using ResidualCorrectionType = typename Base::ResidualCorrectionType; /*!< Residual correction selector. */
+        using AutoSaturationInfo     = typename Base::AutoSaturationInfo;     /*!< AUTO saturation diagnostic. */
+        using AutoSaturationStatus   = typename Base::AutoSaturationStatus;   /*!< AUTO saturation status. */
 
         using Base::A;
         using Base::AQ;
@@ -71,32 +72,43 @@ namespace grit::algo {
         using Base::get_standard_deviations;
         using Base::log;
 
+        /*! Configuration for GD+K. */
         struct Config : BaseConfig {
-            static constexpr RealScalar                         eps                              = std::numeric_limits<RealScalar>::epsilon();
-            ResidualCorrectionType                              residual_correction_type         = ResidualCorrectionType::NONE;
-            bool                                                use_adaptive_inner_tolerance     = false;
-            bool                                                use_jd_b_only                    = false;
-            bool                                                use_krylov_schur_gdplusk_restart = false;
-            bool                                                inject_randomness                = false;
-            Eigen::Index                                        maxRetainBlocks                  = 1;
-            RealScalar                                          inner_tol                        = RealScalar{0.1f};
-            Eigen::Index                                        inner_max_iters                  = 1000;
-            Eigen::Index                                        auto_min_dwell_iters             = 10;
-            RealScalar                                          auto_sat_eigval_threshold        = RealScalar{1e-3f};
-            RealScalar                                          auto_sat_rnorm_threshold         = RealScalar{1e-2f};
-            RealScalar                                          auto_jd_start_rnorm_threshold    = RealScalar{1e-5f};
-            Eigen::Index                                        auto_cheap_probe_interval        = 5;
-            RealScalar                                          auto_cheap_probe_factor          = RealScalar{1.0f};
-            std::function<void(const gdplusk<Scalar, form_> &)> user_callback;
-            Eigen::Index                                        max_extra_ritz_history    = 1;
-            Eigen::Index                                        max_ritz_residual_history = 1;
+            static constexpr RealScalar eps                              = std::numeric_limits<RealScalar>::epsilon(); /*!< Machine epsilon. */
+            ResidualCorrectionType      residual_correction_type         = ResidualCorrectionType::NONE; /*!< Correction used to expand the search space. */
+            bool                        use_adaptive_inner_tolerance     = false; /*!< Tighten the inner correction tolerance as residuals improve. */
+            bool                        use_jd_b_only                    = false; /*!< Use only B in the generalized Jacobi-Davidson projector. */
+            bool                        use_krylov_schur_gdplusk_restart = false; /*!< Use Krylov-Schur style restart for GD+K. */
+            bool                        inject_randomness                = false; /*!< Randomize dependent correction vectors. */
+            Eigen::Index                maxRetainBlocks                  = 1;     /*!< Number of old Ritz blocks kept on restart. */
+            RealScalar                  inner_tol                        = RealScalar{0.1f};   /*!< Initial tolerance for inner correction solves. */
+            Eigen::Index                inner_max_iters                  = 1000;               /*!< Maximum iterations in each inner correction solve. */
+            Eigen::Index                auto_min_dwell_iters             = 10;                 /*!< Minimum cheap Olsen steps before AUTO may switch. */
+            RealScalar                  auto_sat_eigval_threshold        = RealScalar{1e-3f};  /*!< AUTO eigenvalue saturation threshold. */
+            RealScalar                  auto_sat_rnorm_threshold         = RealScalar{1e-2f};  /*!< AUTO relative residual saturation threshold. */
+            RealScalar                  auto_jd_start_rnorm_threshold    = RealScalar{1e-5f};  /*!< AUTO residual threshold for allowing Jacobi-Davidson. */
+            Eigen::Index                auto_cheap_probe_interval        = 5;                  /*!< Jacobi-Davidson steps between cheap Olsen probes. */
+            RealScalar                  auto_cheap_probe_factor          = RealScalar{1.0f};   /*!< Scale factor for judging cheap Olsen probe progress. */
+            std::function<void(const gdplusk<Scalar, form_> &)> user_callback;                 /*!< Callback called after each outer iteration. */
+            Eigen::Index                                        max_extra_ritz_history    = 1; /*!< Extra Ritz history retained for progress checks. */
+            Eigen::Index                                        max_ritz_residual_history = 1; /*!< Ritz residual history retained for progress checks. */
         };
 
-        Config config;
+        Config config; /*!< User-facing GD+K configuration. */
 
+        /*!
+         * Construct a standard GD+K solver.
+         * @param A Matrix-free operator A.
+         */
         gdplusk(Matvec<Scalar> &A) requires(form_ == grit::Form::STANDARD);
+        /*!
+         * Construct a generalized GD+K solver.
+         * @param A Matrix-free operator A.
+         * @param B Matrix-free operator B.
+         */
         gdplusk(Matvec<Scalar> &A, Matvec<Scalar> &B) requires(form_ == grit::Form::GENERALIZED);
 
+        /*! Run the solver until convergence or a stop condition is reached. */
         void run();
 
         private:
@@ -124,27 +136,94 @@ namespace grit::algo {
         void                          run_user_callback() final;
 
         public:
-        void                               adjust_inner_tolerance(const Eigen::Ref<const MatrixType> &S);
-        void                               adjust_residual_correction_type();
-        void                               update_auto_residual_correction_state();
-        [[nodiscard]] RealScalar           get_auto_rnorm_scalar(const VectorReal &rnorms) const;
-        [[nodiscard]] RealScalar           get_auto_probe_eigval_improvement() const;
-        [[nodiscard]] RealScalar           get_auto_probe_eigval_relative_improvement() const;
-        [[nodiscard]] RealScalar           get_auto_ritz_value_relative_change() const;
-        [[nodiscard]] AutoSaturationInfo   get_auto_eigval_saturation_info();
-        [[nodiscard]] AutoSaturationInfo   get_auto_rnorm_saturation_info();
+        /*!
+         * Update the inner correction tolerance from the current search block.
+         * @param S Residual or correction block used to estimate current progress.
+         */
+        void adjust_inner_tolerance(const Eigen::Ref<const MatrixType> &S);
+        /*! Update the active residual correction method. */
+        void adjust_residual_correction_type();
+        /*! Update AUTO residual correction counters after a step. */
+        void update_auto_residual_correction_state();
+        /*!
+         * Scalar residual used by AUTO decisions.
+         * @param rnorms Current selected residual norms.
+         * @return Scalar residual measure.
+         */
+        [[nodiscard]] RealScalar get_auto_rnorm_scalar(const VectorReal &rnorms) const;
+        /*! Absolute Ritz-value improvement from a cheap Olsen probe. */
+        [[nodiscard]] RealScalar get_auto_probe_eigval_improvement() const;
+        /*! Relative Ritz-value improvement from a cheap Olsen probe. */
+        [[nodiscard]] RealScalar get_auto_probe_eigval_relative_improvement() const;
+        /*! Relative Ritz-value change used by AUTO. */
+        [[nodiscard]] RealScalar get_auto_ritz_value_relative_change() const;
+        /*! Current AUTO eigenvalue saturation diagnostic. */
+        [[nodiscard]] AutoSaturationInfo get_auto_eigval_saturation_info();
+        /*! Current AUTO residual saturation diagnostic. */
+        [[nodiscard]] AutoSaturationInfo get_auto_rnorm_saturation_info();
+        /*! Combined AUTO saturation status. */
         [[nodiscard]] AutoSaturationStatus get_auto_saturation_status();
-        [[nodiscard]] bool                 auto_jd_start_ready();
-        [[nodiscard]] MatrixType           cheap_Olsen_correction(const MatrixType &V, const MatrixType &S);
-        [[nodiscard]] MatrixType           full_Olsen_correction(const MatrixType &V, const MatrixType &S);
-        [[nodiscard]] MatrixType           jacobi_davidson_l2_correction(const MatrixType &V, const MatrixType &S, const VectorReal &evals);
+        /*! Whether AUTO may start Jacobi-Davidson from the current residuals. */
+        [[nodiscard]] bool auto_jd_start_ready();
+        /*!
+         * Compute the cheap Olsen correction block.
+         * @param V Current Ritz vectors.
+         * @param S Current residual block.
+         * @return Correction block.
+         */
+        [[nodiscard]] MatrixType cheap_Olsen_correction(const MatrixType &V, const MatrixType &S);
+        /*!
+         * Compute the full Olsen correction block.
+         * @param V Current Ritz vectors.
+         * @param S Current residual block.
+         * @return Correction block.
+         */
+        [[nodiscard]] MatrixType full_Olsen_correction(const MatrixType &V, const MatrixType &S);
+        /*!
+         * Compute an l2 Jacobi-Davidson correction block.
+         * @param V Current Ritz vectors.
+         * @param S Current residual block.
+         * @param evals Current Ritz values.
+         * @return Correction block.
+         */
+        [[nodiscard]] MatrixType jacobi_davidson_l2_correction(const MatrixType &V, const MatrixType &S, const VectorReal &evals);
+        /*!
+         * Compute a B-metric Jacobi-Davidson correction block.
+         * @param V Current Ritz vectors.
+         * @param BV Products B V.
+         * @param S Current residual block.
+         * @param evals Current Ritz values.
+         * @return Correction block.
+         */
         [[nodiscard]] MatrixType jacobi_davidson_bm_correction(const MatrixType &V, const MatrixType &BV, const MatrixType &S, const VectorReal &evals)
             requires(form_ == grit::Form::GENERALIZED);
+        /*!
+         * Build the correction block from the residual block.
+         * @param S_in Current residual block.
+         * @return Correction block.
+         */
         [[nodiscard]] MatrixType get_sBlock(const MatrixType &S_in);
 
         public:
+        /*! Expand or restart the GD+K search space. */
         void build() final;
+        /*!
+         * Append a standard-problem correction block to the basis.
+         * @param Q Search basis.
+         * @param AQ Products A Q.
+         * @param Q_new New basis block.
+         * @param AQ_new Products A Q_new.
+         */
         void build(MatrixType &Q, MatrixType &AQ, const MatrixType &Q_new, const MatrixType &AQ_new);
+        /*!
+         * Append a generalized-problem correction block to the basis.
+         * @param Q Search basis.
+         * @param AQ Products A Q.
+         * @param BQ Products B Q.
+         * @param Q_new New basis block.
+         * @param AQ_new Products A Q_new.
+         * @param BQ_new Products B Q_new.
+         */
         void build(MatrixType &Q, MatrixType &AQ, MatrixType &BQ, const MatrixType &Q_new, const MatrixType &AQ_new, const MatrixType &BQ_new);
     };
 }
