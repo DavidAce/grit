@@ -26,9 +26,9 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &S, VectorReal &rNorms) {
-        auto token_extract_ritz = status.time_extract_ritz.tic_token();
-        MatrixType Z = T_evecs(Eigen::placeholders::all, optIdx);
-        VectorReal Y = T_evals(optIdx);
+        auto       token_extract_ritz = status.time_extract_ritz.tic_token();
+        MatrixType Z                  = T_evecs(Eigen::placeholders::all, optIdx);
+        VectorReal Y                  = T_evals(optIdx);
 
         V  = Q * Z;
         AV = AQ * Z;
@@ -38,9 +38,9 @@ namespace grit::form {
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV, MatrixType &S,
                                                  VectorReal &rNorms) {
-        auto token_extract_ritz = status.time_extract_ritz.tic_token();
-        MatrixType Z = T_evecs(Eigen::placeholders::all, optIdx);
-        VectorReal Y = T_evals(optIdx);
+        auto       token_extract_ritz = status.time_extract_ritz.tic_token();
+        MatrixType Z                  = T_evecs(Eigen::placeholders::all, optIdx);
+        VectorReal Y                  = T_evals(optIdx);
 
         V.noalias()  = Q * Z;
         AV.noalias() = AQ * Z;
@@ -273,32 +273,32 @@ namespace grit::form {
     void base<Scalar, form_>::refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AQ, MatrixType &BQ, MatrixType &S,
                                                  VectorReal &rNorms) requires(form_ == grit::Form::GENERALIZED)
     {
-        auto token_extract_ritz = status.time_extract_ritz.tic_token();
-        VectorReal Y     = T_evals(optIdx);
-        MatrixType Z_rr  = T_evecs(Eigen::placeholders::all, optIdx);
-        MatrixType Z_ref = get_refined_ritz_eigenvectors_gen(Z_rr, Y, AQ, BQ);
-        MatrixType Z_opt = get_optimal_rayleigh_ritz_matrix(Z_rr, Z_ref, T1, T2);
+        auto       token_extract_ritz = status.time_extract_ritz.tic_token();
+        VectorReal Y                  = T_evals(optIdx);
+        MatrixType Z_rr               = T_evecs(Eigen::placeholders::all, optIdx);
+        MatrixType Z_ref              = get_refined_ritz_eigenvectors_gen(Z_rr, Y, AQ, BQ);
+        MatrixType Z_opt              = get_optimal_rayleigh_ritz_matrix(Z_rr, Z_ref, T1, T2);
 
         V.noalias()  = Q * Z_opt;
         AQ.noalias() = this->AQ * Z_opt;
         BQ.noalias() = this->BQ * Z_opt;
 
-        if(cfg().use_rayleigh_quotients_instead_of_evals) {
-            VectorReal rq1  = (V.adjoint() * AQ).diagonal().real();
-            VectorReal rq2  = (V.adjoint() * BQ).diagonal().real();
-            T_evals(optIdx) = rq1.cwiseQuotient(rq2);
-            Y               = T_evals(optIdx);
-        }
+        MatrixType T1h  = (T1.adjoint() + T1) * half;
+        MatrixType T2h  = (T2.adjoint() + T2) * half;
+        VectorReal rq1  = (Z_opt.adjoint() * T1h * Z_opt).diagonal().real();
+        VectorReal rq2  = (Z_opt.adjoint() * T2h * Z_opt).diagonal().real();
+        T_evals(optIdx) = rq1.cwiseQuotient(rq2);
+        Y               = T_evals(optIdx);
 
         S = get_residuals(Y, AQ, BQ, rNorms);
     }
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AQ, MatrixType &S, VectorReal &rNorms) {
-        auto token_extract_ritz = status.time_extract_ritz.tic_token();
-        MatrixType Z     = T_evecs(Eigen::placeholders::all, optIdx);
-        VectorReal Y     = T_evals(optIdx);
-        MatrixType Z_ref = get_refined_ritz_eigenvectors_std(Z, Y, Q, this->AQ);
+        auto       token_extract_ritz = status.time_extract_ritz.tic_token();
+        MatrixType Z                  = T_evecs(Eigen::placeholders::all, optIdx);
+        VectorReal Y                  = T_evals(optIdx);
+        MatrixType Z_ref              = get_refined_ritz_eigenvectors_std(Z, Y, Q, this->AQ);
 
         V  = Q * Z_ref;
         AQ = this->AQ * Z_ref;

@@ -103,6 +103,42 @@ TEST_CASE("generalized gdplusk converges with l2 and bm projectors") {
     }
 }
 
+TEST_CASE("generalized refined Rayleigh-Ritz reports the Rayleigh quotient of the refined vector") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix(5, 5);
+    A_matrix << 4.0, 1.0, 0.0, 0.0, 0.0, 1.0, 3.0, 0.5, 0.0, 0.0, 0.0, 0.5, 2.0, 0.25, 0.0, 0.0, 0.0, 0.25, 5.0, 0.5, 0.0, 0.0,
+        0.0, 0.5, 6.0;
+
+    Matrix B_matrix = Matrix::Identity(5, 5);
+    B_matrix.diagonal() << 1.0, 1.5, 2.0, 2.5, 3.0;
+
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+    auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
+
+    grit::generalized::gdplusk<double> solver(A, B);
+    solver.config.nev                                     = 1;
+    solver.config.ncv                                     = 4;
+    solver.config.block_size                              = 1;
+    solver.config.ritz                                    = grit::Ritz::SR;
+    solver.config.max_iters                               = 3;
+    solver.config.tol                                     = 1e-14;
+    solver.config.use_refined_rayleigh_ritz               = true;
+    solver.config.use_rayleigh_quotients_instead_of_evals = false;
+    solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 71));
+    solver.run();
+
+    auto view = solver.get_result();
+    REQUIRE(view.eigVal().size() == 1);
+    REQUIRE(view.eigVecs().cols() >= 1);
+
+    const auto v  = view.eigVecs().col(0);
+    const auto av = A_matrix * v;
+    const auto bv = B_matrix * v;
+    const auto rq = std::real(v.dot(av)) / std::real(v.dot(bv));
+    REQUIRE(std::abs(view.eigVal()(0) - rq) < 1e-12);
+}
+
 TEST_CASE("generalized gdplusk handles nos4 restart block search") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
