@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 project(grit
-        VERSION 0.1.0
+        VERSION 1.0.0
         DESCRIPTION "Generalized Ritz Iteration Toolkit"
         HOMEPAGE_URL "https://github.com/DavidAce/grit"
         LANGUAGES C CXX)

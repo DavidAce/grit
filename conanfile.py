@@ -8,7 +8,7 @@ required_conan_version = ">=2.0"
 
 class GritConan(ConanFile):
     name = "grit"
-    version = "0.1.0"
+    version = "1.0.0"
     description = "Generalized Ritz Iteration Toolkit"
     homepage = "https://github.com/DavidAce/grit"
     url = "https://github.com/DavidAce/grit"

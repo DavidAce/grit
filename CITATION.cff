@@ -6,5 +6,5 @@ authors:
     orcid: https://orcid.org/0009-0008-8177-9218
 title: "GRIT"
 abstract: "Generalized Ritz Iteration Toolkit"
-version: 0.1.0
+version: 1.0.0
 repository-code: "https://github.com/DavidAce/grit"
