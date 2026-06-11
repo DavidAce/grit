@@ -27,7 +27,7 @@ TEST_CASE("identity operator converges") {
     solver.set_initial_guess(V);
     solver.run();
 
-    auto view = grit::solver_view<double>(solver);
+    auto view = solver.get_result();
     REQUIRE(grit::has_flag(view.stopReason(), grit::StopReason::converged));
     REQUIRE(std::abs(view.eigVal()(0) - 1.0) < 1e-12);
 }

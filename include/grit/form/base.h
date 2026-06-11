@@ -24,165 +24,213 @@
 #include <utility>
 #include <vector>
 
+namespace grit {
+    template<typename Scalar>
+    class ResultView;
+}
+
 namespace grit::form {
+    /*! Shared state and operations for standard and generalized eigensolver forms. */
     template<typename Scalar_, grit::Form form_ = grit::Form::STANDARD>
     class base {
         public:
-        using Scalar     = Scalar_;
-        using RealScalar = decltype(std::real(std::declval<Scalar>()));
-        using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
-        using MatrixReal = Eigen::Matrix<RealScalar, Eigen::Dynamic, Eigen::Dynamic>;
-        using VectorType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
-        using VectorReal = Eigen::Matrix<RealScalar, Eigen::Dynamic, 1>;
-        using VectorIdxT = Eigen::Matrix<Eigen::Index, Eigen::Dynamic, 1>;
+        using Scalar     = Scalar_;                                                   /*!< Scalar type of vectors and operators. */
+        using RealScalar = decltype(std::real(std::declval<Scalar>()));               /*!< Real scalar type used for Ritz values and norms. */
+        using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;     /*!< Dense block of vectors. */
+        using MatrixReal = Eigen::Matrix<RealScalar, Eigen::Dynamic, Eigen::Dynamic>; /*!< Dense real matrix. */
+        using VectorType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;                  /*!< Dense single vector. */
+        using VectorReal = Eigen::Matrix<RealScalar, Eigen::Dynamic, 1>;              /*!< Real-valued vector. */
+        using VectorIdxT = Eigen::Matrix<Eigen::Index, Eigen::Dynamic, 1>;            /*!< Vector of column indices. */
         using fMultP_t   = std::function<MatrixType(const Eigen::Ref<const MatrixType> &, const Eigen::Ref<const VectorReal> &,
-                                                    std::optional<const Eigen::Ref<const MatrixType>>)>;
+                                                    std::optional<const Eigen::Ref<const MatrixType>>)>; /*!< Preconditioner callback type. */
 
-        using ResidualCorrectionType = grit::ResidualCorrectionType;
-        enum class MaskPolicy { COMPRESS, RANDOMIZE };
-        enum class RefreshMult { YES, NO };
-
-        static constexpr auto eps  = std::numeric_limits<RealScalar>::epsilon();
-        static constexpr auto half = RealScalar{1} / RealScalar{2};
-        static constexpr auto form = form_;
-
-        struct BaseConfig {
-            Eigen::Index nev                                     = 1;     /*!< Number of requested eigenpairs. */
-            Eigen::Index ncv                                     = 8;     /*!< Maximum search-space columns. */
-            Eigen::Index block_size                              = 2;     /*!< Number of vectors in each solver block. */
-            bool         use_b_inner_product                     = false; /*!< Use the B-metric inner product in generalized problems. */
-            bool         use_refined_rayleigh_ritz               = false; /*!< Use refined Rayleigh-Ritz extraction. */
-            bool         use_rayleigh_quotients_instead_of_evals = false; /*!< Replace projected eigenvalues with Rayleigh quotient estimates. */
-            bool         use_relative_rnorm_tolerance            = false; /*!< Interpret tol as a derived relative residual-norm tolerance. */
-            Ritz      ritz                                    = Ritz::SR;
-            RealScalar   tol                  = eps * 10000; /*!< Absolute residual-norm convergence tolerance, or relative residual tolerance when enabled. */
-            RealScalar   tol_rnorm_relative   = 0;           /*!< Relative-to-initial absolute residual-norm convergence tolerance; zero disables it. */
-            Eigen::Index max_iters            = 100l;        /*!< Maximum outer solver iterations; negative means unlimited. */
-            Eigen::Index max_matvecs          = -1l;         /*!< Maximum total matrix-vector products; negative means unlimited. */
-            RealScalar   sat_eigval_threshold = RealScalar{0}; /*!< Eigenvalue saturation threshold for stopping; zero disables this stop. */
-            RealScalar   sat_rnorm_threshold  = RealScalar{0}; /*!< Derived relative-residual saturation threshold for stopping; zero disables this stop. */
-            spdlog::level::level_enum log_level = spdlog::level::warn;
+        using ResidualCorrectionType = grit::ResidualCorrectionType; /*!< Residual correction selector. */
+        /*! How to handle linearly dependent candidate vectors. */
+        enum class MaskPolicy {
+            COMPRESS, /*!< Drop dependent columns. */
+            RANDOMIZE /*!< Replace dependent columns by random vectors. */
+        };
+        /*! Whether operator products should be refreshed after orthogonalization. */
+        enum class RefreshMult {
+            YES, /*!< Refresh operator products. */
+            NO   /*!< Keep existing operator products. */
         };
 
-        struct OrthMeta {
-            MatrixType Gram;
-            MatrixType Gram_symm;
-            MatrixType Gram_skew;
-            MatrixType Gram_skew_fwd;
-            MatrixType Gram_skew_adj;
-            VectorReal Rdiag;
-            RealScalar maskTol       = std::numeric_limits<RealScalar>::quiet_NaN();
-            RealScalar orthTol       = std::numeric_limits<RealScalar>::quiet_NaN();
-            RealScalar skewTol       = std::pow(eps, RealScalar{0.25f});
-            RealScalar orthError     = std::numeric_limits<RealScalar>::quiet_NaN();
-            RealScalar symmError     = std::numeric_limits<RealScalar>::quiet_NaN();
-            RealScalar skewError     = std::numeric_limits<RealScalar>::quiet_NaN();
-            RealScalar skewError_fwd = std::numeric_limits<RealScalar>::quiet_NaN();
-            RealScalar skewError_adj = std::numeric_limits<RealScalar>::quiet_NaN();
-            VectorReal proj_sum_a;
-            VectorReal proj_sum_b;
-            VectorReal scale_log;
-            VectorIdxT mask;
-            bool       force_refresh_a           = false;
-            bool       refresh_by                = true;
-            bool       gram_is_positive_definite = false;
-            MaskPolicy maskPolicy                = MaskPolicy::RANDOMIZE;
+        static constexpr auto eps  = std::numeric_limits<RealScalar>::epsilon(); /*!< Machine epsilon. */
+        static constexpr auto half = RealScalar{1} / RealScalar{2};              /*!< One half in the real scalar type. */
+        static constexpr auto form = form_;                                      /*!< Problem form of this base instance. */
 
+        /*! Configuration shared by all eigensolvers. */
+        struct BaseConfig {
+            Eigen::Index              nev                                     = 1;     /*!< Number of requested eigenpairs. */
+            Eigen::Index              ncv                                     = 8;     /*!< Maximum search-space columns. */
+            Eigen::Index              block_size                              = 2;     /*!< Number of vectors in each solver block. */
+            bool                      use_b_inner_product                     = false; /*!< Use the B-metric inner product in generalized problems. */
+            bool                      use_refined_rayleigh_ritz               = false; /*!< Use refined Rayleigh-Ritz extraction. */
+            bool                      use_rayleigh_quotients_instead_of_evals = false; /*!< Report full Rayleigh quotients instead of projected Ritz values. */
+            bool                      use_relative_rnorm_tolerance            = false; /*!< Use tol as a relative residual tolerance scaled by the operator. */
+            Ritz                      ritz                                    = Ritz::SR; /*!< Which Ritz values to target. */
+            RealScalar                tol                  = eps * 10000;         /*!< Residual-norm tolerance, absolute unless relative mode is enabled. */
+            RealScalar                tol_rnorm_relative   = 0;                   /*!< Extra relative-to-initial residual tolerance; zero disables it. */
+            Eigen::Index              max_iters            = 100l;                /*!< Maximum outer solver iterations; negative means unlimited. */
+            Eigen::Index              max_matvecs          = -1l;                 /*!< Maximum total matrix-vector products; negative means unlimited. */
+            RealScalar                sat_eigval_threshold = RealScalar{0};       /*!< Eigenvalue saturation threshold for stopping; zero disables it. */
+            RealScalar                sat_rnorm_threshold  = RealScalar{0};       /*!< Residual saturation threshold for stopping; zero disables it. */
+            spdlog::level::level_enum log_level            = spdlog::level::warn; /*!< Solver log level. */
+        };
+
+        /*! Orthogonalization diagnostics for l2 and B-metric blocks. */
+        struct OrthMeta {
+            MatrixType Gram;                                                         /*!< Gram matrix used in the last orthogonalization check. */
+            MatrixType Gram_symm;                                                    /*!< Hermitian part of the Gram matrix. */
+            MatrixType Gram_skew;                                                    /*!< Skew-Hermitian part of the Gram matrix. */
+            MatrixType Gram_skew_fwd;                                                /*!< Forward skew diagnostic. */
+            MatrixType Gram_skew_adj;                                                /*!< Adjoint skew diagnostic. */
+            VectorReal Rdiag;                                                        /*!< Diagonal of the triangular factor from orthonormalization. */
+            RealScalar maskTol       = std::numeric_limits<RealScalar>::quiet_NaN(); /*!< Tolerance for masking dependent columns. */
+            RealScalar orthTol       = std::numeric_limits<RealScalar>::quiet_NaN(); /*!< Orthogonality tolerance used in the last check. */
+            RealScalar skewTol       = std::pow(eps, RealScalar{0.25f});             /*!< Skew tolerance used for Gram diagnostics. */
+            RealScalar orthError     = std::numeric_limits<RealScalar>::quiet_NaN(); /*!< Measured orthogonality error. */
+            RealScalar symmError     = std::numeric_limits<RealScalar>::quiet_NaN(); /*!< Measured Hermitian symmetry error. */
+            RealScalar skewError     = std::numeric_limits<RealScalar>::quiet_NaN(); /*!< Measured skew error. */
+            RealScalar skewError_fwd = std::numeric_limits<RealScalar>::quiet_NaN(); /*!< Measured forward skew error. */
+            RealScalar skewError_adj = std::numeric_limits<RealScalar>::quiet_NaN(); /*!< Measured adjoint skew error. */
+            VectorReal proj_sum_a;                                                   /*!< Projection coefficients from the first orthogonalization pass. */
+            VectorReal proj_sum_b;                                                   /*!< Projection coefficients from the second orthogonalization pass. */
+            VectorReal scale_log;                                                    /*!< Column scaling diagnostics in logarithmic form. */
+            VectorIdxT mask;                                                         /*!< Kept-column mask after orthonormalization. */
+            bool       force_refresh_a           = false;                            /*!< Refresh A times the block after orthogonalization. */
+            bool       refresh_by                = true;                             /*!< Refresh B times the block after orthogonalization. */
+            bool       gram_is_positive_definite = false;                            /*!< Whether the last Gram matrix passed the positive-definite check. */
+            MaskPolicy maskPolicy                = MaskPolicy::RANDOMIZE;            /*!< Policy for dependent columns. */
+
+            /*!
+             * Analyze l2 orthonormality of Y.
+             * @param Y Block to check.
+             */
             void analyze_l2_orthonormality(const Eigen::Ref<const MatrixType> &Y);
+            /*!
+             * Analyze B-orthonormality using Y and B Y.
+             * @param Y Block to check.
+             * @param B_Y Product B Y.
+             */
             void analyze_b_orthonormality(const Eigen::Ref<const MatrixType> &Y, const Eigen::Ref<const MatrixType> &B_Y);
+            /*!
+             * Analyze B-metric orthonormality using Y and B Y.
+             * @param Y Block to check.
+             * @param B_Y Product B Y.
+             */
             void analyze_bm_orthonormality(const Eigen::Ref<const MatrixType> &Y, const Eigen::Ref<const MatrixType> &B_Y);
+            /*!
+             * Analyze l2 orthogonality between X and Y.
+             * @param X First block.
+             * @param Y Second block.
+             */
             void analyze_l2_orthogonality(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &Y);
+            /*!
+             * Analyze B-metric orthogonality between X and Y.
+             * @param X First block.
+             * @param B_X Product B X.
+             * @param Y Second block.
+             * @param B_Y Product B Y.
+             */
             void analyze_bm_orthogonality(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &B_X, const Eigen::Ref<const MatrixType> &Y,
                                           const Eigen::Ref<const MatrixType> &B_Y);
         };
 
+        /*! Solver output, counters, timers, and stopping diagnostics. */
         struct Status {
-            VectorReal                eigVal;
-            VectorReal                oldVal;
-            VectorReal                absDiff;
-            VectorReal                relDiff;
-            RealScalar                initVal          = std::numeric_limits<RealScalar>::quiet_NaN();
-            RealScalar                condition        = RealScalar{1};
-            RealScalar                sensitivity      = RealScalar{1};
-            RealScalar                op_norm_estimate = RealScalar{1};
-            RealScalar                gap              = std::numeric_limits<RealScalar>::infinity();
-            std::vector<Eigen::Index> optIdx;
-            Eigen::Index              iter                 = 0;
-            Eigen::Index              iter_last_restart    = 0;
-            Eigen::Index              num_iters_inner      = 0;
-            Eigen::Index              num_iters_inner_prev = 0;
-            Eigen::Index              num_matvecs_inner    = 0;
-            Eigen::Index              num_jdops_inner      = 0;
-            Eigen::Index              num_matvecs          = 0;
-            Eigen::Index              num_matvecs_total    = 0;
-            Eigen::Index              num_precond          = 0;
-            Eigen::Index              num_precond_inner    = 0;
-            Eigen::Index              num_precond_total    = 0;
-            tid::ur                   time_elapsed;
-            tid::ur                   time_matvecs;
-            tid::ur                   time_matvecs_inner;
-            tid::ur                   time_matvecs_total;
-            tid::ur                   time_precond;
-            tid::ur                   time_precond_inner;
-            tid::ur                   time_precond_total;
-            tid::ur                   time_jdops_inner;
-            tid::ur                   time_orthogonalize;
-            tid::ur                   time_orthonormalize;
-            tid::ur                   time_orth_project;
-            tid::ur                   time_orth_factor;
-            tid::ur                   time_orth_update;
-            tid::ur                   time_orth_refresh;
-            tid::ur                   time_orth_mask;
-            tid::ur                   time_diagonalize;
-            tid::ur                   time_extract_ritz;
-            tid::ur                   time_restart;
-            RealScalar                inner_error_last     = RealScalar{0};
-            RealScalar                inner_tol_last       = RealScalar{0};
-            bool                      rNorm_below_rnormTol = false;
-            bool                      rNorm_below_gap      = false;
-            VectorReal                rNorms;
-            VectorReal                rNorms_init;
-            std::deque<VectorReal>    rNorms_history;
-            std::deque<VectorReal>    eigVals_history;
-            std::deque<Eigen::Index>  matvecs_history;
-            size_t                    max_history_size        = 5;
-            Eigen::Index              saturation_count_eigVal = 0;
-            Eigen::Index              saturation_count_rNorm  = 0;
-            Eigen::Index              saturation_count_max    = 10;
-            std::vector<std::string>  stopMessage             = {};
-            StopReason                stopReason              = StopReason::none;
-            Ritz                   ritz_internal           = Ritz::NONE;
+            VectorReal                eigVal;                                                          /*!< Current selected Ritz values. */
+            VectorReal                oldVal;                                                          /*!< Ritz values from the previous status update. */
+            VectorReal                absDiff;                                                         /*!< Absolute Ritz-value changes. */
+            VectorReal                relDiff;                                                         /*!< Relative Ritz-value changes. */
+            RealScalar                initVal          = std::numeric_limits<RealScalar>::quiet_NaN(); /*!< Initial Ritz value used for progress checks. */
+            RealScalar                condition        = RealScalar{1};                                /*!< Current projected-problem condition estimate. */
+            RealScalar                sensitivity      = RealScalar{1};                                /*!< Current eigenvalue sensitivity estimate. */
+            RealScalar                op_norm_estimate = RealScalar{1};                                /*!< Current operator norm estimate. */
+            RealScalar                gap              = std::numeric_limits<RealScalar>::infinity();  /*!< Current Ritz gap estimate. */
+            std::vector<Eigen::Index> optIdx;                                     /*!< Indices of selected Ritz values in the projected problem. */
+            Eigen::Index              iter                 = 0;                   /*!< Outer iteration count. */
+            Eigen::Index              iter_last_restart    = 0;                   /*!< Outer iteration of the last restart. */
+            Eigen::Index              num_iters_inner      = 0;                   /*!< Inner correction iterations in the last step. */
+            Eigen::Index              num_iters_inner_prev = 0;                   /*!< Inner correction iterations in the previous step. */
+            Eigen::Index              num_matvecs_inner    = 0;                   /*!< Matrix-vector products in the last inner solve. */
+            Eigen::Index              num_jdops_inner      = 0;                   /*!< Jacobi-Davidson operator applications in the last inner solve. */
+            Eigen::Index              num_matvecs          = 0;                   /*!< Matrix-vector products in the last outer step. */
+            Eigen::Index              num_matvecs_total    = 0;                   /*!< Total matrix-vector products. */
+            Eigen::Index              num_precond          = 0;                   /*!< Preconditioner applications in the last outer step. */
+            Eigen::Index              num_precond_inner    = 0;                   /*!< Preconditioner applications in the last inner solve. */
+            Eigen::Index              num_precond_total    = 0;                   /*!< Total preconditioner applications. */
+            tid::ur                   time_elapsed;                               /*!< Total solver timer. */
+            tid::ur                   time_matvecs;                               /*!< Timer for matrix-vector products in the last outer step. */
+            tid::ur                   time_matvecs_inner;                         /*!< Timer for matrix-vector products in the last inner solve. */
+            tid::ur                   time_matvecs_total;                         /*!< Timer for all matrix-vector products. */
+            tid::ur                   time_precond;                               /*!< Timer for preconditioner applications in the last outer step. */
+            tid::ur                   time_precond_inner;                         /*!< Timer for preconditioner applications in the last inner solve. */
+            tid::ur                   time_precond_total;                         /*!< Timer for all preconditioner applications. */
+            tid::ur                   time_jdops_inner;                           /*!< Timer for Jacobi-Davidson operator applications. */
+            tid::ur                   time_orthogonalize;                         /*!< Timer for orthogonalization. */
+            tid::ur                   time_orthonormalize;                        /*!< Timer for orthonormalization. */
+            tid::ur                   time_orth_project;                          /*!< Timer for orthogonalization projections. */
+            tid::ur                   time_orth_factor;                           /*!< Timer for orthonormalization factorizations. */
+            tid::ur                   time_orth_update;                           /*!< Timer for orthogonalization updates. */
+            tid::ur                   time_orth_refresh;                          /*!< Timer for refreshing operator products. */
+            tid::ur                   time_orth_mask;                             /*!< Timer for masking dependent vectors. */
+            tid::ur                   time_diagonalize;                           /*!< Timer for projected-problem diagonalization. */
+            tid::ur                   time_extract_ritz;                          /*!< Timer for Ritz extraction. */
+            tid::ur                   time_restart;                               /*!< Timer for search-space restarts. */
+            RealScalar                inner_error_last     = RealScalar{0};       /*!< Last inner correction residual. */
+            RealScalar                inner_tol_last       = RealScalar{0};       /*!< Last inner correction tolerance. */
+            bool                      rNorm_below_rnormTol = false;               /*!< Whether selected residual norms are below tolerance. */
+            bool                      rNorm_below_gap      = false;               /*!< Whether selected residual norms are below the Ritz gap criterion. */
+            VectorReal                rNorms;                                     /*!< Current selected residual norms. */
+            VectorReal                rNorms_init;                                /*!< Initial selected residual norms. */
+            std::deque<VectorReal>    rNorms_history;                             /*!< Recent residual-norm history. */
+            std::deque<VectorReal>    eigVals_history;                            /*!< Recent Ritz-value history. */
+            std::deque<Eigen::Index>  matvecs_history;                            /*!< Recent matrix-vector count history. */
+            size_t                    max_history_size        = 5;                /*!< Maximum stored history length. */
+            Eigen::Index              saturation_count_eigVal = 0;                /*!< Consecutive eigenvalue saturation count. */
+            Eigen::Index              saturation_count_rNorm  = 0;                /*!< Consecutive residual saturation count. */
+            Eigen::Index              saturation_count_max    = 10;               /*!< Saturation count required before stopping. */
+            std::vector<std::string>  stopMessage             = {};               /*!< Human-readable stop messages. */
+            StopReason                stopReason              = StopReason::none; /*!< Solver stop reason. */
+            Ritz                      ritz_internal           = Ritz::NONE;       /*!< Effective Ritz selector used internally. */
         };
 
+        /*! State used by AUTO residual correction. */
         struct AutoResidualCorrectionState {
-            ResidualCorrectionType    active               = ResidualCorrectionType::CHEAP_OLSEN;
-            ResidualCorrectionType    step_method          = ResidualCorrectionType::CHEAP_OLSEN;
-            Eigen::Index              dwell                = 0;
-            Eigen::Index              jd_steps_since_probe = 0;
-            double                    step_time_start      = 0.0;
-            std::vector<Eigen::Index> cheap_to_jd_switch_iters;
-            std::vector<Eigen::Index> jd_to_cheap_switch_iters;
+            ResidualCorrectionType    active               = ResidualCorrectionType::CHEAP_OLSEN; /*!< Correction currently preferred by AUTO. */
+            ResidualCorrectionType    step_method          = ResidualCorrectionType::CHEAP_OLSEN; /*!< Correction used in the current step. */
+            Eigen::Index              dwell                = 0;                                   /*!< Cheap Olsen dwell count. */
+            Eigen::Index              jd_steps_since_probe = 0;                                   /*!< Jacobi-Davidson steps since the last cheap probe. */
+            double                    step_time_start      = 0.0;                                 /*!< Wall-time marker for the current correction step. */
+            std::vector<Eigen::Index> cheap_to_jd_switch_iters; /*!< Iterations switching from cheap Olsen to Jacobi-Davidson. */
+            std::vector<Eigen::Index> jd_to_cheap_switch_iters; /*!< Iterations switching from Jacobi-Davidson to cheap Olsen. */
         };
 
+        /*! Saturation diagnostic used by AUTO. */
         struct AutoSaturationInfo {
-            bool         enabled        = false;
-            bool         enough_history = false;
-            bool         saturated      = false;
-            Eigen::Index history_size   = 0;
-            RealScalar   value          = RealScalar{0};
-            RealScalar   stddev         = std::numeric_limits<RealScalar>::infinity();
-            RealScalar   scale          = RealScalar{1};
-            RealScalar   ratio          = std::numeric_limits<RealScalar>::infinity();
-            RealScalar   threshold      = RealScalar{0};
+            bool         enabled        = false;                                       /*!< Whether this saturation check is enabled. */
+            bool         enough_history = false;                                       /*!< Whether enough history is available. */
+            bool         saturated      = false;                                       /*!< Whether the quantity is saturated. */
+            Eigen::Index history_size   = 0;                                           /*!< Number of history points used. */
+            RealScalar   value          = RealScalar{0};                               /*!< Current value. */
+            RealScalar   stddev         = std::numeric_limits<RealScalar>::infinity(); /*!< Standard deviation over history. */
+            RealScalar   scale          = RealScalar{1};                               /*!< Scale used to make the ratio dimensionless. */
+            RealScalar   ratio          = std::numeric_limits<RealScalar>::infinity(); /*!< Saturation ratio. */
+            RealScalar   threshold      = RealScalar{0};                               /*!< Saturation threshold. */
         };
 
+        /*! Combined AUTO saturation diagnostics. */
         struct AutoSaturationStatus {
-            AutoSaturationInfo eigval;
-            AutoSaturationInfo rnorm;
-            bool               ready = false;
+            AutoSaturationInfo eigval;        /*!< Eigenvalue saturation diagnostic. */
+            AutoSaturationInfo rnorm;         /*!< Residual saturation diagnostic. */
+            bool               ready = false; /*!< Whether AUTO may use these diagnostics. */
         };
 
-        static std::string_view       ResidualCorrectionToString(ResidualCorrectionType rct);
+        /*! Convert a residual correction selector to text. */
+        static std::string_view ResidualCorrectionToString(ResidualCorrectionType rct);
+        /*! Convert text to a residual correction selector. */
         static ResidualCorrectionType StringToResidualCorrection(std::string_view rct);
 
         protected:
@@ -201,73 +249,174 @@ namespace grit::form {
         public:
         virtual ~base() = default;
 
-        void               setLogger(spdlog::level::level_enum logLevel, const std::string &name = "");
-        void               set_initial_guess(MatrixType V);
-        void               clear_initial_guess();
+        /*!
+         * Set the solver logger level and optional logger name.
+         * @param logLevel Log level used by this solver.
+         * @param name Optional logger name suffix.
+         */
+        void setLogger(spdlog::level::level_enum logLevel, const std::string &name = "");
+        /*!
+         * Set the initial search vectors.
+         * @param V Initial vectors stored in columns.
+         */
+        void set_initial_guess(MatrixType V);
+        /*! Remove the stored initial guess. */
+        void clear_initial_guess();
+        /*! Whether an initial guess has been stored. */
         [[nodiscard]] bool has_initial_guess() const;
+        /*! Return a read-only view of the current solver result. */
+        [[nodiscard]] grit::ResultView<Scalar> get_result() const;
 
+        /*!
+         * Construct a standard form.
+         * @param V Initial vectors stored in columns.
+         * @param A Matrix-free operator A.
+         */
         base(const MatrixType &V, Matvec<Scalar> &A) requires(form_ == grit::Form::STANDARD);
+        /*!
+         * Construct a generalized form.
+         * @param V Initial vectors stored in columns.
+         * @param A Matrix-free operator A.
+         * @param B Matrix-free operator B.
+         */
         base(const MatrixType &V, Matvec<Scalar> &A, Matvec<Scalar> &B) requires(form_ == grit::Form::GENERALIZED);
 
-        Status                 status = {};
-        Eigen::Index           N;
-        Eigen::Index           size;
+        Status                 status = {};                               /*!< Current solver status and diagnostics. */
+        Eigen::Index           N;                                         /*!< Operator dimension. */
+        Eigen::Index           size;                                      /*!< Alias for the operator dimension. */
         bool                   dev_append_extra_blocks_to_basis  = false; /*!< Development option to retain extra candidate blocks. */
         bool                   dev_skipjcb                       = false; /*!< Development option to skip Jacobi-Davidson correction blocks. */
         int                    chebyshev_filter_degree           = 0;     /*!< Degree of the optional Chebyshev filter. */
-        ResidualCorrectionType residual_correction_type_internal = ResidualCorrectionType::NONE;
-        Matvec<Scalar>        &A;
-        std::optional<std::reference_wrapper<Matvec<Scalar>>> B = std::nullopt;
-        MatrixType                                            T;
-        MatrixType                                            Aproj, Bproj, W, Q;
-        MatrixType                                            AQ, BQ;
-        MatrixType                                            V;
-        MatrixType                                            AV;
-        MatrixType                                            BV;
-        MatrixType                                            V_prev;
-        MatrixType                                            K, K_prev;
-        MatrixType                                            S, S1, S2;
-        MatrixType                                            D;
-        MatrixType                                            M, AM, BM;
-        VectorReal                                            T_evals;
-        MatrixType                                            T1, T2, T_evecs;
-        Eigen::HouseholderQR<MatrixType>                      hhqr;
+        ResidualCorrectionType residual_correction_type_internal = ResidualCorrectionType::NONE; /*!< Effective residual correction used internally. */
+        Matvec<Scalar>        &A;                                                                /*!< Matrix-free operator A. */
+        std::optional<std::reference_wrapper<Matvec<Scalar>>> B = std::nullopt;   /*!< Optional matrix-free operator B for generalized problems. */
+        MatrixType                                            T;                  /*!< Projected matrix for standard problems. */
+        MatrixType                                            Aproj, Bproj, W, Q; /*!< Projected matrices, residual block, and search basis. */
+        MatrixType                                            AQ, BQ;             /*!< Operator products A Q and B Q. */
+        MatrixType                                            V;                  /*!< Selected Ritz vectors. */
+        MatrixType                                            AV;                 /*!< Products A V for selected Ritz vectors. */
+        MatrixType                                            BV;                 /*!< Products B V for selected Ritz vectors. */
+        MatrixType                                            V_prev;             /*!< Selected Ritz vectors from the previous step. */
+        MatrixType                                            K, K_prev;          /*!< Krylov or correction blocks. */
+        MatrixType                                            S, S1, S2;          /*!< Residual and correction blocks. */
+        MatrixType                                            D;                  /*!< Search directions or diagonal block. */
+        MatrixType                                            M, AM, BM;          /*!< Auxiliary basis block and operator products. */
+        VectorReal                                            T_evals;            /*!< Ritz values of the projected problem. */
+        MatrixType                                            T1, T2, T_evecs;    /*!< Generalized projected pencil and Ritz vectors. */
+        Eigen::HouseholderQR<MatrixType>                      hhqr;               /*!< Householder QR workspace. */
 
-        RealScalar                  skewTol         = std::sqrt(eps) * 10000;
-        RealScalar                  normTol         = eps * 10;
-        RealScalar                  orthTol         = eps * 100;
-        RealScalar                  quotTolB        = RealScalar{1e-10f};
-        RealScalar                  rnormRelDiffTol = std::numeric_limits<RealScalar>::epsilon();
-        RealScalar                  absDiffTol      = std::numeric_limits<RealScalar>::epsilon() * 10000;
-        RealScalar                  relDiffTol      = std::numeric_limits<RealScalar>::epsilon() * 10000;
-        std::string                 tag;
-        AutoResidualCorrectionState auto_residual_correction;
+        RealScalar                  skewTol         = std::sqrt(eps) * 10000;                     /*!< Tolerance for skew-Hermitian Gram diagnostics. */
+        RealScalar                  normTol         = eps * 10;                                   /*!< Tolerance for detecting small vector norms. */
+        RealScalar                  orthTol         = eps * 100;                                  /*!< Tolerance for orthogonality checks. */
+        RealScalar                  quotTolB        = RealScalar{1e-10f};                         /*!< Tolerance for small B-Rayleigh quotient denominators. */
+        RealScalar                  rnormRelDiffTol = std::numeric_limits<RealScalar>::epsilon(); /*!< Relative residual-change tolerance. */
+        RealScalar                  absDiffTol      = std::numeric_limits<RealScalar>::epsilon() * 10000; /*!< Absolute Ritz-value change tolerance. */
+        RealScalar                  relDiffTol      = std::numeric_limits<RealScalar>::epsilon() * 10000; /*!< Relative Ritz-value change tolerance. */
+        std::string                 tag;                                                                  /*!< Short solver tag used in log messages. */
+        AutoResidualCorrectionState auto_residual_correction;                                             /*!< AUTO residual correction state. */
 
+        /*! Return the problem form name. */
         std::string_view form_name() const;
 
+        /*!
+         * Compute residuals for candidate Ritz pairs.
+         * @param Y Ritz values.
+         * @param AV Products A V.
+         * @param BV Products B V, or an empty block for standard problems.
+         * @param rNorms Output residual norms.
+         * @return Residual block.
+         */
         MatrixType get_residuals(const Eigen::Ref<const VectorReal> &Y, const Eigen::Ref<const MatrixType> &AV, const Eigen::Ref<const MatrixType> &BV,
                                  VectorReal &rNorms);
+        /*!
+         * Residual-norm tolerance for the nth selected eigenpair.
+         * @param n Selected eigenpair index.
+         * @return Absolute tolerance used for this residual.
+         */
         RealScalar rNormTol(Eigen::Index n) const;
+        /*! Residual-norm tolerances for all selected eigenpairs. */
         VectorReal rNormTols() const;
+        /*!
+         * Relative residual scale for the nth selected eigenpair.
+         * @param n Selected eigenpair index.
+         * @return Scale used to turn an absolute residual into a relative residual.
+         */
         RealScalar relative_rNormScale(Eigen::Index n) const;
+        /*! Relative residual scales for all selected eigenpairs. */
         VectorReal relative_rNormScales() const;
+        /*!
+         * Convert absolute residual norms to relative residual norms.
+         * @param rNorms Absolute residual norms.
+         * @return Relative residual norms.
+         */
         VectorReal relative_rNorms(const VectorReal &rNorms) const;
+        /*! Log10 residual-norm change per matrix-vector product. */
         RealScalar get_rNorms_log10_change_per_matvec();
+        /*!
+         * Estimate the operator norm, optionally using a Ritz value.
+         * @param eigval Ritz value used as a lower bound when supplied.
+         * @return Operator norm estimate.
+         */
         RealScalar get_op_norm_estimate(std::optional<RealScalar> eigval = std::nullopt) const;
 
+        /*!
+         * Apply A to a block of vectors and update counters.
+         * @param X Input block.
+         * @return Product A X.
+         */
         MatrixType MultA(const Eigen::Ref<const MatrixType> &X);
+        /*!
+         * Apply A inside an inner correction solve.
+         * @param X Input block.
+         * @return Product A X.
+         */
         MatrixType MultA_inner(const Eigen::Ref<const MatrixType> &X);
+        /*!
+         * Apply the preconditioner to a block of residual vectors.
+         * @param X Residual or correction block.
+         * @param evals Current Ritz values.
+         * @return Preconditioned block.
+         */
         MatrixType MultP(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const VectorReal> &evals);
 
+        /*!
+         * Apply B to a block of vectors and update counters.
+         * @param X Input block.
+         * @return Product B X.
+         */
         MatrixType MultB(const Eigen::Ref<const MatrixType> &X) requires(form_ == grit::Form::GENERALIZED);
+        /*!
+         * Apply B inside an inner correction solve.
+         * @param X Input block.
+         * @return Product B X.
+         */
         MatrixType MultB_inner(const Eigen::Ref<const MatrixType> &X) requires(form_ == grit::Form::GENERALIZED);
 
+        /*!
+         * Select Ritz indices from the projected spectrum.
+         * @param ritz Ritz selector.
+         * @param offset Number of selected values to skip.
+         * @param num Number of indices to return.
+         * @param evals Projected Ritz values.
+         * @return Selected projected indices.
+         */
         std::vector<Eigen::Index> get_ritz_indices(Ritz ritz, Eigen::Index offset, Eigen::Index num, const VectorReal &evals) const;
 
-        void         init();
+        /*! Initialize solver storage before a run. */
+        void init();
+        /*! Expand or restart the search space. */
         virtual void build() = 0;
-        void         diagonalizeT();
+        /*! Diagonalize the current projected problem. */
+        void diagonalizeT();
 
+        /*!
+         * Return indices of selected entries after partial sorting.
+         * @param v Values to sort.
+         * @param offset Number of sorted entries to skip.
+         * @param num Number of indices to return.
+         * @param comp Ordering predicate.
+         * @return Selected indices.
+         */
         template<typename Comp>
         std::vector<Eigen::Index> getIndices(const VectorReal &v, const Eigen::Index offset, const Eigen::Index num, Comp comp) const {
             std::vector<Eigen::Index> idx(static_cast<size_t>(v.size()));
@@ -277,50 +426,221 @@ namespace grit::form {
             return std::vector(idx.begin() + offset, idx.begin() + numSort);
         }
 
+        /*! Extract selected Ritz vectors and residuals from the projected problem. */
         virtual void extractRitzVectors();
-        void         extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &S, VectorReal &rNorms);
+        /*!
+         * Extract Ritz vectors for a standard problem.
+         * @param optIdx Selected projected indices.
+         * @param V Output Ritz vectors.
+         * @param AV Output products A V.
+         * @param S Output residual block.
+         * @param rNorms Output residual norms.
+         */
+        void extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &S, VectorReal &rNorms);
+        /*!
+         * Extract Ritz vectors for a generalized problem.
+         * @param optIdx Selected projected indices.
+         * @param V Output Ritz vectors.
+         * @param AV Output products A V.
+         * @param BV Output products B V.
+         * @param S Output residual block.
+         * @param rNorms Output residual norms.
+         */
         void extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV, MatrixType &S, VectorReal &rNorms);
+        /*!
+         * Orthonormalize projected eigenvectors in the projected metric.
+         * @param Z Projected eigenvectors, modified in place.
+         * @param T2 Projected metric matrix.
+         */
         void orthonormalize_Z(Eigen::Ref<MatrixType> Z, const Eigen::Ref<const MatrixType> &T2);
+        /*!
+         * Compute refined Ritz vectors for a standard problem.
+         * @param Z Projected Ritz vectors.
+         * @param Y Ritz values.
+         * @param Q Search basis.
+         * @param AQ Products A Q.
+         * @return Refined projected vectors.
+         */
         MatrixType get_refined_ritz_eigenvectors_std(const Eigen::Ref<const MatrixType> &Z, const Eigen::Ref<const VectorReal> &Y, const MatrixType &Q,
                                                      const MatrixType &AQ);
+        /*!
+         * Compute refined Ritz vectors for a generalized problem.
+         * @param Z Projected Ritz vectors.
+         * @param Y Ritz values.
+         * @param AQ Products A Q.
+         * @param BQ Products B Q.
+         * @return Refined projected vectors.
+         */
         MatrixType get_refined_ritz_eigenvectors_gen(const Eigen::Ref<const MatrixType> &Z, const Eigen::Ref<const VectorReal> &Y, const MatrixType &AQ,
                                                      const MatrixType &BQ) requires(form_ == grit::Form::GENERALIZED);
+        /*!
+         * Compute a B-metric normalizer for the projected generalized pencil.
+         * @param T2 Projected B matrix.
+         * @return Normalizer and normalized metric matrix.
+         */
         std::pair<MatrixType, MatrixType> get_bm_normalizer_for_the_projected_pencil(const MatrixType &T2);
+        /*!
+         * Pick the better projected vector between Rayleigh-Ritz and refined candidates.
+         * @param Z_rr Rayleigh-Ritz projected vectors.
+         * @param Z_ref Refined projected vectors.
+         * @param T1 Projected A matrix.
+         * @param T2 Projected B matrix.
+         * @return Projected vectors with the smaller residuals.
+         */
         MatrixType get_optimal_rayleigh_ritz_matrix(const MatrixType &Z_rr, const MatrixType &Z_ref, const MatrixType &T1, const MatrixType &T2);
-        void       refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AQ, MatrixType &BQ, MatrixType &S, VectorReal &rNorms)
+        /*!
+         * Apply refined Rayleigh-Ritz extraction for a generalized problem.
+         * @param optIdx Selected projected indices.
+         * @param V Output Ritz vectors.
+         * @param AQ Products A Q.
+         * @param BQ Products B Q.
+         * @param S Output residual block.
+         * @param rNorms Output residual norms.
+         */
+        void refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AQ, MatrixType &BQ, MatrixType &S, VectorReal &rNorms)
             requires(form_ == grit::Form::GENERALIZED);
-        void         refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AQ, MatrixType &S, VectorReal &rNorms);
-        void         refinedRitzVectors();
+        /*!
+         * Apply refined Rayleigh-Ritz extraction for a standard problem.
+         * @param optIdx Selected projected indices.
+         * @param V Output Ritz vectors.
+         * @param AQ Products A Q.
+         * @param S Output residual block.
+         * @param rNorms Output residual norms.
+         */
+        void refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AQ, MatrixType &S, VectorReal &rNorms);
+        /*! Apply refined Rayleigh-Ritz extraction to the current selected vectors. */
+        void refinedRitzVectors();
+        /*! Prepare a solver run. */
         virtual void preamble();
+        /*! Update status after a solver step. */
         virtual void updateStatus();
-        void         printStatus();
+        /*! Print the current solver status. */
+        void printStatus();
+        /*! Call the user callback, if present. */
         virtual void run_user_callback();
 
+        /*! Perform one outer solver step. */
         void step();
+        /*! Run the solver until convergence or a stop condition is reached. */
         void run();
 
-        void       assert_allFinite(const Eigen::Ref<const MatrixType> &X, const std::source_location &location = std::source_location::current());
-        void       assert_l2_orthonormal(const Eigen::Ref<const MatrixType> &X, const OrthMeta &m,
-                                         const std::source_location &location = std::source_location::current());
-        void       assert_l2_orthogonal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &Y, const OrthMeta &m,
-                                        const std::source_location &location = std::source_location::current());
-        void       assert_bm_orthonormal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &B_X, const OrthMeta &m,
-                                         const std::source_location &location = std::source_location::current());
-        void       assert_bm_orthogonal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &B_Y, const OrthMeta &m,
-                                        const std::source_location &location = std::source_location::current());
-        void       compress_cols(MatrixType &X, const VectorIdxT &mask);
+        /*!
+         * Assert that all entries are finite.
+         * @param X Matrix to check.
+         * @param location Source location used in the error message.
+         */
+        void assert_allFinite(const Eigen::Ref<const MatrixType> &X, const std::source_location &location = std::source_location::current());
+        /*!
+         * Assert l2 orthonormality using stored diagnostics.
+         * @param X Matrix checked by the diagnostics.
+         * @param m Orthogonalization diagnostics.
+         * @param location Source location used in the error message.
+         */
+        void assert_l2_orthonormal(const Eigen::Ref<const MatrixType> &X, const OrthMeta &m,
+                                   const std::source_location &location = std::source_location::current());
+        /*!
+         * Assert l2 orthogonality using stored diagnostics.
+         * @param X First block.
+         * @param Y Second block.
+         * @param m Orthogonalization diagnostics.
+         * @param location Source location used in the error message.
+         */
+        void assert_l2_orthogonal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &Y, const OrthMeta &m,
+                                  const std::source_location &location = std::source_location::current());
+        /*!
+         * Assert B-metric orthonormality using stored diagnostics.
+         * @param X Block to check.
+         * @param B_X Product B X.
+         * @param m Orthogonalization diagnostics.
+         * @param location Source location used in the error message.
+         */
+        void assert_bm_orthonormal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &B_X, const OrthMeta &m,
+                                   const std::source_location &location = std::source_location::current());
+        /*!
+         * Assert B-metric orthogonality using stored diagnostics.
+         * @param X First block.
+         * @param B_Y Product B Y.
+         * @param m Orthogonalization diagnostics.
+         * @param location Source location used in the error message.
+         */
+        void assert_bm_orthogonal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &B_Y, const OrthMeta &m,
+                                  const std::source_location &location = std::source_location::current());
+        /*!
+         * Keep only columns selected by the mask.
+         * @param X Matrix compressed in place.
+         * @param mask Indices of columns to keep.
+         */
+        void compress_cols(MatrixType &X, const VectorIdxT &mask);
+        /*!
+         * Standard deviations over recent history.
+         * @param v History values.
+         * @param apply_log10 Apply log10 before measuring deviations.
+         * @return Standard deviations per selected Ritz pair.
+         */
         VectorReal get_standard_deviations(const std::deque<VectorReal> &v, bool apply_log10);
-        bool       rNorms_have_saturated();
-        bool       eigVals_have_saturated();
-        void       block_l2_orthogonalize(const MatrixType &X, const MatrixType &AX, MatrixType &Y, MatrixType &AY, OrthMeta &m,
-                                          RefreshMult refresh_mult = RefreshMult::YES);
-        void       block_l2_orthogonalize(const MatrixType &X, const MatrixType &AX, const MatrixType &BX, MatrixType &Y, MatrixType &AY, MatrixType &BY,
-                                          OrthMeta &m, RefreshMult refresh_mult = RefreshMult::YES);
-        void       block_l2_orthonormalize(MatrixType &Y, MatrixType &AY, OrthMeta &m);
-        void       block_l2_orthonormalize(MatrixType &Y, MatrixType &AY, MatrixType &BY, OrthMeta &m);
+        /*! Whether residual norms have saturated by the configured criterion. */
+        bool rNorms_have_saturated();
+        /*! Whether Ritz values have saturated by the configured criterion. */
+        bool eigVals_have_saturated();
+        /*!
+         * l2-orthogonalize Y against X and refresh A Y when requested.
+         * @param X Existing basis block.
+         * @param AX Products A X.
+         * @param Y Candidate block modified in place.
+         * @param AY Products A Y modified in place.
+         * @param m Orthogonalization diagnostics.
+         * @param refresh_mult Whether to refresh operator products.
+         */
+        void block_l2_orthogonalize(const MatrixType &X, const MatrixType &AX, MatrixType &Y, MatrixType &AY, OrthMeta &m,
+                                    RefreshMult refresh_mult = RefreshMult::YES);
+        /*!
+         * l2-orthogonalize Y against X and refresh A Y and B Y when requested.
+         * @param X Existing basis block.
+         * @param AX Products A X.
+         * @param BX Products B X.
+         * @param Y Candidate block modified in place.
+         * @param AY Products A Y modified in place.
+         * @param BY Products B Y modified in place.
+         * @param m Orthogonalization diagnostics.
+         * @param refresh_mult Whether to refresh operator products.
+         */
+        void block_l2_orthogonalize(const MatrixType &X, const MatrixType &AX, const MatrixType &BX, MatrixType &Y, MatrixType &AY, MatrixType &BY, OrthMeta &m,
+                                    RefreshMult refresh_mult = RefreshMult::YES);
+        /*!
+         * l2-orthonormalize Y and refresh A Y.
+         * @param Y Candidate block modified in place.
+         * @param AY Products A Y modified in place.
+         * @param m Orthogonalization diagnostics.
+         */
+        void block_l2_orthonormalize(MatrixType &Y, MatrixType &AY, OrthMeta &m);
+        /*!
+         * l2-orthonormalize Y and refresh A Y and B Y.
+         * @param Y Candidate block modified in place.
+         * @param AY Products A Y modified in place.
+         * @param BY Products B Y modified in place.
+         * @param m Orthogonalization diagnostics.
+         */
+        void block_l2_orthonormalize(MatrixType &Y, MatrixType &AY, MatrixType &BY, OrthMeta &m);
+        /*!
+         * B-metric orthogonalize Y against X and refresh products when requested.
+         * @param X Existing basis block.
+         * @param AX Products A X.
+         * @param BX Products B X.
+         * @param Y Candidate block modified in place.
+         * @param AY Products A Y modified in place.
+         * @param BY Products B Y modified in place.
+         * @param m Orthogonalization diagnostics.
+         * @param refresh_mult Whether to refresh operator products.
+         */
         void block_bm_orthogonalize(const MatrixType &X, const MatrixType &AX, const MatrixType &BX, MatrixType &Y, MatrixType &AY, MatrixType &BY, OrthMeta &m,
-                                    RefreshMult refresh_mult = RefreshMult::YES)
-            requires(form_ == grit::Form::GENERALIZED);
+                                    RefreshMult refresh_mult = RefreshMult::YES) requires(form_ == grit::Form::GENERALIZED);
+        /*!
+         * B-metric orthonormalize Y and refresh A Y and B Y.
+         * @param Y Candidate block modified in place.
+         * @param AY Products A Y modified in place.
+         * @param BY Products B Y modified in place.
+         * @param m Orthogonalization diagnostics.
+         */
         void block_bm_orthonormalize(MatrixType &Y, MatrixType &AY, MatrixType &BY, OrthMeta &m) requires(form_ == grit::Form::GENERALIZED);
     };
 }

@@ -16,14 +16,14 @@ TEST_CASE("solver run is reentrant") {
     solver.config.block_size = 1;
     solver.set_initial_guess(V);
     solver.run();
-    auto first_view    = grit::solver_view<double>(solver);
+    auto first_view    = solver.get_result();
     auto first_iters   = first_view.iter();
     auto first_matvecs = first_view.num_matvecs_total();
     REQUIRE(first_view.eigVal().size() == 1);
     REQUIRE(grit::has_flag(first_view.stopReason(), grit::StopReason::converged));
 
     solver.run();
-    auto view = grit::solver_view<double>(solver);
+    auto view = solver.get_result();
     REQUIRE(view.eigVal().size() == 1);
     REQUIRE(grit::has_flag(view.stopReason(), grit::StopReason::converged));
     REQUIRE(view.iter() > first_iters);

@@ -134,7 +134,7 @@ namespace {
         solver.set_initial_guess(seeded_initial_guess(matrix.rows(), solver.config.block_size, initial_guess_seed));
         solver.run();
 
-        auto view = grit::solver_view<Scalar>(solver);
+        auto view = solver.get_result();
         REQUIRE(view.stopReason() == grit::StopReason::converged);
         REQUIRE(view.rNorms().size() == 1);
         REQUIRE(view.rNorms()(0) < 1e-12);

@@ -62,7 +62,7 @@ TEST_CASE("generalized gdplusk matches dense eigensolver") {
     solver.run();
 
     Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> exact(A_matrix, B_matrix);
-    auto                                             view = grit::solver_view<double>(solver);
+    auto                                             view = solver.get_result();
     REQUIRE(view.stopReason() == grit::StopReason::converged);
     print_eigenvalue_comparison("generalized gdplusk", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
@@ -94,7 +94,7 @@ TEST_CASE("generalized gdplusk converges with l2 and bm projectors") {
         solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 54));
         solver.run();
 
-        auto view = grit::solver_view<double>(solver);
+        auto view = solver.get_result();
         print_eigenvalue_comparison(use_b_inner_product ? "generalized gdplusk bm projector" : "generalized gdplusk l2 projector", view.eigVal(),
                                     exact.eigenvalues(), view.eigVal().size());
         REQUIRE(view.stopReason() == grit::StopReason::converged);
@@ -126,7 +126,7 @@ TEST_CASE("generalized gdplusk handles nos4 restart block search") {
 
     Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> exact(A_matrix, B_matrix);
     auto                                             expected = grit_test::expected_ritz_values(exact.eigenvalues(), solver.config.ritz, solver.config.nev);
-    auto                                             view     = grit::solver_view<double>(solver);
+    auto                                             view     = solver.get_result();
     REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
     REQUIRE(std::abs(exact.eigenvalues()(0) - grit_test::nos4_min_eigenvalue) < 1e-12);
     REQUIRE(std::abs(exact.eigenvalues()(exact.eigenvalues().size() - 1) - grit_test::nos4_max_eigenvalue) < 1e-12);
@@ -159,7 +159,7 @@ TEST_CASE("generalized gdplusk supports all Ritz targets on nos4") {
         solver.run();
 
         auto expected = grit_test::expected_ritz_values(exact.eigenvalues(), ritz, solver.config.nev);
-        auto view     = grit::solver_view<double>(solver);
+        auto view     = solver.get_result();
         REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
         print_eigenvalue_comparison(std::format("generalized gdplusk {}", grit::enum2sv(ritz)), view.eigVal(), expected, view.eigVal().size());
         require_close(view.eigVal(), expected, 1e-7);
@@ -200,7 +200,7 @@ TEST_CASE("generalized jacobi-davidson b-only correction supports l2 and bm proj
         solver.set_initial_guess(V);
 
         REQUIRE_NOTHROW(solver.run());
-        auto view = grit::solver_view<double>(solver);
+        auto view = solver.get_result();
         print_eigenvalue_comparison("generalized gdplusk jd b-only l2", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
         REQUIRE(view.stopReason() == grit::StopReason::converged);
         REQUIRE(view.num_iters_inner() > 0);
@@ -218,7 +218,7 @@ TEST_CASE("generalized jacobi-davidson b-only correction supports l2 and bm proj
         solver.set_initial_guess(V);
 
         REQUIRE_NOTHROW(solver.run());
-        auto view = grit::solver_view<double>(solver);
+        auto view = solver.get_result();
         print_eigenvalue_comparison("generalized gdplusk jd b-only bm", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
         REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
         REQUIRE(view.eigVal().allFinite());
@@ -271,7 +271,7 @@ TEST_CASE("generalized jacobi-davidson correction invokes preconditioner callbac
     solver.run();
 
     Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> exact(A_matrix, B_matrix);
-    auto                                             view = grit::solver_view<double>(solver);
+    auto                                             view = solver.get_result();
     print_eigenvalue_comparison("generalized gdplusk jacobi-davidson preconditioner", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     REQUIRE(view.stopReason() == grit::StopReason::converged);
     REQUIRE(view.num_iters_inner() > 0);
@@ -308,7 +308,7 @@ TEST_CASE("generalized jacobi-davidson correction defaults to identity precondit
 
     REQUIRE_NOTHROW(solver.run());
     Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> exact(A_matrix, B_matrix);
-    auto                                             view = grit::solver_view<double>(solver);
+    auto                                             view = solver.get_result();
     print_eigenvalue_comparison("generalized gdplusk identity preconditioner", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     REQUIRE(view.stopReason() == grit::StopReason::converged);
     REQUIRE(view.num_iters_inner() > 0);
@@ -338,7 +338,7 @@ TEST_CASE("generalized gdplusk handles small ncv restart without invalid input")
     solver.run();
 
     Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> exact(A_matrix, B_matrix);
-    auto                                             view = grit::solver_view<double>(solver);
+    auto                                             view = solver.get_result();
     print_eigenvalue_comparison("generalized gdplusk small ncv restart", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
     REQUIRE(view.stopReason() == grit::StopReason::converged);
@@ -372,7 +372,7 @@ TEST_CASE("generalized gdplusk with B as A squared targets A smallest magnitude 
     Vector                                expected(1);
     expected << 1.0 / exact_A.eigenvalues()(0);
 
-    auto view = grit::solver_view<double>(solver);
+    auto view = solver.get_result();
     REQUIRE(view.stopReason() == grit::StopReason::converged);
     print_eigenvalue_comparison("generalized gdplusk B=A^2 LM", view.eigVal(), expected, view.eigVal().size());
     write_test_log(std::format("  recovered A eigenvalue {:.16e} exact SM {:.16e} abs_diff {:.3e}\n", 1.0 / view.eigVal()(0), exact_A.eigenvalues()(0),

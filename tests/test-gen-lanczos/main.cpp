@@ -63,7 +63,7 @@ TEST_CASE("generalized lanczos matches dense eigensolver") {
     solver.run();
 
     Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> exact(A_matrix, B_matrix);
-    auto                                             view = grit::solver_view<double>(solver);
+    auto                                             view = solver.get_result();
     REQUIRE(view.stopReason() == grit::StopReason::converged);
     print_eigenvalue_comparison("generalized lanczos", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
@@ -91,7 +91,7 @@ TEST_CASE("generalized lanczos handles nos4 restart block search") {
 
     Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> exact(A_matrix, B_matrix);
     auto                                             expected = grit_test::expected_ritz_values(exact.eigenvalues(), solver.config.ritz, solver.config.nev);
-    auto                                             view     = grit::solver_view<double>(solver);
+    auto                                             view     = solver.get_result();
     REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
     REQUIRE(std::abs(exact.eigenvalues()(0) - grit_test::nos4_min_eigenvalue) < 1e-12);
     REQUIRE(std::abs(exact.eigenvalues()(exact.eigenvalues().size() - 1) - grit_test::nos4_max_eigenvalue) < 1e-12);
@@ -123,7 +123,7 @@ TEST_CASE("generalized lanczos supports retained restart basis on nos4") {
 
     Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> exact(A_matrix, B_matrix);
     auto                                             expected = grit_test::expected_ritz_values(exact.eigenvalues(), solver.config.ritz, solver.config.nev);
-    auto                                             view     = grit::solver_view<double>(solver);
+    auto                                             view     = solver.get_result();
     REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
     print_eigenvalue_comparison("generalized lanczos nos4 retained restart", view.eigVal(), expected, view.eigVal().size());
     require_close(view.eigVal(), expected, 1e-3);
@@ -152,7 +152,7 @@ TEST_CASE("generalized lanczos supports all Ritz targets on nos4") {
         solver.run();
 
         auto expected = grit_test::expected_ritz_values(exact.eigenvalues(), ritz, solver.config.nev);
-        auto view     = grit::solver_view<double>(solver);
+        auto view     = solver.get_result();
         REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
         print_eigenvalue_comparison(std::format("generalized lanczos {}", grit::enum2sv(ritz)), view.eigVal(), expected, view.eigVal().size());
         require_close(view.eigVal(), expected, 1e-7);
@@ -203,7 +203,7 @@ TEST_CASE("generalized lanczos with B as A squared targets A smallest magnitude 
     Vector                                expected(1);
     expected << 1.0 / exact_A.eigenvalues()(0);
 
-    auto view = grit::solver_view<double>(solver);
+    auto view = solver.get_result();
     REQUIRE(view.stopReason() == grit::StopReason::converged);
     print_eigenvalue_comparison("generalized lanczos B=A^2 LM", view.eigVal(), expected, view.eigVal().size());
     write_test_log(std::format("  recovered A eigenvalue {:.16e} exact SM {:.16e} abs_diff {:.3e}\n", 1.0 / view.eigVal()(0), exact_A.eigenvalues()(0),

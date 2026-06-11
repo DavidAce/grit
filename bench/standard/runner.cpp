@@ -52,7 +52,7 @@ namespace bench_standard {
             return converted;
         }
 
-        double relative_rnorm(grit::solver_view<Scalar> view) {
+        double relative_rnorm(grit::ResultView<Scalar> view) {
             if(view.rNorms().size() == 0) return 0.0;
             auto scale = std::max(view.op_norm_estimate(), std::numeric_limits<double>::min());
             if(view.eigVecs().cols() > 0) scale = std::max(scale * view.eigVecs().col(0).norm(), std::numeric_limits<double>::min());
@@ -60,7 +60,7 @@ namespace bench_standard {
         }
 
         template<typename Snapshot>
-        void fill_common_snapshot(Snapshot &snapshot, const Options &opts, int rep, unsigned int rep_seed, grit::solver_view<Scalar> view) {
+        void fill_common_snapshot(Snapshot &snapshot, const Options &opts, int rep, unsigned int rep_seed, grit::ResultView<Scalar> view) {
             snapshot.case_id                       = static_cast<int32_t>(opts.case_id);
             snapshot.rep                           = static_cast<int32_t>(rep);
             snapshot.seed                          = opts.seed;
@@ -105,7 +105,7 @@ namespace bench_standard {
             snapshot.seconds                       = view.seconds();
         }
 
-        GdpluskSnapshot make_solver_snapshot(const Options &opts, int rep, unsigned int rep_seed, const GdSolver &solver, grit::solver_view<Scalar> view) {
+        GdpluskSnapshot make_solver_snapshot(const Options &opts, int rep, unsigned int rep_seed, const GdSolver &solver, grit::ResultView<Scalar> view) {
             GdpluskSnapshot snapshot;
             fill_common_snapshot(snapshot, opts, rep, rep_seed, view);
             snapshot.max_basis_blocks              = static_cast<int32_t>(opts.ncv / opts.block_size);
@@ -135,7 +135,7 @@ namespace bench_standard {
         }
 
         template<typename Solver>
-        auto make_solver_snapshot(const Options &opts, int rep, unsigned int rep_seed, const Solver &, grit::solver_view<Scalar> view)
+        auto make_solver_snapshot(const Options &opts, int rep, unsigned int rep_seed, const Solver &, grit::ResultView<Scalar> view)
             -> std::conditional_t<std::is_same_v<Solver, LanczosSolver>, LanczosSnapshot, LobpcgSnapshot> {
             using Snapshot = std::conditional_t<std::is_same_v<Solver, LanczosSolver>, LanczosSnapshot, LobpcgSnapshot>;
             Snapshot snapshot;
@@ -217,14 +217,14 @@ namespace bench_standard {
 
             const auto time_start = std::chrono::steady_clock::now();
             const auto rep_seed   = opts.seed + static_cast<unsigned int>(rep - 1);
-            std::vector<decltype(make_solver_snapshot(opts, rep, rep_seed, solver, grit::solver_view<Scalar>(solver)))> snapshots;
+            std::vector<decltype(make_solver_snapshot(opts, rep, rep_seed, solver, solver.get_result()))> snapshots;
             solver.config.user_callback = [&](const Solver &solver_ref) {
-                snapshots.push_back(make_solver_snapshot(opts, rep, rep_seed, solver_ref, grit::solver_view<Scalar>(solver_ref)));
+                snapshots.push_back(make_solver_snapshot(opts, rep, rep_seed, solver_ref, solver_ref.get_result()));
             };
             solver.run();
             const auto time_stop = std::chrono::steady_clock::now();
 
-            const auto view = grit::solver_view<Scalar>(solver);
+            const auto view = solver.get_result();
             auto final_snapshot = make_solver_snapshot(opts, rep, rep_seed, solver, view);
             final_snapshot.seconds   = std::chrono::duration<double>(time_stop - time_start).count();
             final_snapshot.vmrss_mib = mem_usage_in_mib("VmRSS");

@@ -1,5 +1,7 @@
 #pragma once
 
+/*! Umbrella header for GRIT eigensolvers and matrix-free operator wrappers. */
+
 #include "algo/gdplusk.h"
 #include "algo/lanczos.h"
 #include "algo/lobpcg.h"
@@ -11,4 +13,4 @@
 #include "Matvec.h"
 #include "solv/generalized.h"
 #include "solv/standard.h"
-#include "solver_view.h"
+#include "ResultView.h"

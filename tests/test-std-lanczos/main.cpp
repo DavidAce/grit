@@ -59,7 +59,7 @@ TEST_CASE("standard lanczos matches dense eigensolver") {
     solver.run();
 
     Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
-    auto                                  view = grit::solver_view<double>(solver);
+    auto                                  view = solver.get_result();
     REQUIRE(view.stopReason() == grit::StopReason::converged);
     print_eigenvalue_comparison("standard lanczos", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
@@ -83,7 +83,7 @@ TEST_CASE("standard lanczos handles nos4 restart block search") {
 
     Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
     auto                                  expected = grit_test::expected_ritz_values(exact.eigenvalues(), solver.config.ritz, solver.config.nev);
-    auto                                  view     = grit::solver_view<double>(solver);
+    auto                                  view     = solver.get_result();
     REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
     REQUIRE(std::abs(exact.eigenvalues()(0) - grit_test::nos4_min_eigenvalue) < 1e-12);
     REQUIRE(std::abs(exact.eigenvalues()(exact.eigenvalues().size() - 1) - grit_test::nos4_max_eigenvalue) < 1e-12);
@@ -111,7 +111,7 @@ TEST_CASE("standard lanczos supports retained restart basis on nos4") {
 
     Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
     auto                                  expected = grit_test::expected_ritz_values(exact.eigenvalues(), solver.config.ritz, solver.config.nev);
-    auto                                  view     = grit::solver_view<double>(solver);
+    auto                                  view     = solver.get_result();
     REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
     print_eigenvalue_comparison("standard lanczos nos4 retained restart", view.eigVal(), expected, view.eigVal().size());
     require_close(view.eigVal(), expected, 1e-3);
@@ -136,7 +136,7 @@ TEST_CASE("standard lanczos supports all Ritz targets on nos4") {
         solver.run();
 
         auto expected = grit_test::expected_ritz_values(exact.eigenvalues(), ritz, solver.config.nev);
-        auto view     = grit::solver_view<double>(solver);
+        auto view     = solver.get_result();
         REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
         print_eigenvalue_comparison(std::format("standard lanczos {}", grit::enum2sv(ritz)), view.eigVal(), expected, view.eigVal().size());
         require_close(view.eigVal(), expected, 1e-7);

@@ -58,7 +58,7 @@ TEST_CASE("standard gdplusk matches dense eigensolver") {
     solver.run();
 
     Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
-    auto                                  view = grit::solver_view<double>(solver);
+    auto                                  view = solver.get_result();
     REQUIRE(view.stopReason() == grit::StopReason::converged);
     print_eigenvalue_comparison("standard gdplusk", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
@@ -84,7 +84,7 @@ TEST_CASE("standard gdplusk owns temporary initial guess") {
     solver.run();
 
     Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
-    auto                                  view = grit::solver_view<double>(solver);
+    auto                                  view = solver.get_result();
     print_eigenvalue_comparison("standard gdplusk temporary initial guess", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     REQUIRE(view.stopReason() == grit::StopReason::converged);
     require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
@@ -109,7 +109,7 @@ TEST_CASE("standard gdplusk handles nos4 restart block search") {
 
     Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
     auto                                  expected = grit_test::expected_ritz_values(exact.eigenvalues(), solver.config.ritz, solver.config.nev);
-    auto                                  view     = grit::solver_view<double>(solver);
+    auto                                  view     = solver.get_result();
     REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
     REQUIRE(std::abs(exact.eigenvalues()(0) - grit_test::nos4_min_eigenvalue) < 1e-12);
     REQUIRE(std::abs(exact.eigenvalues()(exact.eigenvalues().size() - 1) - grit_test::nos4_max_eigenvalue) < 1e-12);
@@ -136,7 +136,7 @@ TEST_CASE("standard gdplusk handles small ncv restart without invalid input") {
     solver.run();
 
     Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
-    auto                                  view = grit::solver_view<double>(solver);
+    auto                                  view = solver.get_result();
     print_eigenvalue_comparison("standard gdplusk small ncv restart", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
     REQUIRE(view.eigVal().allFinite());
@@ -163,7 +163,7 @@ TEST_CASE("standard gdplusk supports all Ritz targets on nos4") {
         solver.run();
 
         auto expected = grit_test::expected_ritz_values(exact.eigenvalues(), ritz, solver.config.nev);
-        auto view     = grit::solver_view<double>(solver);
+        auto view     = solver.get_result();
         REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
         print_eigenvalue_comparison(std::format("standard gdplusk {}", grit::enum2sv(ritz)), view.eigVal(), expected, view.eigVal().size());
         require_close(view.eigVal(), expected, 1e-7);
@@ -191,7 +191,7 @@ TEST_CASE("standard gdplusk converges with an exact zero eigenvalue") {
     solver.run();
 
     Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
-    auto                                  view = grit::solver_view<double>(solver);
+    auto                                  view = solver.get_result();
     REQUIRE(view.stopReason() == grit::StopReason::converged);
     print_eigenvalue_comparison("standard gdplusk zero eigenvalue", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     REQUIRE(std::abs(view.eigVal()(0)) < 1e-12);
@@ -217,7 +217,7 @@ TEST_CASE("standard gdplusk user callback reports initial and final view") {
     solver.config.ritz          = grit::Ritz::SR;
     solver.config.max_iters     = 20;
     solver.config.user_callback = [&](const auto &solver_ref) {
-        auto view = grit::solver_view<double>(solver_ref);
+        auto view = solver_ref.get_result();
         iterations.push_back(view.iter());
         stop_reasons.push_back(view.stopReason());
     };
@@ -225,7 +225,7 @@ TEST_CASE("standard gdplusk user callback reports initial and final view") {
     solver.run();
 
     Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
-    auto                                  view = grit::solver_view<double>(solver);
+    auto                                  view = solver.get_result();
     print_eigenvalue_comparison("standard gdplusk callback", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
 
     require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
@@ -269,7 +269,7 @@ TEST_CASE("standard jacobi-davidson correction invokes preconditioner callbacks"
     solver.run();
 
     Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
-    auto                                  view = grit::solver_view<double>(solver);
+    auto                                  view = solver.get_result();
     print_eigenvalue_comparison("standard gdplusk jacobi-davidson", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
 
     REQUIRE(view.stopReason() == grit::StopReason::converged);
@@ -302,7 +302,7 @@ TEST_CASE("standard jacobi-davidson correction defaults to identity precondition
 
     REQUIRE_NOTHROW(solver.run());
     Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
-    auto                                  view = grit::solver_view<double>(solver);
+    auto                                  view = solver.get_result();
     print_eigenvalue_comparison("standard gdplusk identity preconditioner", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     REQUIRE(view.stopReason() == grit::StopReason::converged);
     require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);

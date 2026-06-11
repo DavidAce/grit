@@ -13,5 +13,5 @@ int main() {
     solver.config.ritz       = grit::Ritz::SR;
     solver.set_initial_guess(V);
     solver.run();
-    return grit::solver_view<double>(solver).stopReason() == grit::StopReason::converged ? 0 : 1;
+    return solver.get_result().stopReason() == grit::StopReason::converged ? 0 : 1;
 }

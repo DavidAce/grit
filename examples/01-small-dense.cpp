@@ -21,7 +21,7 @@ int main() {
     solver.set_initial_guess(Matrix::Identity(A_matrix.rows(), A_matrix.rows()));
     solver.run();
 
-    auto view = grit::solver_view<double>(solver);
+    auto view = solver.get_result();
     for(Eigen::Index i = 0; i < view.eigVal().size(); ++i) {
         std::println("lambda[{}] = {:.16e}", i, view.eigVal()(i));
     }

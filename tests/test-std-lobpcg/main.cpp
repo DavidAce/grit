@@ -61,7 +61,7 @@ TEST_CASE("standard lobpcg matches dense eigensolver") {
     solver.run();
 
     Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
-    auto                                  view = grit::solver_view<double>(solver);
+    auto                                  view = solver.get_result();
     REQUIRE(view.stopReason() == grit::StopReason::converged);
     print_eigenvalue_comparison("standard lobpcg", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
@@ -87,7 +87,7 @@ TEST_CASE("standard lobpcg handles nos4 restart block search") {
 
     Eigen::SelfAdjointEigenSolver<Matrix> exact(A_matrix);
     auto                                  expected = grit_test::expected_ritz_values(exact.eigenvalues(), solver.config.ritz, solver.config.nev);
-    auto                                  view     = grit::solver_view<double>(solver);
+    auto                                  view     = solver.get_result();
     REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
     REQUIRE(std::abs(exact.eigenvalues()(0) - grit_test::nos4_min_eigenvalue) < 1e-12);
     REQUIRE(std::abs(exact.eigenvalues()(exact.eigenvalues().size() - 1) - grit_test::nos4_max_eigenvalue) < 1e-12);
@@ -118,7 +118,7 @@ TEST_CASE("standard lobpcg supports all Ritz targets on nos4") {
         solver.run();
 
         auto expected = grit_test::expected_ritz_values(exact.eigenvalues(), ritz, solver.config.nev);
-        auto view     = grit::solver_view<double>(solver);
+        auto view     = solver.get_result();
         REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
         print_eigenvalue_comparison(std::format("standard lobpcg {}", grit::enum2sv(ritz)), view.eigVal(), expected, view.eigVal().size());
         require_close(view.eigVal(), expected, 1e-7);
