@@ -241,8 +241,8 @@ namespace grit::form {
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::diagonalizeT() {
         auto token_diagonalize = status.time_diagonalize.tic_token();
-        T1 = Q.adjoint() * AQ;
-        T1 = (T1 + T1.adjoint()) * half;
+        T1                     = Q.adjoint() * AQ;
+        T1                     = (T1 + T1.adjoint()) * half;
         if constexpr(form_ == grit::Form::GENERALIZED) {
             T2 = Q.adjoint() * BQ;
             T2 = (T2 + T2.adjoint()) * half;

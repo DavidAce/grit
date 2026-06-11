@@ -244,20 +244,18 @@ namespace grit::algo {
             auto rnorm = get_auto_rnorm_scalar(status.rNorms);
             // Cheap probes are accepted only when they move the Ritz value by more than
             // the variance scale implied by the stored absolute residual norm.
-            auto rnorm_squared     = rnorm * rnorm;
-            auto op_norm_estimate  = get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
-            auto probe_scale_floor = eps * op_norm_estimate;
-            auto probe_scale       = std::max(rnorm_squared, probe_scale_floor);
-            auto improvement       = get_auto_probe_eigval_improvement();
+            auto rnorm_squared        = rnorm * rnorm;
+            auto op_norm_estimate     = get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
+            auto probe_scale_floor    = eps * op_norm_estimate;
+            auto probe_scale          = std::max(rnorm_squared, probe_scale_floor);
+            auto improvement          = get_auto_probe_eigval_improvement();
             auto relative_improvement = get_auto_probe_eigval_relative_improvement();
-            auto threshold         = config.auto_cheap_probe_factor * probe_scale;
-            auto relative_threshold =
-                config.auto_sat_eigval_threshold > RealScalar{0}
-                    ? config.auto_cheap_probe_factor * config.auto_sat_eigval_threshold
-                    : std::numeric_limits<RealScalar>::infinity();
-            bool keep_cheap_absolute = improvement > threshold;
-            bool keep_cheap_relative = relative_improvement > relative_threshold;
-            bool keep_cheap          = keep_cheap_absolute || keep_cheap_relative;
+            auto threshold            = config.auto_cheap_probe_factor * probe_scale;
+            auto relative_threshold   = config.auto_sat_eigval_threshold > RealScalar{0} ? config.auto_cheap_probe_factor * config.auto_sat_eigval_threshold
+                                                                                         : std::numeric_limits<RealScalar>::infinity();
+            bool keep_cheap_absolute  = improvement > threshold;
+            bool keep_cheap_relative  = relative_improvement > relative_threshold;
+            bool keep_cheap           = keep_cheap_absolute || keep_cheap_relative;
 
             if(keep_cheap) {
                 auto_residual_correction.active               = ResidualCorrectionType::CHEAP_OLSEN;
@@ -301,8 +299,7 @@ namespace grit::algo {
         auto ritz_rel_change        = get_auto_ritz_value_relative_change();
         bool jd_start_rnorm_enabled = config.auto_jd_start_rnorm_threshold > RealScalar{0};
         bool ritz_progress_low      = config.auto_sat_eigval_threshold <= RealScalar{0} || ritz_rel_change <= config.auto_sat_eigval_threshold;
-        bool jd_start_rnorm_ready =
-            jd_start_rnorm_enabled && status.rNorms.size() > 0 && rrnorm <= config.auto_jd_start_rnorm_threshold && ritz_progress_low;
+        bool jd_start_rnorm_ready   = jd_start_rnorm_enabled && status.rNorms.size() > 0 && rrnorm <= config.auto_jd_start_rnorm_threshold && ritz_progress_low;
         bool jd_start_ready         = saturation.ready || jd_start_rnorm_ready;
         if(log) {
             log->trace("auto residual correction start check: cheap dwell {}/{} ready {} | eigval sat {} ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} "
@@ -330,12 +327,12 @@ namespace grit::algo {
                     "jd start rrnorm threshold {:.6e} rrnorm {:.6e} ritz rel change {:.6e} threshold {:.6e} | "
                     "mv {} outer {} inner {} inner_iters {} jdops {} time {:.6e}s",
                     method_name(ResidualCorrectionType::CHEAP_OLSEN), method_name(ResidualCorrectionType::JACOBI_DAVIDSON),
-                    jd_start_rnorm_ready ? "rrnorm threshold and ritz progress" : "saturation", saturation.eigval.ratio, saturation.eigval.threshold, saturation.eigval.stddev,
-                    saturation.eigval.scale, saturation.eigval.value, saturation.rnorm.ratio, saturation.rnorm.threshold, saturation.rnorm.stddev,
-                    saturation.rnorm.scale, saturation.rnorm.value, config.auto_cheap_probe_interval, config.auto_cheap_probe_factor,
+                    jd_start_rnorm_ready ? "rrnorm threshold and ritz progress" : "saturation", saturation.eigval.ratio, saturation.eigval.threshold,
+                    saturation.eigval.stddev, saturation.eigval.scale, saturation.eigval.value, saturation.rnorm.ratio, saturation.rnorm.threshold,
+                    saturation.rnorm.stddev, saturation.rnorm.scale, saturation.rnorm.value, config.auto_cheap_probe_interval, config.auto_cheap_probe_factor,
                     config.auto_jd_start_rnorm_threshold, rrnorm, ritz_rel_change, config.auto_sat_eigval_threshold,
-                    status.num_matvecs + status.num_matvecs_inner, status.num_matvecs, status.num_matvecs_inner, status.num_iters_inner,
-                    status.num_jdops_inner, step_seconds);
+                    status.num_matvecs + status.num_matvecs_inner, status.num_matvecs, status.num_matvecs_inner, status.num_iters_inner, status.num_jdops_inner,
+                    step_seconds);
             }
         }
     }

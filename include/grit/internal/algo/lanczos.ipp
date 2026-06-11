@@ -185,8 +185,8 @@ namespace grit::algo {
         }
 
         auto restart_basis = [&]() {
-            auto token_restart = status.time_restart.tic_token();
-            Eigen::Index cols_ks = 0;
+            auto         token_restart = status.time_restart.tic_token();
+            Eigen::Index cols_ks       = 0;
 
             if constexpr(form_ == grit::Form::GENERALIZED) {
                 MatrixType T1 = Q.adjoint() * AQ;
@@ -254,7 +254,7 @@ namespace grit::algo {
                 MatrixType AQ_ks = AQ * Z;
                 Q                = Q_ks;
                 AQ               = AQ_ks;
-                BQ = Q;
+                BQ               = Q;
 
                 OrthMeta m;
                 m.Gram       = Q.adjoint() * Q;

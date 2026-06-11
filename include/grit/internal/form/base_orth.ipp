@@ -335,8 +335,8 @@ namespace grit::form {
     void base<Scalar, form_>::block_bm_orthogonalize(const MatrixType &X, const MatrixType &AX, const MatrixType &BX, MatrixType &Y, MatrixType &AY,
                                                      MatrixType &BY, OrthMeta &m, RefreshMult refresh_mult) requires(form_ == grit::Form::GENERALIZED)
     {
-        auto token_orthogonalize = status.time_orthogonalize.tic_token();
-        constexpr RealScalar inv_sqrt_2 = static_cast<RealScalar>(0.70710678118654752440);
+        auto                 token_orthogonalize = status.time_orthogonalize.tic_token();
+        constexpr RealScalar inv_sqrt_2          = static_cast<RealScalar>(0.70710678118654752440);
         if(X.cols() == 0 || Y.cols() == 0) {
             AY.resizeLike(Y);
             BY.resizeLike(Y);
