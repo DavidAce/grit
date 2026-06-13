@@ -26,6 +26,9 @@
 
 namespace grit {
     template<typename Scalar>
+    class Result;
+
+    template<typename Scalar>
     class ResultView;
 }
 
@@ -72,7 +75,7 @@ namespace grit::form {
             Ritz                      ritz                                    = Ritz::SR; /*!< Which Ritz values to target. */
             RealScalar                tol                  = eps * 10000;         /*!< Residual-norm tolerance, absolute unless relative mode is enabled. */
             RealScalar                tol_rnorm_relative   = 0;                   /*!< Extra relative-to-initial residual tolerance; zero disables it. */
-            Eigen::Index              max_iters            = 100l;                /*!< Maximum outer solver iterations; negative means unlimited. */
+            Eigen::Index              max_iters            = 100l;                /*!< Maximum outer iterations; negative means unlimited. */
             Eigen::Index              max_matvecs          = -1l;                 /*!< Maximum total matrix-vector products; negative means unlimited. */
             RealScalar                sat_eigval_threshold = RealScalar{0};       /*!< Eigenvalue saturation threshold for stopping; zero disables it. */
             RealScalar                sat_rnorm_threshold  = RealScalar{0};       /*!< Residual saturation threshold for stopping; zero disables it. */
@@ -150,22 +153,22 @@ namespace grit::form {
             RealScalar                op_norm_estimate = RealScalar{1};                                /*!< Current operator norm estimate. */
             RealScalar                gap              = std::numeric_limits<RealScalar>::infinity();  /*!< Current Ritz gap estimate. */
             std::vector<Eigen::Index> optIdx;                                     /*!< Indices of selected Ritz values in the projected problem. */
-            Eigen::Index              iter                 = 0;                   /*!< Outer iteration count. */
-            Eigen::Index              iter_last_restart    = 0;                   /*!< Outer iteration of the last restart. */
-            Eigen::Index              num_iters_inner      = 0;                   /*!< Inner correction iterations in the last step. */
-            Eigen::Index              num_iters_inner_prev = 0;                   /*!< Inner correction iterations in the previous step. */
+            Eigen::Index              outer_iter                       = 0;       /*!< Outer iteration count. */
+            Eigen::Index              num_outer_iters_last_restart     = 0;       /*!< Outer iteration count at the last restart. */
+            Eigen::Index              num_inner_iters                  = 0;       /*!< Inner correction iterations in the last outer iteration. */
+            Eigen::Index              num_inner_iters_prev             = 0;       /*!< Inner correction iterations in the previous outer iteration. */
             Eigen::Index              num_matvecs_inner    = 0;                   /*!< Matrix-vector products in the last inner solve. */
             Eigen::Index              num_jdops_inner      = 0;                   /*!< Jacobi-Davidson operator applications in the last inner solve. */
-            Eigen::Index              num_matvecs          = 0;                   /*!< Matrix-vector products in the last outer step. */
+            Eigen::Index              num_matvecs          = 0;                   /*!< Matrix-vector products in the last outer iteration. */
             Eigen::Index              num_matvecs_total    = 0;                   /*!< Total matrix-vector products. */
-            Eigen::Index              num_precond          = 0;                   /*!< Preconditioner applications in the last outer step. */
+            Eigen::Index              num_precond          = 0;                   /*!< Preconditioner applications in the last outer iteration. */
             Eigen::Index              num_precond_inner    = 0;                   /*!< Preconditioner applications in the last inner solve. */
             Eigen::Index              num_precond_total    = 0;                   /*!< Total preconditioner applications. */
             tid::ur                   time_elapsed;                               /*!< Total solver timer. */
-            tid::ur                   time_matvecs;                               /*!< Timer for matrix-vector products in the last outer step. */
+            tid::ur                   time_matvecs;                               /*!< Timer for matrix-vector products in the last outer iteration. */
             tid::ur                   time_matvecs_inner;                         /*!< Timer for matrix-vector products in the last inner solve. */
             tid::ur                   time_matvecs_total;                         /*!< Timer for all matrix-vector products. */
-            tid::ur                   time_precond;                               /*!< Timer for preconditioner applications in the last outer step. */
+            tid::ur                   time_precond;                               /*!< Timer for preconditioner applications in the last outer iteration. */
             tid::ur                   time_precond_inner;                         /*!< Timer for preconditioner applications in the last inner solve. */
             tid::ur                   time_precond_total;                         /*!< Timer for all preconditioner applications. */
             tid::ur                   time_jdops_inner;                           /*!< Timer for Jacobi-Davidson operator applications. */
@@ -200,12 +203,12 @@ namespace grit::form {
         /*! State used by AUTO residual correction. */
         struct AutoResidualCorrectionState {
             ResidualCorrectionType    active               = ResidualCorrectionType::CHEAP_OLSEN; /*!< Correction currently preferred by AUTO. */
-            ResidualCorrectionType    step_method          = ResidualCorrectionType::CHEAP_OLSEN; /*!< Correction used in the current step. */
+            ResidualCorrectionType    iteration_method          = ResidualCorrectionType::CHEAP_OLSEN; /*!< Correction used in the current outer iteration. */
             Eigen::Index              dwell                = 0;                                   /*!< Cheap Olsen dwell count. */
-            Eigen::Index              jd_steps_since_probe = 0;                                   /*!< Jacobi-Davidson steps since the last cheap probe. */
-            double                    step_time_start      = 0.0;                                 /*!< Wall-time marker for the current correction step. */
-            std::vector<Eigen::Index> cheap_to_jd_switch_iters; /*!< Iterations switching from cheap Olsen to Jacobi-Davidson. */
-            std::vector<Eigen::Index> jd_to_cheap_switch_iters; /*!< Iterations switching from Jacobi-Davidson to cheap Olsen. */
+            Eigen::Index              jd_outer_iters_since_probe = 0;                                   /*!< Jacobi-Davidson outer iterations since the last cheap Olsen probe. */
+            double                    outer_iteration_time_start      = 0.0;                                 /*!< Wall-time marker for the current outer iteration. */
+            std::vector<Eigen::Index> cheap_to_jd_switch_outer_iters; /*!< Outer iterations switching from cheap Olsen to Jacobi-Davidson. */
+            std::vector<Eigen::Index> jd_to_cheap_switch_outer_iters; /*!< Outer iterations switching from Jacobi-Davidson to cheap Olsen. */
         };
 
         /*! Saturation diagnostic used by AUTO. */
@@ -264,8 +267,10 @@ namespace grit::form {
         void clear_initial_guess();
         /*! Whether an initial guess has been stored. */
         [[nodiscard]] bool has_initial_guess() const;
-        /*! Return a read-only view of the current solver result. */
-        [[nodiscard]] grit::ResultView<Scalar> get_result() const;
+        /*! Return a non-owning read-only view of the current solver result. */
+        [[nodiscard]] grit::ResultView<Scalar> get_result_view() const;
+        /*! Return an owning snapshot of the current solver result. */
+        [[nodiscard]] grit::Result<Scalar> get_result() const;
 
         /*!
          * Construct a standard form.
@@ -296,7 +301,7 @@ namespace grit::form {
         MatrixType                                            V;                  /*!< Selected Ritz vectors. */
         MatrixType                                            AV;                 /*!< Products A V for selected Ritz vectors. */
         MatrixType                                            BV;                 /*!< Products B V for selected Ritz vectors. */
-        MatrixType                                            V_prev;             /*!< Selected Ritz vectors from the previous step. */
+        MatrixType                                            V_prev;             /*!< Selected Ritz vectors from the previous outer iteration. */
         MatrixType                                            K, K_prev;          /*!< Krylov or correction blocks. */
         MatrixType                                            S, S1, S2;          /*!< Residual and correction blocks. */
         MatrixType                                            D;                  /*!< Search directions or diagonal block. */
@@ -512,15 +517,15 @@ namespace grit::form {
         void refinedRitzVectors();
         /*! Prepare a solver run. */
         virtual void preamble();
-        /*! Update status after a solver step. */
+        /*! Update status after an outer iteration. */
         virtual void updateStatus();
         /*! Print the current solver status. */
         void printStatus();
         /*! Call the user callback, if present. */
         virtual void run_user_callback();
 
-        /*! Perform one outer solver step. */
-        void step();
+        /*! Perform one outer iteration. */
+        void do_outer_iteration();
         /*! Run the solver until convergence or a stop condition is reached. */
         void run();
 

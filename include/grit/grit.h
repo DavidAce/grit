@@ -11,6 +11,7 @@
 #include "form/standard.h"
 #include "internal/scalars.h"
 #include "Matvec.h"
+#include "Result.h"
 #include "solv/generalized.h"
 #include "solv/standard.h"
 #include "ResultView.h"

@@ -73,8 +73,8 @@ namespace grit::tid {
             lap_timepoint = now;
             return lap;
         }
-        ur &operator+=(double seconds) noexcept {
-            measured_time += seconds;
+        ur &operator+=(double elapsed_time) noexcept {
+            measured_time += elapsed_time;
             return *this;
         }
         [[nodiscard]] token tic_token(double add_time = 0) noexcept { return token(*this, add_time); }

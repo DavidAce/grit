@@ -302,7 +302,7 @@ namespace grit::form {
         };
 
         assert(V.cols() == cfg().block_size);
-        if(status.iter == 0) {
+        if(status.outer_iter == 0) {
             // Make sure we start with ritz vectors in V, so that the first Lanczos loop produces proper residuals.
             if constexpr(form_ == grit::Form::GENERALIZED) {
                 block_orthonormalize();
@@ -373,10 +373,10 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::preamble() {
-        status.num_iters_inner_prev = status.num_iters_inner;
+        status.num_inner_iters_prev = status.num_inner_iters;
         status.num_matvecs          = 0;
         status.num_precond          = 0;
-        status.num_iters_inner      = 0;
+        status.num_inner_iters      = 0;
         status.num_matvecs_inner    = 0;
         status.num_precond_inner    = 0;
         status.num_jdops_inner      = 0;
@@ -416,7 +416,7 @@ namespace grit::form {
     bool base<Scalar, form_>::rNorms_have_saturated() {
         if(cfg().sat_rnorm_threshold <= RealScalar{0}) return false;
         const auto min_history_size = std::min<size_t>(status.max_history_size, size_t{2});
-        if(status.iter < static_cast<Eigen::Index>(min_history_size)) return false;
+        if(status.outer_iter < static_cast<Eigen::Index>(min_history_size)) return false;
         if(status.rNorms_history.size() < static_cast<size_t>(min_history_size)) return false;
         if(status.rNorms.size() == 0) return false;
 
@@ -439,7 +439,7 @@ namespace grit::form {
     bool base<Scalar, form_>::eigVals_have_saturated() {
         if(cfg().sat_eigval_threshold <= RealScalar{0}) return false;
         const auto min_history_size = std::min<size_t>(status.max_history_size, size_t{2});
-        if(status.iter < static_cast<Eigen::Index>(min_history_size)) return false;
+        if(status.outer_iter < static_cast<Eigen::Index>(min_history_size)) return false;
         if(status.eigVals_history.size() < static_cast<size_t>(min_history_size)) return false;
         VectorReal vals           = status.eigVal.cwiseAbs().array() + eps;
         VectorReal stds           = get_standard_deviations(status.eigVals_history, false);
@@ -506,19 +506,19 @@ namespace grit::form {
         if(status.rNorm_below_rnormTol) {
             std::string msg_rnorm_gap = fmt::format(" | gap {:.3e} (rel {:.3e})", status.gap, relGap);
             if(cfg().use_relative_rnorm_tolerance) {
-                status.stopMessage.emplace_back(fmt::format("converged rNorm {} < relative tol {}{} | rrNorm {} | iters {} | mv {} | {:.3e} s",
+                status.stopMessage.emplace_back(fmt::format("converged rNorm {} < relative tol {}{} | rrNorm {} | outer_iter {} | mv {} | {:.3e} s",
                                                             format_vector(VectorReal(status.rNorms.topRows(cfg().nev))), format_vector(tols), msg_rnorm_gap,
-                                                            format_vector(rrNorms), status.iter + 1, status.num_matvecs_total, status.time_elapsed.get_time()));
+                                                            format_vector(rrNorms), status.outer_iter + 1, status.num_matvecs_total, status.time_elapsed.get_time()));
             } else {
-                status.stopMessage.emplace_back(fmt::format("converged rNorm {} < tol {}{} | rrNorm {} | iters {} | mv {} | {:.3e} s",
+                status.stopMessage.emplace_back(fmt::format("converged rNorm {} < tol {}{} | rrNorm {} | outer_iter {} | mv {} | {:.3e} s",
                                                             format_vector(VectorReal(status.rNorms.topRows(cfg().nev))), format_vector(tols), msg_rnorm_gap,
-                                                            format_vector(rrNorms), status.iter + 1, status.num_matvecs_total, status.time_elapsed.get_time()));
+                                                            format_vector(rrNorms), status.outer_iter + 1, status.num_matvecs_total, status.time_elapsed.get_time()));
             }
             status.stopReason |= StopReason::converged;
         }
 
-        if(cfg().max_iters >= 0 && status.iter + 1 >= cfg().max_iters) {
-            status.stopMessage.emplace_back(fmt::format("iters ({}) >= maxiter ({}) | mv {} | {:.3e} s", status.iter + 1, cfg().max_iters,
+        if(cfg().max_iters >= 0 && status.outer_iter + 1 >= cfg().max_iters) {
+            status.stopMessage.emplace_back(fmt::format("outer iterations ({}) >= max_iters ({}) | mv {} | {:.3e} s", status.outer_iter + 1, cfg().max_iters,
                                                         status.num_matvecs_total, status.time_elapsed.get_time()));
             status.stopReason |= StopReason::max_iters;
         }
@@ -530,20 +530,20 @@ namespace grit::form {
         }
 
         if(std::min(status.saturation_count_eigVal, status.saturation_count_rNorm) >= status.saturation_count_max) {
-            status.stopMessage.emplace_back(fmt::format("saturation_count (eigVal {} rNorm {}) >= saturation_count_max ({}) | it {} | mv {} | {:.3e} s",
+            status.stopMessage.emplace_back(fmt::format("saturation_count (eigVal {} rNorm {}) >= saturation_count_max ({}) | outer_iter {} | mv {} | {:.3e} s",
                                                         status.saturation_count_eigVal, status.saturation_count_rNorm, status.saturation_count_max,
-                                                        status.iter + 1, status.num_matvecs_total, status.time_elapsed.get_time()));
+                                                        status.outer_iter + 1, status.num_matvecs_total, status.time_elapsed.get_time()));
             status.stopReason |= StopReason::ritz_value_stalled;
             status.stopReason |= StopReason::ritz_residual_stalled;
         } else if(status.saturation_count_eigVal >= status.saturation_count_max * 2) {
-            status.stopMessage.emplace_back(fmt::format("saturation_count eigVal {} >= saturation_count_max ({}) * 2 | it {} | mv {} | {:.3e} s",
-                                                        status.saturation_count_eigVal, status.saturation_count_max, status.iter + 1, status.num_matvecs_total,
+            status.stopMessage.emplace_back(fmt::format("saturation_count eigVal {} >= saturation_count_max ({}) * 2 | outer_iter {} | mv {} | {:.3e} s",
+                                                        status.saturation_count_eigVal, status.saturation_count_max, status.outer_iter + 1, status.num_matvecs_total,
                                                         status.time_elapsed.get_time()));
             status.stopReason |= StopReason::ritz_value_stalled;
         } else if(status.saturation_count_eigVal > 2 && status.saturation_count_rNorm >= status.saturation_count_max * 2) {
             // Probably eigVal is stuck in some kind of cycle.
-            status.stopMessage.emplace_back(fmt::format("saturation_count rNorm {} >= saturation_count_max ({}) * 2 | it {} | mv {} | {:.3e} s",
-                                                        status.saturation_count_rNorm, status.saturation_count_max, status.iter + 1, status.num_matvecs_total,
+            status.stopMessage.emplace_back(fmt::format("saturation_count rNorm {} >= saturation_count_max ({}) * 2 | outer_iter {} | mv {} | {:.3e} s",
+                                                        status.saturation_count_rNorm, status.saturation_count_max, status.outer_iter + 1, status.num_matvecs_total,
                                                         status.time_elapsed.get_time()));
             status.stopReason |= StopReason::ritz_residual_stalled;
         }
@@ -599,9 +599,9 @@ namespace grit::form {
 
         auto op_norm_estimate              = get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
         bool log_long_time                 = last_log_time.get_lap() > 10.0;
-        bool log_every_ten_it              = status.iter > 0 && status.iter % 10 == 0;
+        bool log_every_ten_outer_iters     = status.outer_iter > 0 && status.outer_iter % 10 == 0;
         spdlog::level::level_enum loglevel = spdlog::level::trace;
-        if(log_every_ten_it || log_long_time) loglevel = spdlog::level::debug;
+        if(log_every_ten_outer_iters || log_long_time) loglevel = spdlog::level::debug;
         if(!log->should_log(loglevel)) return;
         [[maybe_unused]] auto lap = last_log_time.restart_lap();
 
@@ -610,11 +610,11 @@ namespace grit::form {
         const auto rrNorms         = relative_rNorms(status.rNorms);
 
         log->log(loglevel,
-                 "it {:3} mv {:3} pc {:3} t {:.1e}s dim {} {}eigVal {}{} "
+                 "outer_iter {:3} mv {:3} pc {:3} t {:.1e}s dim {} {}eigVal {}{} "
                  "oErr {:.3e} rNorms {} rrNorms {} {} {} tol {:.2e} (rel {:.2e}) "
                  "({:9.2e}/mv) sat {}:{}/{} col {:2} block_size {} ritz {} "
                  "op norm {:.2e} cond {:.2e} sens {:.2e}{}",
-                 status.iter, status.num_matvecs, status.num_precond, status.time_elapsed.get_time(), N, innerMsg,
+                 status.outer_iter, status.num_matvecs, status.num_precond, status.time_elapsed.get_time(), N, innerMsg,
                  format_vector(VectorReal(status.eigVal), "{:.16f}"), evMsg, orthError, format_vector(VectorReal(status.rNorms)),
                  format_vector(VectorReal(rrNorms)), active_tol_name, format_vector(active_tols, "{:.3e}"), cfg().tol, cfg().tol_rnorm_relative,
                  get_rNorms_log10_change_per_matvec(), status.saturation_count_eigVal, status.saturation_count_rNorm, status.saturation_count_max, Q.cols(),
@@ -627,7 +627,7 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::step() {
+    void base<Scalar, form_>::do_outer_iteration() {
         preamble();
         build();
         diagonalizeT();
@@ -635,7 +635,7 @@ namespace grit::form {
         updateStatus();
         printStatus();
         run_user_callback();
-        status.iter++;
+        status.outer_iter++;
     }
 
     template<typename Scalar, grit::Form form_>
@@ -661,14 +661,14 @@ namespace grit::form {
         status.time_restart.reset();
 
         auto token_elapsed = status.time_elapsed.tic_token();
-        if(status.iter == 0) {
+        if(status.outer_iter == 0) {
             init();
             printStatus();
             run_user_callback();
-            status.iter++;
+            status.outer_iter++;
         }
         while(true) {
-            step();
+            do_outer_iteration();
             if(status.stopReason != StopReason::none) break;
         }
     }

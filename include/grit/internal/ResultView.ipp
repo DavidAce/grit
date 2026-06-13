@@ -1,7 +1,7 @@
 #pragma once
 
 #include <grit/form/base.h>
-#include <grit/ResultView.h>
+#include <grit/Result.h>
 
 namespace grit {
     namespace internal {
@@ -13,8 +13,13 @@ namespace grit {
 
     namespace form {
         template<typename Scalar_, grit::Form form_>
-        ResultView<Scalar_> base<Scalar_, form_>::get_result() const {
+        ResultView<Scalar_> base<Scalar_, form_>::get_result_view() const {
             return ResultView<Scalar_>(*this);
+        }
+
+        template<typename Scalar_, grit::Form form_>
+        Result<Scalar_> base<Scalar_, form_>::get_result() const {
+            return get_result_view().to_result();
         }
     }
 
@@ -43,8 +48,8 @@ namespace grit {
     }
 
     template<typename Scalar_>
-    Eigen::Index ResultView<Scalar_>::iter() const {
-        return internal::visit_solver_source(source, [](const auto &src) { return src.status.iter; });
+    Eigen::Index ResultView<Scalar_>::outer_iter() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.status.outer_iter; });
     }
 
     template<typename Scalar_>
@@ -53,8 +58,8 @@ namespace grit {
     }
 
     template<typename Scalar_>
-    Eigen::Index ResultView<Scalar_>::num_iters_inner() const {
-        return internal::visit_solver_source(source, [](const auto &src) { return src.status.num_iters_inner; });
+    Eigen::Index ResultView<Scalar_>::num_inner_iters() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.status.num_inner_iters; });
     }
 
     template<typename Scalar_>
@@ -88,57 +93,57 @@ namespace grit {
     }
 
     template<typename Scalar_>
-    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::seconds() const {
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time() const {
         return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_elapsed.get_time()); });
     }
 
     template<typename Scalar_>
-    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::seconds_orthogonalize() const {
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_orthogonalize() const {
         return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_orthogonalize.get_time()); });
     }
 
     template<typename Scalar_>
-    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::seconds_orthonormalize() const {
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_orthonormalize() const {
         return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_orthonormalize.get_time()); });
     }
 
     template<typename Scalar_>
-    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::seconds_orth_project() const {
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_orth_project() const {
         return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_orth_project.get_time()); });
     }
 
     template<typename Scalar_>
-    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::seconds_orth_factor() const {
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_orth_factor() const {
         return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_orth_factor.get_time()); });
     }
 
     template<typename Scalar_>
-    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::seconds_orth_update() const {
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_orth_update() const {
         return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_orth_update.get_time()); });
     }
 
     template<typename Scalar_>
-    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::seconds_orth_refresh() const {
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_orth_refresh() const {
         return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_orth_refresh.get_time()); });
     }
 
     template<typename Scalar_>
-    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::seconds_orth_mask() const {
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_orth_mask() const {
         return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_orth_mask.get_time()); });
     }
 
     template<typename Scalar_>
-    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::seconds_diagonalize() const {
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_diagonalize() const {
         return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_diagonalize.get_time()); });
     }
 
     template<typename Scalar_>
-    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::seconds_extract_ritz() const {
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_extract_ritz() const {
         return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_extract_ritz.get_time()); });
     }
 
     template<typename Scalar_>
-    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::seconds_restart() const {
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_restart() const {
         return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_restart.get_time()); });
     }
 
@@ -204,9 +209,9 @@ namespace grit {
     }
 
     template<typename Scalar_>
-    std::string_view ResultView<Scalar_>::residual_correction_step_name() const {
+    std::string_view ResultView<Scalar_>::residual_correction_iteration_name() const {
         return internal::visit_solver_source(
-            source, [](const auto &src) { return std::remove_cvref_t<decltype(src)>::ResidualCorrectionToString(src.auto_residual_correction.step_method); });
+            source, [](const auto &src) { return std::remove_cvref_t<decltype(src)>::ResidualCorrectionToString(src.auto_residual_correction.iteration_method); });
     }
 
     template<typename Scalar_>
@@ -215,19 +220,19 @@ namespace grit {
     }
 
     template<typename Scalar_>
-    Eigen::Index ResultView<Scalar_>::auto_jd_steps_since_probe() const {
-        return internal::visit_solver_source(source, [](const auto &src) { return src.auto_residual_correction.jd_steps_since_probe; });
+    Eigen::Index ResultView<Scalar_>::auto_jd_outer_iters_since_probe() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.auto_residual_correction.jd_outer_iters_since_probe; });
     }
 
     template<typename Scalar_>
-    const std::vector<Eigen::Index> &ResultView<Scalar_>::cheap_to_jd_switch_iters() const {
+    const std::vector<Eigen::Index> &ResultView<Scalar_>::cheap_to_jd_switch_outer_iters() const {
         return internal::visit_solver_source(
-            source, [](const auto &src) -> const std::vector<Eigen::Index> & { return src.auto_residual_correction.cheap_to_jd_switch_iters; });
+            source, [](const auto &src) -> const std::vector<Eigen::Index> & { return src.auto_residual_correction.cheap_to_jd_switch_outer_iters; });
     }
 
     template<typename Scalar_>
-    const std::vector<Eigen::Index> &ResultView<Scalar_>::jd_to_cheap_switch_iters() const {
+    const std::vector<Eigen::Index> &ResultView<Scalar_>::jd_to_cheap_switch_outer_iters() const {
         return internal::visit_solver_source(
-            source, [](const auto &src) -> const std::vector<Eigen::Index> & { return src.auto_residual_correction.jd_to_cheap_switch_iters; });
+            source, [](const auto &src) -> const std::vector<Eigen::Index> & { return src.auto_residual_correction.jd_to_cheap_switch_outer_iters; });
     }
 }

@@ -31,24 +31,24 @@ namespace grit::algo {
         residual_correction_type_internal = config.residual_correction_type;
         if(residual_correction_type_internal == ResidualCorrectionType::AUTO) {
             if(auto_residual_correction.active == ResidualCorrectionType::JACOBI_DAVIDSON &&
-               auto_residual_correction.jd_steps_since_probe >= config.auto_cheap_probe_interval) {
-                auto_residual_correction.step_method = ResidualCorrectionType::CHEAP_OLSEN;
+               auto_residual_correction.jd_outer_iters_since_probe >= config.auto_cheap_probe_interval) {
+                auto_residual_correction.iteration_method = ResidualCorrectionType::CHEAP_OLSEN;
             } else {
-                auto_residual_correction.step_method = auto_residual_correction.active;
+                auto_residual_correction.iteration_method = auto_residual_correction.active;
             }
-            residual_correction_type_internal = auto_residual_correction.step_method;
+            residual_correction_type_internal = auto_residual_correction.iteration_method;
         } else {
-            auto_residual_correction.step_method = residual_correction_type_internal;
+            auto_residual_correction.iteration_method = residual_correction_type_internal;
         }
     }
 
     template<typename Scalar, grit::Form form_>
     void gdplusk<Scalar, form_>::adjust_inner_tolerance([[maybe_unused]] const Eigen::Ref<const MatrixType> &S) {
         if(!config.use_adaptive_inner_tolerance) return;
-        if(status.num_iters_inner_prev == 0) return;
+        if(status.num_inner_iters_prev == 0) return;
 
         const auto oldtol = std::max(eps, current_inner_tol);
-        const auto oldits = status.num_iters_inner_prev;
+        const auto previous_num_inner_iters = status.num_inner_iters_prev;
 
         const RealScalar inner_tol_min         = eps;
         const RealScalar inner_tol_max         = RealScalar{0.75f};
@@ -75,16 +75,16 @@ namespace grit::algo {
         }
 
         RealScalar next_tol = oldtol;
-        if(status.iter > 0) {
+        if(status.outer_iter > 0) {
             if(has_rnorm_progress) {
                 if(rnorm_ratio > slow_rnorm_ratio) {
-                    if(oldits < low_inner_iters) next_tol = oldtol * inner_tol_decr_factor;
+                    if(previous_num_inner_iters < low_inner_iters) next_tol = oldtol * inner_tol_decr_factor;
                 } else if(rnorm_ratio < fast_rnorm_ratio) {
-                    if(oldits > high_inner_iters) next_tol = oldtol * inner_tol_incr_factor;
+                    if(previous_num_inner_iters > high_inner_iters) next_tol = oldtol * inner_tol_incr_factor;
                 }
             } else {
-                if(oldits < low_inner_iters) next_tol = oldtol * inner_tol_decr_factor;
-                if(oldits > high_inner_iters) next_tol = oldtol * inner_tol_incr_factor;
+                if(previous_num_inner_iters < low_inner_iters) next_tol = oldtol * inner_tol_decr_factor;
+                if(previous_num_inner_iters > high_inner_iters) next_tol = oldtol * inner_tol_incr_factor;
             }
         }
 
@@ -145,7 +145,7 @@ namespace grit::algo {
         if(!info.enabled) return info;
 
         const auto min_history_size = std::min<size_t>(status.max_history_size, size_t{2});
-        info.enough_history         = status.iter >= static_cast<Eigen::Index>(min_history_size) && status.rNorms_history.size() >= min_history_size;
+        info.enough_history         = status.outer_iter >= static_cast<Eigen::Index>(min_history_size) && status.rNorms_history.size() >= min_history_size;
         if(!info.enough_history || status.rNorms.size() == 0) return info;
 
         auto rows = std::min<Eigen::Index>(cfg().nev, status.rNorms.size());
@@ -178,7 +178,7 @@ namespace grit::algo {
         if(!info.enabled) return info;
 
         const auto min_history_size = std::min<size_t>(status.max_history_size, size_t{2});
-        info.enough_history         = status.iter >= static_cast<Eigen::Index>(min_history_size) && status.eigVals_history.size() >= min_history_size;
+        info.enough_history         = status.outer_iter >= static_cast<Eigen::Index>(min_history_size) && status.eigVals_history.size() >= min_history_size;
         if(!info.enough_history || status.eigVal.size() == 0) return info;
 
         VectorReal stds = get_standard_deviations(status.eigVals_history, false);
@@ -237,10 +237,10 @@ namespace grit::algo {
             return "NONE";
         };
 
-        auto step_seconds = std::max(0.0, status.time_elapsed.get_time() - auto_residual_correction.step_time_start);
+        auto outer_iteration_time = std::max(0.0, status.time_elapsed.get_time() - auto_residual_correction.outer_iteration_time_start);
 
         if(auto_residual_correction.active == ResidualCorrectionType::JACOBI_DAVIDSON &&
-           auto_residual_correction.step_method == ResidualCorrectionType::CHEAP_OLSEN) {
+           auto_residual_correction.iteration_method == ResidualCorrectionType::CHEAP_OLSEN) {
             auto rnorm = get_auto_rnorm_scalar(status.rNorms);
             // Cheap probes are accepted only when they move the Ritz value by more than
             // the variance scale implied by the stored absolute residual norm.
@@ -260,11 +260,11 @@ namespace grit::algo {
             if(keep_cheap) {
                 auto_residual_correction.active               = ResidualCorrectionType::CHEAP_OLSEN;
                 auto_residual_correction.dwell                = 0;
-                auto_residual_correction.jd_steps_since_probe = 0;
-                auto_residual_correction.jd_to_cheap_switch_iters.push_back(status.iter);
+                auto_residual_correction.jd_outer_iters_since_probe = 0;
+                auto_residual_correction.jd_to_cheap_switch_outer_iters.push_back(status.outer_iter);
             } else {
                 auto_residual_correction.active               = ResidualCorrectionType::JACOBI_DAVIDSON;
-                auto_residual_correction.jd_steps_since_probe = 0;
+                auto_residual_correction.jd_outer_iters_since_probe = 0;
             }
 
             if(log) {
@@ -276,17 +276,18 @@ namespace grit::algo {
                            improvement, threshold, relative_improvement, relative_threshold, config.auto_cheap_probe_factor, rnorm, rnorm_squared,
                            probe_scale_floor, config.auto_cheap_probe_interval, keep_cheap ? "keep CHEAP_OLSEN" : "return JACOBI_DAVIDSON",
                            keep_cheap_relative ? "relative ritz progress" : (keep_cheap_absolute ? "absolute residual scale" : "insufficient progress"),
-                           status.num_matvecs + status.num_matvecs_inner, status.num_matvecs, status.num_matvecs_inner, status.num_iters_inner,
-                           status.num_jdops_inner, step_seconds);
+                           status.num_matvecs + status.num_matvecs_inner, status.num_matvecs, status.num_matvecs_inner, status.num_inner_iters,
+                           status.num_jdops_inner, outer_iteration_time);
             }
             return;
         }
 
-        if(auto_residual_correction.step_method == ResidualCorrectionType::JACOBI_DAVIDSON) {
+        if(auto_residual_correction.iteration_method == ResidualCorrectionType::JACOBI_DAVIDSON) {
             auto_residual_correction.active = ResidualCorrectionType::JACOBI_DAVIDSON;
-            auto_residual_correction.jd_steps_since_probe++;
+            auto_residual_correction.jd_outer_iters_since_probe++;
             if(log) {
-                log->trace("auto residual correction jd step: steps since cheap probe {}/{}", auto_residual_correction.jd_steps_since_probe,
+                log->trace("auto residual correction jd outer iteration: outer iterations since cheap Olsen probe {}/{}",
+                           auto_residual_correction.jd_outer_iters_since_probe,
                            config.auto_cheap_probe_interval);
             }
             return;
@@ -317,8 +318,8 @@ namespace grit::algo {
         if(jd_start_ready) {
             auto_residual_correction.active               = ResidualCorrectionType::JACOBI_DAVIDSON;
             auto_residual_correction.dwell                = 0;
-            auto_residual_correction.jd_steps_since_probe = 0;
-            auto_residual_correction.cheap_to_jd_switch_iters.push_back(status.iter);
+            auto_residual_correction.jd_outer_iters_since_probe = 0;
+            auto_residual_correction.cheap_to_jd_switch_outer_iters.push_back(status.outer_iter);
 
             if(log) {
                 log->debug(
@@ -331,8 +332,8 @@ namespace grit::algo {
                     saturation.eigval.stddev, saturation.eigval.scale, saturation.eigval.value, saturation.rnorm.ratio, saturation.rnorm.threshold,
                     saturation.rnorm.stddev, saturation.rnorm.scale, saturation.rnorm.value, config.auto_cheap_probe_interval, config.auto_cheap_probe_factor,
                     config.auto_jd_start_rnorm_threshold, rrnorm, ritz_rel_change, config.auto_sat_eigval_threshold,
-                    status.num_matvecs + status.num_matvecs_inner, status.num_matvecs, status.num_matvecs_inner, status.num_iters_inner, status.num_jdops_inner,
-                    step_seconds);
+                    status.num_matvecs + status.num_matvecs_inner, status.num_matvecs, status.num_matvecs_inner, status.num_inner_iters, status.num_jdops_inner,
+                    outer_iteration_time);
             }
         }
     }
@@ -452,7 +453,7 @@ namespace grit::algo {
                 IterativeLinearSolverConfig<Scalar> cfg;
                 cfg.result               = {};
                 cfg.matdef               = MatDef::IND;
-                cfg.maxiters             = config.inner_max_iters;
+                cfg.max_inner_iters             = config.inner_max_iters;
                 cfg.tolerance            = current_inner_tol;
                 cfg.theta                = th;
                 cfg.preconditioner_apply = [this](const Eigen::Ref<const VectorType> &x, Eigen::Ref<VectorType> y, RealScalar theta) -> void {
@@ -477,7 +478,7 @@ namespace grit::algo {
                 d.noalias() = internal::precondition::JacobiDavidsonSolver(JDop, rhs, cfg);
                 d.noalias() = ProjectOpR_tmp(d);
 
-                status.num_iters_inner   += cfg.result.iters;
+                status.num_inner_iters   += cfg.result.num_inner_iters;
                 status.num_jdops_inner   += cfg.result.matvecs;
                 status.num_precond_inner += cfg.result.precond;
                 status.inner_error_last   = std::max(status.inner_error_last, cfg.result.error);
@@ -547,7 +548,7 @@ namespace grit::algo {
                 IterativeLinearSolverConfig<Scalar> cfg;
                 cfg.result               = {};
                 cfg.matdef               = MatDef::IND;
-                cfg.maxiters             = config.inner_max_iters;
+                cfg.max_inner_iters             = config.inner_max_iters;
                 cfg.tolerance            = current_inner_tol;
                 cfg.theta                = th;
                 cfg.preconditioner_apply = [this](const Eigen::Ref<const VectorType> &x, Eigen::Ref<VectorType> y, RealScalar theta) -> void {
@@ -570,7 +571,7 @@ namespace grit::algo {
                 d.noalias() = internal::precondition::JacobiDavidsonSolver(JDop, rhs, cfg);
                 d.noalias() = ProjectOpR_tmp(d);
 
-                status.num_iters_inner   += cfg.result.iters;
+                status.num_inner_iters   += cfg.result.num_inner_iters;
                 status.num_jdops_inner   += cfg.result.matvecs;
                 status.num_precond_inner += cfg.result.precond;
                 status.inner_error_last   = std::max(status.inner_error_last, cfg.result.error);

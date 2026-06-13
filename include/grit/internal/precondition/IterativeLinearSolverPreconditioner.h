@@ -40,7 +40,7 @@ namespace grit::internal::precondition {
 
         template<typename MatType>
         explicit IterativeLinearSolverPreconditioner(const MatType &) {}
-        Eigen::Index    iterations() const { return m_iterations; }
+        Eigen::Index    num_applications() const { return m_iterations; }
         double          elapsed_time() const { return m_time_elapsed; }
         double          time_jacobi() const { return 0.0; }
         double          time_chebyshev() const { return 0.0; }

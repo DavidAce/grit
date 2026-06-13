@@ -82,12 +82,12 @@ namespace grit::algo {
             bool                        inject_randomness                = false; /*!< Randomize dependent correction vectors. */
             Eigen::Index                maxRetainBlocks                  = 1;     /*!< Number of old Ritz blocks kept on restart. */
             RealScalar                  inner_tol                        = RealScalar{0.1f};   /*!< Initial tolerance for inner correction solves. */
-            Eigen::Index                inner_max_iters                  = 1000;               /*!< Maximum iterations in each inner correction solve. */
-            Eigen::Index                auto_min_dwell_iters             = 10;                 /*!< Minimum cheap Olsen steps before AUTO may switch. */
+            Eigen::Index                inner_max_iters                  = 1000;               /*!< Maximum inner iterations in each inner correction solve. */
+            Eigen::Index                auto_min_dwell_iters             = 10;                 /*!< Minimum cheap Olsen outer iterations before AUTO may switch. */
             RealScalar                  auto_sat_eigval_threshold        = RealScalar{1e-3f};  /*!< AUTO eigenvalue saturation threshold. */
             RealScalar                  auto_sat_rnorm_threshold         = RealScalar{1e-2f};  /*!< AUTO relative residual saturation threshold. */
             RealScalar                  auto_jd_start_rnorm_threshold    = RealScalar{1e-5f};  /*!< AUTO residual threshold for allowing Jacobi-Davidson. */
-            Eigen::Index                auto_cheap_probe_interval        = 5;                  /*!< Jacobi-Davidson steps between cheap Olsen probes. */
+            Eigen::Index                auto_cheap_probe_interval        = 5;                  /*!< Jacobi-Davidson outer iterations between cheap Olsen probes. */
             RealScalar                  auto_cheap_probe_factor          = RealScalar{1.0f};   /*!< Scale factor for judging cheap Olsen probe progress. */
             std::function<void(const gdplusk<Scalar, form_> &)> user_callback;                 /*!< Callback called after each outer iteration. */
             Eigen::Index                                        max_extra_ritz_history    = 1; /*!< Extra Ritz history retained for progress checks. */
@@ -143,7 +143,7 @@ namespace grit::algo {
         void adjust_inner_tolerance(const Eigen::Ref<const MatrixType> &S);
         /*! Update the active residual correction method. */
         void adjust_residual_correction_type();
-        /*! Update AUTO residual correction counters after a step. */
+        /*! Update AUTO residual correction counters after an outer iteration. */
         void update_auto_residual_correction_state();
         /*!
          * Scalar residual used by AUTO decisions.

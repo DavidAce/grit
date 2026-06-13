@@ -70,7 +70,7 @@ namespace bench_standard {
             insert_field(h5type, "eigenvalue", &Row::eigenvalue);
             insert_field(h5type, "rnorm", &Row::rnorm);
             insert_field(h5type, "rrnorm", &Row::rrnorm);
-            insert_field(h5type, "iterations", &Row::iterations);
+            insert_field(h5type, "outer_iterations", &Row::outer_iterations);
             insert_field(h5type, "matvecs", &Row::matvecs);
             insert_field(h5type, "outer_matvecs", &Row::outer_matvecs);
             insert_field(h5type, "inner_matvecs", &Row::inner_matvecs);
@@ -88,7 +88,7 @@ namespace bench_standard {
             insert_field(h5type, "gap", &Row::gap);
             insert_field(h5type, "rnorm_below_tol", &Row::rnorm_below_tol);
             insert_field(h5type, "rnorm_below_gap", &Row::rnorm_below_gap);
-            insert_field(h5type, "seconds", &Row::seconds);
+            insert_field(h5type, "time", &Row::time);
             insert_field(h5type, "vmrss_mib", &Row::vmrss_mib);
             insert_field(h5type, "vmhwm_mib", &Row::vmhwm_mib);
             insert_field(h5type, "vmpeak_mib", &Row::vmpeak_mib);
@@ -112,27 +112,27 @@ namespace bench_standard {
                 insert_field(h5type, "use_adaptive_inner_tolerance", &Row::use_adaptive_inner_tolerance);
                 insert_field(h5type, "inner_tol_last", &Row::inner_tol_last);
                 insert_field(h5type, "inner_error_last", &Row::inner_error_last);
-                insert_field(h5type, "first_cheap_to_jd_iter", &Row::first_cheap_to_jd_iter);
+                insert_field(h5type, "first_cheap_to_jd_outer_iter", &Row::first_cheap_to_jd_outer_iter);
                 insert_field(h5type, "residual_correction_active", &Row::residual_correction_active);
-                insert_field(h5type, "residual_correction_step", &Row::residual_correction_step);
+                insert_field(h5type, "residual_correction_iteration", &Row::residual_correction_iteration);
                 insert_field(h5type, "auto_dwell", &Row::auto_dwell);
-                insert_field(h5type, "auto_jd_steps_since_probe", &Row::auto_jd_steps_since_probe);
+                insert_field(h5type, "auto_jd_outer_iters_since_probe", &Row::auto_jd_outer_iters_since_probe);
                 insert_field(h5type, "num_cheap_to_jd_switches", &Row::num_cheap_to_jd_switches);
                 insert_field(h5type, "num_jd_to_cheap_switches", &Row::num_jd_to_cheap_switches);
-                insert_field(h5type, "cheap_to_jd_switch_iters", &Row::cheap_to_jd_switch_iters);
-                insert_field(h5type, "jd_to_cheap_switch_iters", &Row::jd_to_cheap_switch_iters);
+                insert_field(h5type, "cheap_to_jd_switch_outer_iters", &Row::cheap_to_jd_switch_outer_iters);
+                insert_field(h5type, "jd_to_cheap_switch_outer_iters", &Row::jd_to_cheap_switch_outer_iters);
             } else if constexpr(std::is_same_v<Row, LanczosSnapshot>) {
                 insert_field(h5type, "max_retain_blocks", &Row::max_retain_blocks);
-                insert_field(h5type, "seconds_orthogonalize", &Row::seconds_orthogonalize);
-                insert_field(h5type, "seconds_orthonormalize", &Row::seconds_orthonormalize);
-                insert_field(h5type, "seconds_orth_project", &Row::seconds_orth_project);
-                insert_field(h5type, "seconds_orth_factor", &Row::seconds_orth_factor);
-                insert_field(h5type, "seconds_orth_update", &Row::seconds_orth_update);
-                insert_field(h5type, "seconds_orth_refresh", &Row::seconds_orth_refresh);
-                insert_field(h5type, "seconds_orth_mask", &Row::seconds_orth_mask);
-                insert_field(h5type, "seconds_diagonalize", &Row::seconds_diagonalize);
-                insert_field(h5type, "seconds_extract_ritz", &Row::seconds_extract_ritz);
-                insert_field(h5type, "seconds_restart", &Row::seconds_restart);
+                insert_field(h5type, "time_orthogonalize", &Row::time_orthogonalize);
+                insert_field(h5type, "time_orthonormalize", &Row::time_orthonormalize);
+                insert_field(h5type, "time_orth_project", &Row::time_orth_project);
+                insert_field(h5type, "time_orth_factor", &Row::time_orth_factor);
+                insert_field(h5type, "time_orth_update", &Row::time_orth_update);
+                insert_field(h5type, "time_orth_refresh", &Row::time_orth_refresh);
+                insert_field(h5type, "time_orth_mask", &Row::time_orth_mask);
+                insert_field(h5type, "time_diagonalize", &Row::time_diagonalize);
+                insert_field(h5type, "time_extract_ritz", &Row::time_extract_ritz);
+                insert_field(h5type, "time_restart", &Row::time_restart);
             }
             return h5type;
         }
@@ -178,21 +178,21 @@ namespace bench_standard {
             RunningStats eigval;
             RunningStats rnorm;
             RunningStats rrnorm;
-            RunningStats iterations;
+            RunningStats outer_iterations;
             RunningStats matvecs;
-            RunningStats seconds;
+            RunningStats time;
             RunningStats vmhwm_mib;
             RunningStats first_jd_switch;
-            RunningStats seconds_orthogonalize;
-            RunningStats seconds_orthonormalize;
-            RunningStats seconds_orth_project;
-            RunningStats seconds_orth_factor;
-            RunningStats seconds_orth_update;
-            RunningStats seconds_orth_refresh;
-            RunningStats seconds_orth_mask;
-            RunningStats seconds_diagonalize;
-            RunningStats seconds_extract_ritz;
-            RunningStats seconds_restart;
+            RunningStats time_orthogonalize;
+            RunningStats time_orthonormalize;
+            RunningStats time_orth_project;
+            RunningStats time_orth_factor;
+            RunningStats time_orth_update;
+            RunningStats time_orth_refresh;
+            RunningStats time_orth_mask;
+            RunningStats time_diagonalize;
+            RunningStats time_extract_ritz;
+            RunningStats time_restart;
 
             void add(const Row &value) {
                 if(count == 0) row = value;
@@ -201,23 +201,23 @@ namespace bench_standard {
                 eigval.add(value.eigenvalue);
                 rnorm.add(value.rnorm);
                 rrnorm.add(value.rrnorm);
-                iterations.add(static_cast<double>(value.iterations));
+                outer_iterations.add(static_cast<double>(value.outer_iterations));
                 matvecs.add(static_cast<double>(value.matvecs));
-                seconds.add(value.seconds);
+                time.add(value.time);
                 vmhwm_mib.add(value.vmhwm_mib);
                 if constexpr(std::is_same_v<Row, GdpluskSnapshot>) {
-                    if(value.first_cheap_to_jd_iter >= 0) first_jd_switch.add(static_cast<double>(value.first_cheap_to_jd_iter));
+                    if(value.first_cheap_to_jd_outer_iter >= 0) first_jd_switch.add(static_cast<double>(value.first_cheap_to_jd_outer_iter));
                 } else if constexpr(std::is_same_v<Row, LanczosSnapshot>) {
-                    seconds_orthogonalize.add(value.seconds_orthogonalize);
-                    seconds_orthonormalize.add(value.seconds_orthonormalize);
-                    seconds_orth_project.add(value.seconds_orth_project);
-                    seconds_orth_factor.add(value.seconds_orth_factor);
-                    seconds_orth_update.add(value.seconds_orth_update);
-                    seconds_orth_refresh.add(value.seconds_orth_refresh);
-                    seconds_orth_mask.add(value.seconds_orth_mask);
-                    seconds_diagonalize.add(value.seconds_diagonalize);
-                    seconds_extract_ritz.add(value.seconds_extract_ritz);
-                    seconds_restart.add(value.seconds_restart);
+                    time_orthogonalize.add(value.time_orthogonalize);
+                    time_orthonormalize.add(value.time_orthonormalize);
+                    time_orth_project.add(value.time_orth_project);
+                    time_orth_factor.add(value.time_orth_factor);
+                    time_orth_update.add(value.time_orth_update);
+                    time_orth_refresh.add(value.time_orth_refresh);
+                    time_orth_mask.add(value.time_orth_mask);
+                    time_diagonalize.add(value.time_diagonalize);
+                    time_extract_ritz.add(value.time_extract_ritz);
+                    time_restart.add(value.time_restart);
                 }
             }
         };
@@ -269,7 +269,7 @@ namespace bench_standard {
             file.writeAttribute(snapshot.eigenvalue, group_path(algo), "eigenvalue");
             file.writeAttribute(snapshot.rnorm, group_path(algo), "rnorm");
             file.writeAttribute(snapshot.rrnorm, group_path(algo), "rrnorm");
-            file.writeAttribute(snapshot.iterations, group_path(algo), "iterations");
+            file.writeAttribute(snapshot.outer_iterations, group_path(algo), "outer_iterations");
             file.writeAttribute(snapshot.matvecs, group_path(algo), "matvecs");
             file.writeAttribute(to_string(snapshot.stop_reason), group_path(algo), "stop_reason");
         }
@@ -302,44 +302,44 @@ namespace bench_standard {
             std::println("summary: {}", path.string());
             if constexpr(std::is_same_v<Row, GdpluskSnapshot>) {
                 std::println("{:<5} {:>8} {:>5} {:>5} {:<17} {:>9} {:>9} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18}",
-                             "case", "algo", "ncv", "blk", "correction", "conv", "reps", "eigval mean", "rnorm mean", "rrnorm mean", "iter mean±se",
+                             "case", "algo", "ncv", "blk", "correction", "conv", "reps", "eigval mean", "rnorm mean", "rrnorm mean", "outer_iter mean±se",
                              "matvec mean±se", "time mean±se", "jd switch ±se");
                 for(const auto &[case_id, group] : groups) {
                     (void)case_id;
                     std::println("{:<5} {:>8} {:>5} {:>5} {:<17} {:>4}/{:<4} {:>9} {:>18.10e} {:>18.4e} {:>18.4e} {:>18} {:>18} {:>18} {:>18}",
                                  group.row.case_id, to_string(group.row.algo), group.row.ncv, group.row.block_size, to_string(group.row.residual_correction),
                                  group.converged, group.count, group.count, group.eigval.mean(), group.rnorm.mean(), group.rrnorm.mean(),
-                                 mean_stderr_text(group.iterations, "{:.1f}"), mean_stderr_text(group.matvecs, "{:.1f}"),
-                                 mean_stderr_text(group.seconds, "{:.4f}"), mean_stderr_text(group.first_jd_switch, "{:.1f}"));
+                                 mean_stderr_text(group.outer_iterations, "{:.1f}"), mean_stderr_text(group.matvecs, "{:.1f}"),
+                                 mean_stderr_text(group.time, "{:.4f}"), mean_stderr_text(group.first_jd_switch, "{:.1f}"));
                 }
             } else if constexpr(std::is_same_v<Row, LanczosSnapshot>) {
                 std::println("{:<5} {:>8} {:>5} {:>5} {:>6} {:>9} {:>9} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18}",
-                             "case", "algo", "ncv", "blk", "retain", "conv", "reps", "eigval mean", "rnorm mean", "rrnorm mean", "iter mean±se", "matvec mean±se",
+                             "case", "algo", "ncv", "blk", "retain", "conv", "reps", "eigval mean", "rnorm mean", "rrnorm mean", "outer_iter mean±se", "matvec mean±se",
                              "time mean±se", "orth mean±se", "orthn mean±se", "proj mean±se", "factor mean±se", "update mean±se", "refresh mean±se",
                              "mask mean±se", "diag mean±se", "ritz mean±se", "restart mean±se");
                 for(const auto &[case_id, group] : groups) {
                     (void)case_id;
                     std::println("{:<5} {:>8} {:>5} {:>5} {:>6} {:>4}/{:<4} {:>9} {:>18.10e} {:>18.4e} {:>18.4e} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18}",
                                  group.row.case_id, to_string(group.row.algo), group.row.ncv, group.row.block_size, group.row.max_retain_blocks, group.converged, group.count,
-                                 group.count, group.eigval.mean(), group.rnorm.mean(), group.rrnorm.mean(), mean_stderr_text(group.iterations, "{:.1f}"),
-                                 mean_stderr_text(group.matvecs, "{:.1f}"), mean_stderr_text(group.seconds, "{:.4f}"),
-                                 mean_stderr_text(group.seconds_orthogonalize, "{:.4f}"), mean_stderr_text(group.seconds_orthonormalize, "{:.4f}"),
-                                 mean_stderr_text(group.seconds_orth_project, "{:.4f}"), mean_stderr_text(group.seconds_orth_factor, "{:.4f}"),
-                                 mean_stderr_text(group.seconds_orth_update, "{:.4f}"), mean_stderr_text(group.seconds_orth_refresh, "{:.4f}"),
-                                 mean_stderr_text(group.seconds_orth_mask, "{:.4f}"),
-                                 mean_stderr_text(group.seconds_diagonalize, "{:.4f}"), mean_stderr_text(group.seconds_extract_ritz, "{:.4f}"),
-                                 mean_stderr_text(group.seconds_restart, "{:.4f}"));
+                                 group.count, group.eigval.mean(), group.rnorm.mean(), group.rrnorm.mean(), mean_stderr_text(group.outer_iterations, "{:.1f}"),
+                                 mean_stderr_text(group.matvecs, "{:.1f}"), mean_stderr_text(group.time, "{:.4f}"),
+                                 mean_stderr_text(group.time_orthogonalize, "{:.4f}"), mean_stderr_text(group.time_orthonormalize, "{:.4f}"),
+                                 mean_stderr_text(group.time_orth_project, "{:.4f}"), mean_stderr_text(group.time_orth_factor, "{:.4f}"),
+                                 mean_stderr_text(group.time_orth_update, "{:.4f}"), mean_stderr_text(group.time_orth_refresh, "{:.4f}"),
+                                 mean_stderr_text(group.time_orth_mask, "{:.4f}"),
+                                 mean_stderr_text(group.time_diagonalize, "{:.4f}"), mean_stderr_text(group.time_extract_ritz, "{:.4f}"),
+                                 mean_stderr_text(group.time_restart, "{:.4f}"));
                 }
             } else {
                 std::println("{:<5} {:>8} {:>5} {:>5} {:>9} {:>9} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18}",
-                             "case", "algo", "ncv", "blk", "conv", "reps", "eigval mean", "rnorm mean", "rrnorm mean", "iter mean±se", "matvec mean±se",
+                             "case", "algo", "ncv", "blk", "conv", "reps", "eigval mean", "rnorm mean", "rrnorm mean", "outer_iter mean±se", "matvec mean±se",
                              "time mean±se");
                 for(const auto &[case_id, group] : groups) {
                     (void)case_id;
                     std::println("{:<5} {:>8} {:>5} {:>5} {:>4}/{:<4} {:>9} {:>18.10e} {:>18.4e} {:>18.4e} {:>18} {:>18} {:>18}",
                                  group.row.case_id, to_string(group.row.algo), group.row.ncv, group.row.block_size, group.converged, group.count, group.count,
-                                 group.eigval.mean(), group.rnorm.mean(), group.rrnorm.mean(), mean_stderr_text(group.iterations, "{:.1f}"),
-                                 mean_stderr_text(group.matvecs, "{:.1f}"), mean_stderr_text(group.seconds, "{:.4f}"));
+                                 group.eigval.mean(), group.rnorm.mean(), group.rrnorm.mean(), mean_stderr_text(group.outer_iterations, "{:.1f}"),
+                                 mean_stderr_text(group.matvecs, "{:.1f}"), mean_stderr_text(group.time, "{:.4f}"));
                 }
             }
         }

@@ -107,7 +107,7 @@ namespace grit::algo {
         Base::preamble();
         adjust_inner_tolerance(S);
         adjust_residual_correction_type();
-        if(config.residual_correction_type == ResidualCorrectionType::AUTO) auto_residual_correction.step_time_start = status.time_elapsed.get_time();
+        if(config.residual_correction_type == ResidualCorrectionType::AUTO) auto_residual_correction.outer_iteration_time_start = status.time_elapsed.get_time();
     }
 
     template<typename Scalar, grit::Form form_>
@@ -241,9 +241,9 @@ namespace grit::algo {
                                        const MatrixType &BQ_new) {
         if(status.stopReason != StopReason::none) return;
 
-        if(Q_new.cols() == 0 && status.iter <= status.iter_last_restart + 2) {
+        if(Q_new.cols() == 0 && status.outer_iter <= status.num_outer_iters_last_restart + 2) {
             status.stopReason |= StopReason::subspace_exhausted;
-            status.stopMessage.emplace_back(fmt::format("saturated basis: exhausted subspace search | iter {} | mv {} | {:.3e} s", status.iter,
+            status.stopMessage.emplace_back(fmt::format("saturated basis: exhausted subspace search | outer_iter {} | mv {} | {:.3e} s", status.outer_iter,
                                                         status.num_matvecs_total, status.time_elapsed.get_time()));
             return;
         }
@@ -363,7 +363,7 @@ namespace grit::algo {
                 BQ = Q;
             }
 
-            status.iter_last_restart = status.iter;
+            status.num_outer_iters_last_restart = status.outer_iter;
         };
 
         auto newCols = std::min<Eigen::Index>({Q.cols() + Q_new.cols(), N});
@@ -392,7 +392,7 @@ namespace grit::algo {
         m.Gram       = (m.Gram + m.Gram.adjoint()).eval() * Base::half;
         m.orthError  = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
 
-        bool basis_was_restarted = status.iter_last_restart == status.iter;
+        bool basis_was_restarted = status.num_outer_iters_last_restart == status.outer_iter;
         if(basis_was_restarted || m.orthError > this->normTol * std::sqrt(status.op_norm_estimate)) {
             if constexpr(form_ == grit::Form::GENERALIZED) {
                 if(config.use_b_inner_product) {

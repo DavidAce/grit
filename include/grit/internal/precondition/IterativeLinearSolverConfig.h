@@ -15,7 +15,7 @@ namespace grit {
         using PreconditionerApplyFunc = std::function<void(const Eigen::Ref<const VectorType> &, Eigen::Ref<VectorType>, Real)>;
 
         struct Result {
-            Eigen::Index           iters        = 0;
+            Eigen::Index           num_inner_iters = 0;
             Eigen::Index           matvecs      = 0;
             Eigen::Index           precond      = 0;
             double                 time         = 0;
@@ -26,7 +26,7 @@ namespace grit {
 
             void    add_latest(const Result &other) { *this += other; }
             Result &operator+=(const Result &other) {
-                iters        += other.iters;
+                num_inner_iters += other.num_inner_iters;
                 matvecs      += other.matvecs;
                 precond      += other.precond;
                 time         += other.time;
@@ -37,7 +37,7 @@ namespace grit {
                 return *this;
             }
             void copy_latest(const Result &other) {
-                iters        = other.iters;
+                num_inner_iters = other.num_inner_iters;
                 matvecs      = other.matvecs;
                 precond      = other.precond;
                 time         = other.time;
@@ -49,7 +49,7 @@ namespace grit {
             void reset() { *this = {}; }
         };
 
-        long                    maxiters     = 1000;
+        long                    max_inner_iters = 1000;
         Real                    tolerance    = Real{0.1f};
         Real                    theta        = Real{0};
         MatDef                  matdef       = MatDef::IND;

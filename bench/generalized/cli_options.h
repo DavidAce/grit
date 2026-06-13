@@ -27,11 +27,11 @@ namespace bench_generalized {
         double              sat_eigval_threshold = 0.0;     /*!< Eigenvalue saturation threshold for stopping; zero disables this stop. */
         double              sat_rnorm_threshold  = 0.0;     /*!< Derived relative-residual saturation threshold for stopping; zero disables this stop. */
         std::vector<double> inner_tol            = {0.1};   /*!< Inner correction tolerance, optionally as a sweep list. */
-        int                 auto_min_dwell_iters = 10;      /*!< Minimum consecutive cheap-Olsen AUTO steps before JD activation may occur. */
+        int                 auto_min_dwell_iters = 10;      /*!< Minimum consecutive cheap-Olsen AUTO outer iterations before Jacobi-Davidson activation may occur. */
         double              auto_sat_eigval_threshold     = 1e-3; /*!< Eigenvalue saturation threshold for AUTO JD activation. */
         double              auto_sat_rnorm_threshold      = 1e-2; /*!< Derived relative-residual saturation threshold for AUTO JD activation. */
         double              auto_jd_start_rnorm_threshold = 1e-5; /*!< Derived relative residual norm below which AUTO may activate JD; zero disables it. */
-        int                 auto_cheap_probe_interval     = 5;    /*!< JD steps before AUTO forces a cheap-Olsen probe. */
+        int                 auto_cheap_probe_interval     = 5;    /*!< Jacobi-Davidson outer iterations before AUTO forces a cheap-Olsen probe. */
         double       auto_cheap_probe_factor = 1.0; /*!< Cheap probe must improve the Ritz value by this factor times max(absolute rnorm^2, roundoff scale). */
         unsigned int seed                    = 0;
         std::string  ritz                    = "SR";

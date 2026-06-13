@@ -79,7 +79,7 @@ namespace grit::internal::precondition {
         }
         [[nodiscard]] Eigen::Index rows() const { return size; };
         [[nodiscard]] Eigen::Index cols() const { return size; };
-        Eigen::Index               iterations() const { return m_opcounter; }
+        Eigen::Index               num_applications() const { return m_opcounter; }
         double                     elapsed_time() const { return m_optimer; }
     };
 
@@ -151,7 +151,7 @@ namespace grit::internal::precondition {
         auto                                                run = [&](auto &solver) {
             auto t_start = std::chrono::high_resolution_clock::now();
 
-            solver.setMaxIterations(cfg.maxiters);
+            solver.setMaxIterations(cfg.max_inner_iters);
             solver.setTolerance(cfg.tolerance);
             solver.preconditioner().attach(&matRepl, &cfg);
             solver.compute(matRepl);
@@ -162,9 +162,9 @@ namespace grit::internal::precondition {
             }
             auto t_end = std::chrono::high_resolution_clock::now();
 
-            cfg.result.iters        += solver.iterations();
-            cfg.result.matvecs      += matRepl.iterations();
-            cfg.result.precond      += solver.preconditioner().iterations();
+            cfg.result.num_inner_iters += solver.iterations();
+            cfg.result.matvecs      += matRepl.num_applications();
+            cfg.result.precond      += solver.preconditioner().num_applications();
             cfg.result.time         += std::chrono::duration<double>(t_end - t_start).count();
             cfg.result.time_matvecs += matRepl.elapsed_time();
             cfg.result.time_precond += solver.preconditioner().elapsed_time();

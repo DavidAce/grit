@@ -92,7 +92,7 @@ namespace grit::algo {
 
         status.saturation_count_max = this->cfg().ncv;
 
-        if(status.iter == 0) {
+        if(status.outer_iter == 0) {
             status.rNorms.setOnes(this->cfg().nev);
             status.rNorms_init.setOnes(this->cfg().nev);
             status.eigVal.setOnes(this->cfg().nev);
@@ -138,7 +138,7 @@ namespace grit::algo {
             updateStatus();
             this->printStatus();
             run_user_callback();
-            status.iter++;
+            status.outer_iter++;
             if(status.stopReason != StopReason::none) break;
         }
     }
@@ -265,7 +265,7 @@ namespace grit::algo {
                 BQ = Q;
             }
 
-            status.iter_last_restart = status.iter;
+            status.num_outer_iters_last_restart = status.outer_iter;
         };
 
         MatrixType Q_prev;

@@ -149,7 +149,7 @@ namespace bench_generalized {
         app.add_option("--nev", opts.nev, "Number of eigenpairs")->check(CLI::PositiveNumber);
         app.add_option("--ncv", opts.ncv, "Maximum subspace columns, or a comma list like [8,16]")->delimiter(',');
         app.add_option("--block-size", opts.block_size, "Solver block size, or a comma list like [1,2]")->delimiter(',');
-        app.add_option("--max-iters", opts.max_iters, "Maximum solver iterations, or a negative value for unlimited");
+        app.add_option("--max-iters", opts.max_iters, "Maximum solver outer iterations, or a negative value for unlimited");
         app.add_option("--max-matvecs", opts.max_matvecs, "Maximum matrix-vector products, or a negative value for unlimited");
         auto *inner_max_iters_opt = app.add_option("--inner-max-iters", opts.inner_max_iters, "Maximum Jacobi-Davidson inner iterations, or a comma list")->delimiter(',');
         auto *max_retain_blocks_opt = app.add_option("--max-retain-blocks", opts.max_retain_blocks, "Lanczos retained restart blocks, or a comma list")->delimiter(',');
@@ -160,11 +160,11 @@ namespace bench_generalized {
         app.add_option("--sat-rnorm-threshold", opts.sat_rnorm_threshold,
                        "Stop if derived relative-residual history standard deviation is below this fraction of the current derived relative residual; 0 disables it");
         auto *inner_tol_opt = app.add_option("--inner-tol", opts.inner_tol, "Jacobi-Davidson inner tolerance, or a comma list")->delimiter(',');
-        auto *auto_min_dwell_iters_opt = app.add_option("--auto-min-dwell-iters", opts.auto_min_dwell_iters, "Minimum consecutive cheap-Olsen AUTO steps before JD activation may be scheduled")->check(CLI::NonNegativeNumber);
+        auto *auto_min_dwell_iters_opt = app.add_option("--auto-min-dwell-iters", opts.auto_min_dwell_iters, "Minimum consecutive cheap-Olsen AUTO outer iterations before Jacobi-Davidson activation may be scheduled")->check(CLI::NonNegativeNumber);
         auto *auto_sat_eigval_threshold_opt = app.add_option("--auto-sat-eigval-threshold", opts.auto_sat_eigval_threshold, "AUTO eigenvalue-history relative standard deviation tolerance");
         auto *auto_sat_rnorm_threshold_opt = app.add_option("--auto-sat-rnorm-threshold", opts.auto_sat_rnorm_threshold, "AUTO derived-relative-residual saturation tolerance");
         auto *auto_jd_start_rnorm_threshold_opt = app.add_option("--auto-jd-start-rnorm-threshold", opts.auto_jd_start_rnorm_threshold, "Derived relative residual norm below which AUTO may activate JD; 0 disables it");
-        auto *auto_cheap_probe_interval_opt = app.add_option("--auto-cheap-probe-interval", opts.auto_cheap_probe_interval, "JD steps before AUTO forces a cheap-Olsen probe")->check(CLI::PositiveNumber);
+        auto *auto_cheap_probe_interval_opt = app.add_option("--auto-cheap-probe-interval", opts.auto_cheap_probe_interval, "Jacobi-Davidson outer iterations before AUTO forces a cheap-Olsen probe")->check(CLI::PositiveNumber);
         auto *auto_cheap_probe_factor_opt = app.add_option("--auto-cheap-probe-factor", opts.auto_cheap_probe_factor,
                        "Cheap probe must improve the Ritz value by this factor times max(absolute rnorm^2, roundoff scale)");
         app.add_option("--seed", opts.seed, "Random seed for deterministic initial guess");

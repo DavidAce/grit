@@ -84,11 +84,11 @@ namespace bench_standard {
             snapshot.eigenvalue                    = view.eigVal().size() > 0 ? view.eigVal()(0) : 0.0;
             snapshot.rnorm                         = view.rNorms().size() > 0 ? view.rNorms()(0) : 0.0;
             snapshot.rrnorm                        = relative_rnorm(view);
-            snapshot.iterations                    = static_cast<int64_t>(view.iter());
+            snapshot.outer_iterations                    = static_cast<int64_t>(view.outer_iter());
             snapshot.matvecs                       = static_cast<int64_t>(view.num_matvecs_total());
             snapshot.outer_matvecs                 = static_cast<int64_t>(view.num_matvecs());
             snapshot.inner_matvecs                 = static_cast<int64_t>(view.num_matvecs_inner());
-            snapshot.inner_iterations              = static_cast<int64_t>(view.num_iters_inner());
+            snapshot.inner_iterations              = static_cast<int64_t>(view.num_inner_iters());
             snapshot.jdops_inner                   = static_cast<int64_t>(view.num_jdops_inner());
             snapshot.precond                       = static_cast<int64_t>(view.num_precond());
             snapshot.precond_inner                 = static_cast<int64_t>(view.num_precond_inner());
@@ -102,7 +102,7 @@ namespace bench_standard {
             snapshot.gap                           = view.gap();
             snapshot.rnorm_below_tol               = static_cast<uint8_t>(view.rnorm_below_tol());
             snapshot.rnorm_below_gap               = static_cast<uint8_t>(view.rnorm_below_gap());
-            snapshot.seconds                       = view.seconds();
+            snapshot.time                       = view.time();
         }
 
         GdpluskSnapshot make_solver_snapshot(const Options &opts, int rep, unsigned int rep_seed, const GdSolver &solver, grit::ResultView<Scalar> view) {
@@ -121,16 +121,16 @@ namespace bench_standard {
             snapshot.use_adaptive_inner_tolerance  = static_cast<uint8_t>(opts.use_adaptive_inner_tolerance);
             snapshot.inner_tol_last                = view.inner_tol_last();
             snapshot.inner_error_last              = view.inner_error_last();
-            snapshot.first_cheap_to_jd_iter =
-                view.cheap_to_jd_switch_iters().empty() ? int64_t{-1} : static_cast<int64_t>(view.cheap_to_jd_switch_iters().front());
+            snapshot.first_cheap_to_jd_outer_iter =
+                view.cheap_to_jd_switch_outer_iters().empty() ? int64_t{-1} : static_cast<int64_t>(view.cheap_to_jd_switch_outer_iters().front());
             snapshot.auto_dwell                 = static_cast<int64_t>(view.auto_dwell());
-            snapshot.auto_jd_steps_since_probe  = static_cast<int64_t>(view.auto_jd_steps_since_probe());
+            snapshot.auto_jd_outer_iters_since_probe  = static_cast<int64_t>(view.auto_jd_outer_iters_since_probe());
             snapshot.residual_correction_active = fixed_string<32>(view.residual_correction_active_name(), "residual_correction_active");
-            snapshot.residual_correction_step   = fixed_string<32>(view.residual_correction_step_name(), "residual_correction_step");
-            snapshot.num_cheap_to_jd_switches   = static_cast<int64_t>(view.cheap_to_jd_switch_iters().size());
-            snapshot.num_jd_to_cheap_switches   = static_cast<int64_t>(view.jd_to_cheap_switch_iters().size());
-            snapshot.cheap_to_jd_switch_iters   = to_i64_vector(view.cheap_to_jd_switch_iters());
-            snapshot.jd_to_cheap_switch_iters   = to_i64_vector(view.jd_to_cheap_switch_iters());
+            snapshot.residual_correction_iteration   = fixed_string<32>(view.residual_correction_iteration_name(), "residual_correction_iteration");
+            snapshot.num_cheap_to_jd_switches   = static_cast<int64_t>(view.cheap_to_jd_switch_outer_iters().size());
+            snapshot.num_jd_to_cheap_switches   = static_cast<int64_t>(view.jd_to_cheap_switch_outer_iters().size());
+            snapshot.cheap_to_jd_switch_outer_iters   = to_i64_vector(view.cheap_to_jd_switch_outer_iters());
+            snapshot.jd_to_cheap_switch_outer_iters   = to_i64_vector(view.jd_to_cheap_switch_outer_iters());
             return snapshot;
         }
 
@@ -142,16 +142,16 @@ namespace bench_standard {
             fill_common_snapshot(snapshot, opts, rep, rep_seed, view);
             if constexpr(std::is_same_v<Solver, LanczosSolver>) {
                 snapshot.max_retain_blocks      = static_cast<int32_t>(opts.maxRetainBlocks);
-                snapshot.seconds_orthogonalize  = view.seconds_orthogonalize();
-                snapshot.seconds_orthonormalize = view.seconds_orthonormalize();
-                snapshot.seconds_orth_project   = view.seconds_orth_project();
-                snapshot.seconds_orth_factor    = view.seconds_orth_factor();
-                snapshot.seconds_orth_update    = view.seconds_orth_update();
-                snapshot.seconds_orth_refresh   = view.seconds_orth_refresh();
-                snapshot.seconds_orth_mask      = view.seconds_orth_mask();
-                snapshot.seconds_diagonalize    = view.seconds_diagonalize();
-                snapshot.seconds_extract_ritz   = view.seconds_extract_ritz();
-                snapshot.seconds_restart        = view.seconds_restart();
+                snapshot.time_orthogonalize  = view.time_orthogonalize();
+                snapshot.time_orthonormalize = view.time_orthonormalize();
+                snapshot.time_orth_project   = view.time_orth_project();
+                snapshot.time_orth_factor    = view.time_orth_factor();
+                snapshot.time_orth_update    = view.time_orth_update();
+                snapshot.time_orth_refresh   = view.time_orth_refresh();
+                snapshot.time_orth_mask      = view.time_orth_mask();
+                snapshot.time_diagonalize    = view.time_diagonalize();
+                snapshot.time_extract_ritz   = view.time_extract_ritz();
+                snapshot.time_restart        = view.time_restart();
             }
             return snapshot;
         }
@@ -217,16 +217,16 @@ namespace bench_standard {
 
             const auto time_start = std::chrono::steady_clock::now();
             const auto rep_seed   = opts.seed + static_cast<unsigned int>(rep - 1);
-            std::vector<decltype(make_solver_snapshot(opts, rep, rep_seed, solver, solver.get_result()))> snapshots;
+            std::vector<decltype(make_solver_snapshot(opts, rep, rep_seed, solver, solver.get_result_view()))> snapshots;
             solver.config.user_callback = [&](const Solver &solver_ref) {
-                snapshots.push_back(make_solver_snapshot(opts, rep, rep_seed, solver_ref, solver_ref.get_result()));
+                snapshots.push_back(make_solver_snapshot(opts, rep, rep_seed, solver_ref, solver_ref.get_result_view()));
             };
             solver.run();
             const auto time_stop = std::chrono::steady_clock::now();
 
-            const auto view = solver.get_result();
+            const auto view = solver.get_result_view();
             auto final_snapshot = make_solver_snapshot(opts, rep, rep_seed, solver, view);
-            final_snapshot.seconds   = std::chrono::duration<double>(time_stop - time_start).count();
+            final_snapshot.time   = std::chrono::duration<double>(time_stop - time_start).count();
             final_snapshot.vmrss_mib = mem_usage_in_mib("VmRSS");
             final_snapshot.vmhwm_mib = mem_usage_in_mib("VmHWM");
             final_snapshot.vmpeak_mib = mem_usage_in_mib("VmPeak");

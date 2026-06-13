@@ -239,7 +239,7 @@ TEST_CASE("generalized jacobi-davidson b-only correction supports l2 and bm proj
         auto view = solver.get_result();
         print_eigenvalue_comparison("generalized gdplusk jd b-only l2", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
         REQUIRE(view.stopReason() == grit::StopReason::converged);
-        REQUIRE(view.num_iters_inner() > 0);
+        REQUIRE(view.num_inner_iters() > 0);
         REQUIRE(view.num_jdops_inner() > 0);
         require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
     }
@@ -259,7 +259,7 @@ TEST_CASE("generalized jacobi-davidson b-only correction supports l2 and bm proj
         REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
         REQUIRE(view.eigVal().allFinite());
         REQUIRE(view.rNorms().allFinite());
-        REQUIRE(view.num_iters_inner() > 0);
+        REQUIRE(view.num_inner_iters() > 0);
         REQUIRE(view.num_jdops_inner() > 0);
         require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
     }
@@ -310,7 +310,7 @@ TEST_CASE("generalized jacobi-davidson correction invokes preconditioner callbac
     auto                                             view = solver.get_result();
     print_eigenvalue_comparison("generalized gdplusk jacobi-davidson preconditioner", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     REQUIRE(view.stopReason() == grit::StopReason::converged);
-    REQUIRE(view.num_iters_inner() > 0);
+    REQUIRE(view.num_inner_iters() > 0);
     REQUIRE(view.num_jdops_inner() > 0);
     REQUIRE(update_count > 0);
     REQUIRE(apply_count > 0);
@@ -347,7 +347,7 @@ TEST_CASE("generalized jacobi-davidson correction defaults to identity precondit
     auto                                             view = solver.get_result();
     print_eigenvalue_comparison("generalized gdplusk identity preconditioner", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     REQUIRE(view.stopReason() == grit::StopReason::converged);
-    REQUIRE(view.num_iters_inner() > 0);
+    REQUIRE(view.num_inner_iters() > 0);
     REQUIRE(view.num_jdops_inner() > 0);
     require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
 }

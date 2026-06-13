@@ -208,7 +208,7 @@ TEST_CASE("standard gdplusk user callback reports initial and final view") {
 
     Matrix V = Matrix::Identity(A_matrix.rows(), A_matrix.rows());
 
-    std::vector<Eigen::Index>       iterations;
+    std::vector<Eigen::Index>       outer_iterations;
     std::vector<grit::StopReason>   stop_reasons;
     grit::standard::gdplusk<double> solver(A);
     solver.config.nev           = 1;
@@ -217,8 +217,8 @@ TEST_CASE("standard gdplusk user callback reports initial and final view") {
     solver.config.ritz          = grit::Ritz::SR;
     solver.config.max_iters     = 20;
     solver.config.user_callback = [&](const auto &solver_ref) {
-        auto view = solver_ref.get_result();
-        iterations.push_back(view.iter());
+        auto view = solver_ref.get_result_view();
+        outer_iterations.push_back(view.outer_iter());
         stop_reasons.push_back(view.stopReason());
     };
     solver.set_initial_guess(V);
@@ -229,9 +229,9 @@ TEST_CASE("standard gdplusk user callback reports initial and final view") {
     print_eigenvalue_comparison("standard gdplusk callback", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
 
     require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
-    REQUIRE(iterations.size() >= 2);
-    REQUIRE(iterations.front() == 0);
-    REQUIRE(iterations.back() + 1 == view.iter());
+    REQUIRE(outer_iterations.size() >= 2);
+    REQUIRE(outer_iterations.front() == 0);
+    REQUIRE(outer_iterations.back() + 1 == view.outer_iter());
     REQUIRE(stop_reasons.front() == grit::StopReason::none);
     REQUIRE(stop_reasons.back() == grit::StopReason::converged);
 }
@@ -325,7 +325,7 @@ TEST_CASE("standard auto residual correction starts with cheap Olsen") {
 
     REQUIRE(solver.residual_correction_type_internal == Correction::CHEAP_OLSEN);
     REQUIRE(solver.auto_residual_correction.active == Correction::CHEAP_OLSEN);
-    REQUIRE(solver.auto_residual_correction.step_method == Correction::CHEAP_OLSEN);
+    REQUIRE(solver.auto_residual_correction.iteration_method == Correction::CHEAP_OLSEN);
 }
 
 TEST_CASE("standard auto residual correction does not start Jacobi-Davidson unless eigenvalues and residuals saturate") {
@@ -344,9 +344,9 @@ TEST_CASE("standard auto residual correction does not start Jacobi-Davidson unle
 
     solver.config.residual_correction_type      = Correction::AUTO;
     solver.auto_residual_correction.active      = Correction::CHEAP_OLSEN;
-    solver.auto_residual_correction.step_method = Correction::CHEAP_OLSEN;
+    solver.auto_residual_correction.iteration_method = Correction::CHEAP_OLSEN;
     solver.auto_residual_correction.dwell       = solver.config.auto_min_dwell_iters;
-    solver.status.iter                          = 2;
+    solver.status.outer_iter                          = 2;
     solver.status.eigVal                        = VectorReal::Constant(1, -1.0);
     solver.status.rNorms                        = VectorReal::Constant(1, 1.0e-2);
     solver.status.eigVals_history.clear();
@@ -361,7 +361,7 @@ TEST_CASE("standard auto residual correction does not start Jacobi-Davidson unle
     solver.update_auto_residual_correction_state();
 
     REQUIRE(solver.auto_residual_correction.active == Correction::CHEAP_OLSEN);
-    REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_iters.empty());
+    REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_outer_iters.empty());
 }
 
 TEST_CASE("standard auto residual correction switches to Jacobi-Davidson when residuals are small and Ritz values are stable") {
@@ -378,9 +378,9 @@ TEST_CASE("standard auto residual correction switches to Jacobi-Davidson when re
     solver.config.auto_min_dwell_iters          = 10;
     solver.config.auto_jd_start_rnorm_threshold = 1e-4;
     solver.auto_residual_correction.active      = grit::ResidualCorrectionType::CHEAP_OLSEN;
-    solver.auto_residual_correction.step_method = grit::ResidualCorrectionType::CHEAP_OLSEN;
+    solver.auto_residual_correction.iteration_method = grit::ResidualCorrectionType::CHEAP_OLSEN;
     solver.auto_residual_correction.dwell       = solver.config.auto_min_dwell_iters;
-    solver.status.iter                          = 7;
+    solver.status.outer_iter                          = 7;
     solver.status.oldVal                        = grit::form::base<double>::VectorReal::Constant(1, 1.0 + 1.0e-6);
     solver.status.eigVal                        = grit::form::base<double>::VectorReal::Constant(1, 1.0);
     solver.status.rNorms                        = grit::form::base<double>::VectorReal::Constant(1, 1.0e-6);
@@ -389,8 +389,8 @@ TEST_CASE("standard auto residual correction switches to Jacobi-Davidson when re
 
     REQUIRE(solver.auto_residual_correction.active == grit::ResidualCorrectionType::JACOBI_DAVIDSON);
     REQUIRE(solver.auto_residual_correction.dwell == 0);
-    REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_iters.size() == 1);
-    REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_iters.front() == solver.status.iter);
+    REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_outer_iters.size() == 1);
+    REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_outer_iters.front() == solver.status.outer_iter);
 }
 
 TEST_CASE("standard auto residual correction does not let residual threshold bypass dwell") {
@@ -407,9 +407,9 @@ TEST_CASE("standard auto residual correction does not let residual threshold byp
     solver.config.auto_min_dwell_iters          = 10;
     solver.config.auto_jd_start_rnorm_threshold = 1e-4;
     solver.auto_residual_correction.active      = grit::ResidualCorrectionType::CHEAP_OLSEN;
-    solver.auto_residual_correction.step_method = grit::ResidualCorrectionType::CHEAP_OLSEN;
+    solver.auto_residual_correction.iteration_method = grit::ResidualCorrectionType::CHEAP_OLSEN;
     solver.auto_residual_correction.dwell       = 0;
-    solver.status.iter                          = 7;
+    solver.status.outer_iter                          = 7;
     solver.status.oldVal                        = grit::form::base<double>::VectorReal::Constant(1, 1.0 + 1.0e-6);
     solver.status.eigVal                        = grit::form::base<double>::VectorReal::Constant(1, 1.0);
     solver.status.rNorms                        = grit::form::base<double>::VectorReal::Constant(1, 1.0e-6);
@@ -417,7 +417,7 @@ TEST_CASE("standard auto residual correction does not let residual threshold byp
     solver.update_auto_residual_correction_state();
 
     REQUIRE(solver.auto_residual_correction.active == grit::ResidualCorrectionType::CHEAP_OLSEN);
-    REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_iters.empty());
+    REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_outer_iters.empty());
 }
 
 TEST_CASE("standard auto residual correction returns to cheap Olsen after productive probe") {
@@ -433,9 +433,9 @@ TEST_CASE("standard auto residual correction returns to cheap Olsen after produc
     solver.config.residual_correction_type               = grit::ResidualCorrectionType::AUTO;
     solver.config.auto_cheap_probe_factor                = 1.0;
     solver.auto_residual_correction.active               = grit::ResidualCorrectionType::JACOBI_DAVIDSON;
-    solver.auto_residual_correction.step_method          = grit::ResidualCorrectionType::CHEAP_OLSEN;
-    solver.auto_residual_correction.jd_steps_since_probe = 3;
-    solver.status.iter                                   = 11;
+    solver.auto_residual_correction.iteration_method          = grit::ResidualCorrectionType::CHEAP_OLSEN;
+    solver.auto_residual_correction.jd_outer_iters_since_probe = 3;
+    solver.status.outer_iter                                   = 11;
     solver.status.oldVal                                 = grit::form::base<double>::VectorReal::Constant(1, 2.0);
     solver.status.eigVal                                 = grit::form::base<double>::VectorReal::Constant(1, 1.9);
     solver.status.rNorms                                 = grit::form::base<double>::VectorReal::Constant(1, 1.0e-6);
@@ -444,9 +444,9 @@ TEST_CASE("standard auto residual correction returns to cheap Olsen after produc
 
     REQUIRE(solver.auto_residual_correction.active == grit::ResidualCorrectionType::CHEAP_OLSEN);
     REQUIRE(solver.auto_residual_correction.dwell == 0);
-    REQUIRE(solver.auto_residual_correction.jd_steps_since_probe == 0);
-    REQUIRE(solver.auto_residual_correction.jd_to_cheap_switch_iters.size() == 1);
-    REQUIRE(solver.auto_residual_correction.jd_to_cheap_switch_iters.front() == solver.status.iter);
+    REQUIRE(solver.auto_residual_correction.jd_outer_iters_since_probe == 0);
+    REQUIRE(solver.auto_residual_correction.jd_to_cheap_switch_outer_iters.size() == 1);
+    REQUIRE(solver.auto_residual_correction.jd_to_cheap_switch_outer_iters.front() == solver.status.outer_iter);
 }
 
 TEST_CASE("standard auto residual correction keeps cheap Olsen after relative Ritz progress") {
@@ -463,9 +463,9 @@ TEST_CASE("standard auto residual correction keeps cheap Olsen after relative Ri
     solver.config.auto_sat_eigval_threshold              = 1.0e-3;
     solver.config.auto_cheap_probe_factor                = 1.0;
     solver.auto_residual_correction.active               = grit::ResidualCorrectionType::JACOBI_DAVIDSON;
-    solver.auto_residual_correction.step_method          = grit::ResidualCorrectionType::CHEAP_OLSEN;
-    solver.auto_residual_correction.jd_steps_since_probe = 3;
-    solver.status.iter                                   = 11;
+    solver.auto_residual_correction.iteration_method          = grit::ResidualCorrectionType::CHEAP_OLSEN;
+    solver.auto_residual_correction.jd_outer_iters_since_probe = 3;
+    solver.status.outer_iter                                   = 11;
     solver.status.oldVal                                 = grit::form::base<double>::VectorReal::Constant(1, 100.0);
     solver.status.eigVal                                 = grit::form::base<double>::VectorReal::Constant(1, 90.0);
     solver.status.rNorms                                 = grit::form::base<double>::VectorReal::Constant(1, 1.0e4);
@@ -474,9 +474,9 @@ TEST_CASE("standard auto residual correction keeps cheap Olsen after relative Ri
 
     REQUIRE(solver.auto_residual_correction.active == grit::ResidualCorrectionType::CHEAP_OLSEN);
     REQUIRE(solver.auto_residual_correction.dwell == 0);
-    REQUIRE(solver.auto_residual_correction.jd_steps_since_probe == 0);
-    REQUIRE(solver.auto_residual_correction.jd_to_cheap_switch_iters.size() == 1);
-    REQUIRE(solver.auto_residual_correction.jd_to_cheap_switch_iters.front() == solver.status.iter);
+    REQUIRE(solver.auto_residual_correction.jd_outer_iters_since_probe == 0);
+    REQUIRE(solver.auto_residual_correction.jd_to_cheap_switch_outer_iters.size() == 1);
+    REQUIRE(solver.auto_residual_correction.jd_to_cheap_switch_outer_iters.front() == solver.status.outer_iter);
 }
 
 TEST_CASE("standard auto eigenvalue saturation is relative to average eigenvalue magnitude") {
@@ -492,7 +492,7 @@ TEST_CASE("standard auto eigenvalue saturation is relative to average eigenvalue
     solver.config.sat_eigval_threshold = 1e-3;
 
     using VectorReal     = grit::form::base<double>::VectorReal;
-    solver.status.iter   = 2;
+    solver.status.outer_iter   = 2;
     solver.status.eigVal = VectorReal::Constant(1, 1.0e6);
     solver.status.eigVals_history.clear();
     solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, 1.0e6));
