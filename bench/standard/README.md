@@ -122,7 +122,7 @@ The following options are `gdplusk`-only and will be rejected for `lanczos` and
 ## AUTO Residual Correction
 
 `--residual-correction=auto` starts with cheap Olsen. Once cheap Olsen has
-dwelled for `--auto-min-dwell-iters` steps and both the eigenvalue and derived
+dwelled for `--auto-min-dwell-iters` outer iterations and both the eigenvalue and derived
 relative-residual histories saturate, AUTO switches to Jacobi-Davidson. AUTO
 also switches to Jacobi-Davidson once the derived relative residual norm is below
 `--auto-jd-start-rnorm-threshold`; set that option to `0` to disable this
