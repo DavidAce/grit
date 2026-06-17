@@ -1,6 +1,7 @@
 #define CATCH_CONFIG_RUNNER
 #include "catch.hpp"
 #include "solver_test_utils.h"
+#include <cstdlib>
 #include <cmath>
 #include <Eigen/Eigenvalues>
 #include <format>
@@ -38,6 +39,45 @@ namespace {
             write_test_log(std::format("  [{}] computed {:.16e} exact {:.16e} abs_diff {:.3e}\n", i, computed(i), exact(i), diff));
         }
     }
+}
+
+TEST_CASE("generalized refined Rayleigh-Ritz reports the Rayleigh quotient of the refined vector") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    std::srand(1);
+
+    Matrix A_matrix(5, 5);
+    A_matrix << 4.0, 1.0, 0.0, 0.0, 0.0, 1.0, 3.0, 0.5, 0.0, 0.0, 0.0, 0.5, 2.0, 0.25, 0.0, 0.0, 0.0, 0.25, 5.0, 0.5, 0.0, 0.0,
+        0.0, 0.5, 6.0;
+
+    Matrix B_matrix = Matrix::Identity(5, 5);
+    B_matrix.diagonal() << 1.0, 1.5, 2.0, 2.5, 3.0;
+
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+    auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
+
+    grit::generalized::gdplusk<double> solver(A, B);
+    solver.config.nev                                     = 1;
+    solver.config.ncv                                     = A_matrix.rows();
+    solver.config.block_size                              = 1;
+    solver.config.maxRetainBlocks                         = 1;
+    solver.config.ritz                                    = grit::Ritz::SR;
+    solver.config.max_iters                               = 20;
+    solver.config.tol                                     = 1e-14;
+    solver.config.residual_correction_type                = grit::ResidualCorrectionType::CHEAP_OLSEN;
+    solver.config.use_refined_rayleigh_ritz               = true;
+    solver.config.use_rayleigh_quotients_instead_of_evals = false;
+    solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 71));
+    solver.run();
+
+    auto view = solver.get_result();
+    REQUIRE(view.eigVal().size() == 1);
+    REQUIRE(view.eigVecs().cols() >= 1);
+
+    const auto v  = view.eigVecs().col(0);
+    const auto av = A_matrix * v;
+    const auto bv = B_matrix * v;
+    const auto rq = std::real(v.dot(av)) / std::real(v.dot(bv));
+    REQUIRE(std::abs(view.eigVal()(0) - rq) < 1e-12);
 }
 
 TEST_CASE("generalized gdplusk matches dense eigensolver") {
@@ -103,40 +143,61 @@ TEST_CASE("generalized gdplusk converges with l2 and bm projectors") {
     }
 }
 
-TEST_CASE("generalized refined Rayleigh-Ritz reports the Rayleigh quotient of the refined vector") {
+TEST_CASE("B-metric orthonormality check does not throw on skew-only Gram error") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
-    Matrix A_matrix(5, 5);
-    A_matrix << 4.0, 1.0, 0.0, 0.0, 0.0, 1.0, 3.0, 0.5, 0.0, 0.0, 0.0, 0.5, 2.0, 0.25, 0.0, 0.0, 0.0, 0.25, 5.0, 0.5, 0.0, 0.0,
-        0.0, 0.5, 6.0;
-
-    Matrix B_matrix = Matrix::Identity(5, 5);
-    B_matrix.diagonal() << 1.0, 1.5, 2.0, 2.5, 3.0;
+    Matrix A_matrix = Matrix::Identity(2, 2);
+    Matrix B_matrix = Matrix::Identity(2, 2);
 
     auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
     auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
 
     grit::generalized::gdplusk<double> solver(A, B);
-    solver.config.nev                                     = 1;
-    solver.config.ncv                                     = 4;
-    solver.config.block_size                              = 1;
-    solver.config.ritz                                    = grit::Ritz::SR;
-    solver.config.max_iters                               = 3;
-    solver.config.tol                                     = 1e-14;
-    solver.config.use_refined_rayleigh_ritz               = true;
-    solver.config.use_rayleigh_quotients_instead_of_evals = false;
-    solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 71));
-    solver.run();
+    solver.config.use_b_inner_product = true;
+    solver.setLogger(spdlog::level::off);
 
-    auto view = solver.get_result();
-    REQUIRE(view.eigVal().size() == 1);
-    REQUIRE(view.eigVecs().cols() >= 1);
+    Matrix X = Matrix::Identity(2, 2);
+    Matrix B_X(2, 2);
+    B_X << 1.0, 2.0, -2.0, 1.0;
 
-    const auto v  = view.eigVecs().col(0);
-    const auto av = A_matrix * v;
-    const auto bv = B_matrix * v;
-    const auto rq = std::real(v.dot(av)) / std::real(v.dot(bv));
-    REQUIRE(std::abs(view.eigVal()(0) - rq) < 1e-12);
+    grit::generalized::gdplusk<double>::OrthMeta meta;
+    REQUIRE_NOTHROW(solver.assert_bm_orthonormal(X, B_X, meta));
+}
+
+TEST_CASE("B-metric eig orthonormalizer compresses and normalizes dependent blocks") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = Matrix::Identity(4, 4);
+    Matrix B_matrix = Matrix::Identity(4, 4);
+    B_matrix.diagonal() << 1.0, 2.0, 3.0, 4.0;
+
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+    auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
+
+    grit::generalized::gdplusk<double> solver(A, B);
+    solver.config.use_b_inner_product = true;
+
+    Matrix Y(4, 3);
+    Y << 1.0, 1.0, 0.0, 0.0, 1e-12, 1.0, 0.0, 0.0, 0.0, 0.25, 0.0, 0.0;
+    Matrix AY;
+    Matrix BY = B_matrix * Y;
+
+    grit::generalized::gdplusk<double>::OrthMeta meta;
+    meta.maskPolicy = grit::generalized::gdplusk<double>::Base::MaskPolicy::COMPRESS;
+    meta.refresh_by = false;
+    solver.block_bm_orthonormalize_eig(Y, AY, BY, meta);
+
+    REQUIRE(Y.cols() > 0);
+    REQUIRE(Y.cols() <= 3);
+    REQUIRE(AY.rows() == Y.rows());
+    REQUIRE(AY.cols() == Y.cols());
+    REQUIRE(BY.rows() == Y.rows());
+    REQUIRE(BY.cols() == Y.cols());
+
+    Matrix Gram      = Y.adjoint() * BY;
+    Matrix Gram_symm = (Gram + Gram.adjoint()) * 0.5;
+    Matrix I         = Matrix::Identity(Gram.rows(), Gram.cols());
+    REQUIRE((Gram_symm - I).norm() < 1e-11);
 }
 
 TEST_CASE("generalized gdplusk handles nos4 restart block search") {

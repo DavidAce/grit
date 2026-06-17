@@ -136,21 +136,36 @@ namespace grit::form {
         RealScalar symmError = (Gram_symm - I).norm();
         RealScalar skewError = Gram_skew.norm();
 
-        RealScalar xnorm    = X.norm();
-        RealScalar bxnorm   = B_X.norm();
-        RealScalar bnorm    = std::isfinite(status.op_norm_estimate) ? status.op_norm_estimate : RealScalar{1};
-        RealScalar t_abs    = orthTol * static_cast<RealScalar>(X.cols()) * (xnorm + bxnorm);
-        RealScalar bmTol    = orthTol * static_cast<RealScalar>(X.cols()) * bnorm;
-        RealScalar maskTol  = std::isfinite(m.maskTol) ? m.maskTol : orthTol;
-        RealScalar finalTol = std::max({t_abs, orthTol, bmTol, maskTol}) * RealScalar{10};
+        Eigen::SelfAdjointEigenSolver<MatrixType> esG(Gram_symm);
+        VectorReal                                evG_abs = esG.eigenvalues().cwiseAbs();
+        RealScalar                                evG_max = evG_abs.size() > 0 ? evG_abs.maxCoeff() : RealScalar{1};
+        RealScalar                                evG_min = evG_abs.size() > 0 ? evG_abs.minCoeff() : RealScalar{1};
+        evG_max                                           = std::max(evG_max, eps);
+        evG_min                                           = std::max(evG_min, eps);
+        RealScalar normG_max                              = std::sqrt(evG_max);
 
-        RealScalar error = std::max({orthError, symmError, skewError});
-        if(error > finalTol && log)
-            log->warn("{}:{}: {}: matrix is not B-orthonormal: error {:.5e} > tol {:.5e} | orth {:.5e} symm {:.5e} skew {:.5e}", location.file_name(),
-                      location.line(), location.function_name(), error, finalTol, orthError, symmError, skewError);
-        if(error > RealScalar{1000} * finalTol)
+        RealScalar xnorm     = X.norm();
+        RealScalar bxnorm    = B_X.norm();
+        RealScalar c_abs     = static_cast<RealScalar>(X.size());
+        RealScalar c_rel     = static_cast<RealScalar>(X.size());
+        RealScalar t_abs     = c_abs * eps * (xnorm + bxnorm);
+        RealScalar t_rel     = c_rel * std::sqrt(eps) * normG_max;
+        RealScalar kappaG    = evG_max / evG_min;
+        RealScalar kappaGTol = RealScalar{20} * eps * kappaG;
+        RealScalar maskTol   = std::isfinite(m.maskTol) ? m.maskTol : orthTol;
+        RealScalar finalTol  = std::max({t_abs, t_rel, orthTol, kappaGTol, maskTol}) * RealScalar{10};
+
+        if(skewError > RealScalar{1e-2f} && log) {
+            log->warn("{}:{}: {}: skew-Hermitian B Gram diagnostic {:.5e} | orth {:.5e} symm {:.5e}", location.file_name(), location.line(),
+                      location.function_name(), skewError, orthError, symmError);
+        }
+        if(symmError > finalTol && log) {
+            log->warn("{}:{}: {}: matrix is not B-orthonormal: error {:.5e} > tol {:.5e} | symm {:.5e} skew {:.5e}", location.file_name(), location.line(),
+                      location.function_name(), orthError, finalTol, symmError, skewError);
+        }
+        if(symmError > finalTol && orthError > RealScalar{1000} * finalTol)
             throw std::runtime_error(fmt::format("{}:{}: {}: matrix is not B-orthonormal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
-                                                 location.function_name(), error, finalTol));
+                                                 location.function_name(), orthError, finalTol));
     }
 
     template<typename Scalar, grit::Form form_>
@@ -573,6 +588,205 @@ namespace grit::form {
             else
                 BY = Y;
         }
+    }
+
+    template<typename LScalar>
+    struct BmEigOrthoStepMeta {
+        using RealLScalar = decltype(std::real(std::declval<LScalar>()));
+        using MatrixLType = Eigen::Matrix<LScalar, Eigen::Dynamic, Eigen::Dynamic>;
+        using VectorLReal = Eigen::Matrix<RealLScalar, Eigen::Dynamic, 1>;
+        MatrixLType Y, BY;
+        MatrixLType G;
+        RealLScalar symmError;
+        template<typename Scalar>
+        BmEigOrthoStepMeta(Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> &Y_Scalar,
+                           Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> &BY_Scalar)
+            : Y(Y_Scalar.template cast<LScalar>()), BY(BY_Scalar.template cast<LScalar>()) {}
+    };
+
+    template<typename Scalar, typename RealScalar, typename LScalar>
+    void do_bm_eig_orthonormalization_step(
+        BmEigOrthoStepMeta<LScalar> &m,
+        std::function<Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>(const Eigen::Ref<const Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>> &)>
+                                                  applyB,
+        [[maybe_unused]] const Logger::LoggerHandle &log) {
+        using RealLScalar = typename BmEigOrthoStepMeta<LScalar>::RealLScalar;
+        using MatrixLType = typename BmEigOrthoStepMeta<LScalar>::MatrixLType;
+        using VectorLReal = typename BmEigOrthoStepMeta<LScalar>::VectorLReal;
+
+        auto &G         = m.G;
+        auto &Y         = m.Y;
+        auto &BY        = m.BY;
+        auto &symmError = m.symmError;
+
+        static constexpr auto half = RealLScalar{1} / RealLScalar{2};
+
+        auto assert_finite = [&]() {
+            bool ynan  = !Y.allFinite();
+            bool bynan = !BY.allFinite();
+            if(ynan) throw std::runtime_error("do_bm_eig_orthonormalization_step: Y has nan or inf");
+            if(bynan) throw std::runtime_error("do_bm_eig_orthonormalization_step: BY has nan or inf");
+        };
+        MatrixLType G1          = Y.adjoint() * BY;
+        G                       = (G1 + G1.adjoint()) * half; // The Gram matrix must be Hermitian and positive semi-definite.
+        symmError               = (G - MatrixLType::Identity(G.rows(), G.cols())).norm();
+        VectorLReal Gdiag       = G.real().diagonal();
+        VectorLReal scaleErrors = Gdiag - VectorLReal::Ones(Gdiag.size());
+        assert_finite();
+        if(log && log->should_log(spdlog::level::trace))
+            log->trace("do_bm_eig_orthonormalization_step: max diag(G)-I scale error {:.5e}",
+                       scaleErrors.size() > 0 ? scaleErrors.cwiseAbs().maxCoeff() : RealLScalar{0});
+
+        if(Y.cols() == 0) {
+            if(log && log->should_log(spdlog::level::trace)) log->trace("do_bm_eig_orthonormalization_step: no columns left");
+            G         = MatrixLType();
+            symmError = RealLScalar{0};
+            return;
+        }
+
+        auto esG = Eigen::SelfAdjointEigenSolver<MatrixLType>(G);
+        if(esG.info() != Eigen::Success) throw std::runtime_error("do_bm_eig_orthonormalization_step: eig failed");
+        VectorLReal lG = esG.eigenvalues();
+        if(log && log->should_log(spdlog::level::trace))
+            log->trace("do_bm_eig_orthonormalization_step: Gram eigenvalue range [{:.5e}, {:.5e}]", lG.minCoeff(), lG.maxCoeff());
+
+        RealLScalar eps100 = std::numeric_limits<RealLScalar>::epsilon() * RealLScalar{100};
+        RealLScalar tol    = eps100 * std::max<RealLScalar>(RealLScalar{1}, lG.cwiseAbs().maxCoeff());
+
+        std::vector<Eigen::Index> keep;
+        for(Eigen::Index j = 0; j < lG.size(); ++j) {
+            if(lG(j) > tol) {
+                keep.push_back(j);
+            } else if(log && log->should_log(spdlog::level::trace)) {
+                log->trace("do_bm_eig_orthonormalization_step: dropping Gram eigenvalue {} of {}: {:.5e}", j, G.rows(), lG(j));
+            }
+        }
+
+        if(keep.empty()) {
+            Y.resize(Y.rows(), 0);
+            BY.resize(BY.rows(), 0);
+            G         = MatrixLType();
+            symmError = RealLScalar{0};
+            return;
+        }
+
+        VectorLReal D = lG(keep);
+        MatrixLType U = esG.eigenvectors()(Eigen::placeholders::all, keep);
+        MatrixLType W = U * D.cwiseInverse().cwiseSqrt().asDiagonal();
+
+        Y  = (Y * W).eval();
+        BY = (BY * W).eval();
+        if(log && log->should_log(spdlog::level::debug)) {
+            MatrixLType B_YW      = applyB(Y.template cast<Scalar>()).template cast<LScalar>();
+            MatrixLType Delta     = B_YW - BY;
+            MatrixLType E_predict = Y.adjoint() * Delta;
+            log->debug("do_bm_eig_orthonormalization_step: refreshed BY mismatch {:.4e} | predicted Gram error {:.4e}", Delta.norm(), E_predict.norm());
+        }
+
+        G1 = Y.adjoint() * BY;
+        G  = (G1 + G1.adjoint()) * half;
+
+        MatrixLType E_BY_W = (G - MatrixLType::Identity(G.rows(), G.cols()));
+        symmError          = E_BY_W.norm();
+        assert_finite();
+        if(log && log->should_log(spdlog::level::debug)) log->debug("do_bm_eig_orthonormalization_step: symmError {:.5e}", symmError);
+    }
+
+    template<typename Scalar, grit::Form form_>
+    void base<Scalar, form_>::block_bm_orthonormalize_eig(MatrixType &Y, MatrixType &AY, MatrixType &BY, OrthMeta &m) requires(form_ == grit::Form::GENERALIZED)
+    {
+        auto token_orthonormalize = status.time_orthonormalize.tic_token();
+        if(Y.cols() == 0) {
+            AY.resizeLike(Y);
+            BY.resizeLike(Y);
+            return;
+        }
+        if(m.mask.size() > 0 && m.mask.sum() == 0) return;
+
+        assert(cfg().use_b_inner_product && "block_bm_orthonormalize_eig is for B inner product");
+        assert(m.maskPolicy == MaskPolicy::COMPRESS);
+
+        {
+            auto token_orth_project = status.time_orth_project.tic_token();
+            m.analyze_bm_orthonormality(Y, BY);
+        }
+        if(m.refresh_by || Y.cols() != BY.cols() || Y.rows() != BY.rows() || m.skewError > m.skewTol) {
+            auto token_orth_refresh = status.time_orth_refresh.tic_token();
+            BY                      = MultB(Y);
+            m.analyze_bm_orthonormality(Y, BY);
+            if(log && log->should_log(spdlog::level::debug)) log->debug("block_bm_orthonormalize_eig: refreshed BY");
+        } else {
+            assert_allFinite(BY);
+        }
+
+        m.refresh_by = false;
+
+        if(log && log->should_log(spdlog::level::trace))
+            log->trace("block_bm_orthonormalize_eig: initial orthError {:.4e} symmError {:.4e} skewError {:.4e}", m.orthError, m.symmError, m.skewError);
+
+        if(std::isnan(m.orthTol)) m.orthTol = normTol * static_cast<RealScalar>(Y.cols());
+        if(m.symmError < m.orthTol) {
+            auto token_orth_refresh = status.time_orth_refresh.tic_token();
+            AY                      = MultA(Y);
+            assert_bm_orthonormal(Y, BY, m);
+            return;
+        }
+        auto assert_finite = [&]() {
+            if(!Y.allFinite()) throw std::runtime_error("block_bm_orthonormalize_eig: Y has nan or inf");
+            if(!BY.allFinite()) throw std::runtime_error("block_bm_orthonormalize_eig: BY has nan or inf");
+        };
+
+        std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> fMultB = [this](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
+            return this->MultB(X);
+        };
+
+        Eigen::Index maxReps = 1;
+        Eigen::Index rep     = 0;
+        for(rep = 0; rep < maxReps; ++rep) {
+            assert_finite();
+
+            auto eosm = BmEigOrthoStepMeta<Scalar>(Y, BY);
+            {
+                auto token_orth_factor = status.time_orth_factor.tic_token();
+                do_bm_eig_orthonormalization_step<Scalar, RealScalar, Scalar>(eosm, fMultB, log);
+            }
+
+            assert_finite();
+
+            if(eosm.Y.cols() == 0) {
+                if(log && log->should_log(spdlog::level::trace)) log->trace("block_bm_orthonormalize_eig: 0/{} cols remain in Y", m.Gram.cols());
+                Y  = MatrixType();
+                AY = MatrixType();
+                BY = MatrixType();
+                m  = OrthMeta();
+                return;
+            }
+
+            {
+                auto token_orth_update = status.time_orth_update.tic_token();
+                Y                      = eosm.Y.template cast<Scalar>();
+                BY                     = eosm.BY.template cast<Scalar>();
+            }
+            {
+                auto token_orth_project = status.time_orth_project.tic_token();
+                m.analyze_bm_orthonormality(Y, BY);
+            }
+            assert_finite();
+
+            if(log && log->should_log(spdlog::level::trace))
+                log->trace("block_bm_orthonormalize_eig: eig rep {} | orthError {:.4e} symmError {:.4e} skewError {:.4e} | tol {:.5e}", rep,
+                           m.orthError, m.symmError, m.skewError, normTol);
+        }
+        if(m.skewError >= RealScalar{1e-3f} && log) {
+            log->warn("block_bm_orthonormalize_eig: large skew error on rep {} | orthError {:.4e} symmError {:.4e} skewError {:.4e} | cols {}", rep,
+                      m.orthError, m.symmError, m.skewError, Y.cols());
+        }
+
+        {
+            auto token_orth_refresh = status.time_orth_refresh.tic_token();
+            AY                      = MultA(Y);
+        }
+        assert_bm_orthonormal(Y, BY, m);
     }
 
     template<typename Scalar, grit::Form form_>

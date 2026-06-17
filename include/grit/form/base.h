@@ -647,5 +647,13 @@ namespace grit::form {
          * @param m Orthogonalization diagnostics.
          */
         void block_bm_orthonormalize(MatrixType &Y, MatrixType &AY, MatrixType &BY, OrthMeta &m) requires(form_ == grit::Form::GENERALIZED);
+        /*!
+         * B-metric orthonormalize Y through the small Gram eigensystem and refresh A Y.
+         * @param Y Candidate block modified in place.
+         * @param AY Products A Y modified in place.
+         * @param BY Products B Y modified in place.
+         * @param m Orthogonalization diagnostics.
+         */
+        void block_bm_orthonormalize_eig(MatrixType &Y, MatrixType &AY, MatrixType &BY, OrthMeta &m) requires(form_ == grit::Form::GENERALIZED);
     };
 }

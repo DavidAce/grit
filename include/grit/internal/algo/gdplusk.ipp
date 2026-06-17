@@ -287,9 +287,11 @@ namespace grit::algo {
                     OrthMeta m;
                     m.maskPolicy = Base::MaskPolicy::COMPRESS;
                     if(config.use_b_inner_product) {
-                        block_bm_orthonormalize(Q_ks, AQ_ks, BQ_ks, m);
+                        m.refresh_by = false;
+                        this->block_bm_orthonormalize_eig(Q_ks, AQ_ks, BQ_ks, m);
+                        m.refresh_by = true;
                         block_bm_orthogonalize(Q_ks, AQ_ks, BQ_ks, K_prev, AK_prev, BK_prev, m);
-                        block_bm_orthonormalize(K_prev, AK_prev, BK_prev, m);
+                        this->block_bm_orthonormalize_eig(K_prev, AK_prev, BK_prev, m);
                     } else {
                         block_l2_orthonormalize(Q_ks, AQ_ks, BQ_ks, m);
                         block_l2_orthogonalize(Q_ks, AQ_ks, BQ_ks, K_prev, AK_prev, BK_prev, m);
