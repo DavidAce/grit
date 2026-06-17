@@ -74,7 +74,7 @@ namespace grit::form {
             bool                      use_relative_rnorm_tolerance            = false; /*!< Use tol as a relative residual tolerance scaled by the operator. */
             Ritz                      ritz                                    = Ritz::SR; /*!< Which Ritz values to target. */
             RealScalar                tol                  = eps * 10000;         /*!< Residual-norm tolerance, absolute unless relative mode is enabled. */
-            RealScalar                tol_rnorm_relative   = 0;                   /*!< Extra relative-to-initial residual tolerance; zero disables it. */
+            RealScalar                tol_rnorm_relative   = 0; /*!< Initial residual improvement factor in relative residual units; zero disables it. */
             Eigen::Index              max_iters            = 100l;                /*!< Maximum outer iterations; negative means unlimited. */
             Eigen::Index              max_matvecs          = -1l;                 /*!< Maximum total matrix-vector products; negative means unlimited. */
             RealScalar                sat_eigval_threshold = RealScalar{0};       /*!< Eigenvalue saturation threshold for stopping; zero disables it. */
@@ -188,6 +188,7 @@ namespace grit::form {
             bool                      rNorm_below_gap      = false;               /*!< Whether selected residual norms are below the Ritz gap criterion. */
             VectorReal                rNorms;                                     /*!< Current selected residual norms. */
             VectorReal                rNorms_init;                                /*!< Initial selected residual norms. */
+            VectorReal                rNormScales_init;                           /*!< Initial residual scales for relative residual norms. */
             std::deque<VectorReal>    rNorms_history;                             /*!< Recent residual-norm history. */
             std::deque<VectorReal>    eigVals_history;                            /*!< Recent Ritz-value history. */
             std::deque<Eigen::Index>  matvecs_history;                            /*!< Recent matrix-vector count history. */

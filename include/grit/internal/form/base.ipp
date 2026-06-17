@@ -119,21 +119,23 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     typename base<Scalar, form_>::RealScalar base<Scalar, form_>::rNormTol([[maybe_unused]] Eigen::Index n) const {
-        if(cfg().use_relative_rnorm_tolerance) {
-            auto scale     = relative_rNormScale(n);
-            auto rnorm_tol = cfg().tol * scale;
-            if(cfg().tol_rnorm_relative > RealScalar{0} && n < status.rNorms_init.size())
-                rnorm_tol = std::max(rnorm_tol, cfg().tol_rnorm_relative * status.rNorms_init(n));
-            return rnorm_tol;
-        }
-        return cfg().tol;
+        return rNormTols()(n);
     }
 
     template<typename Scalar, grit::Form form_>
     typename base<Scalar, form_>::VectorReal base<Scalar, form_>::rNormTols() const {
-        VectorReal tols(cfg().nev);
-        for(Eigen::Index n = 0; n < cfg().nev; ++n) tols(n) = rNormTol(n);
-        return tols;
+        if(!cfg().use_relative_rnorm_tolerance) return VectorReal::Constant(cfg().nev, cfg().tol);
+
+        VectorReal scales      = relative_rNormScales();
+        VectorReal rrnorm_tols = VectorReal::Constant(cfg().nev, cfg().tol);
+        Eigen::Index rows      = std::min({cfg().nev, status.rNorms_init.size(), status.rNormScales_init.size()});
+        if(cfg().tol_rnorm_relative > RealScalar{0} && rows > 0) {
+            VectorReal init_scales = status.rNormScales_init.topRows(rows).cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
+            VectorReal init_rr     = status.rNorms_init.topRows(rows).cwiseQuotient(init_scales);
+            rrnorm_tols.topRows(rows) =
+                rrnorm_tols.topRows(rows).cwiseMin((cfg().tol_rnorm_relative * init_rr).eval());
+        }
+        return (scales.array() * rrnorm_tols.array()).matrix();
     }
 
     template<typename Scalar, grit::Form form_>
@@ -146,8 +148,9 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     typename base<Scalar, form_>::VectorReal base<Scalar, form_>::relative_rNormScales() const {
-        VectorReal scales(cfg().nev);
-        for(Eigen::Index n = 0; n < cfg().nev; ++n) scales(n) = relative_rNormScale(n);
+        const auto nev = cfg().nev;
+        VectorReal scales(nev);
+        for(Eigen::Index n = 0; n < nev; ++n) scales(n) = relative_rNormScale(n);
         return scales;
     }
 
@@ -364,8 +367,10 @@ namespace grit::form {
                 status.op_norm_estimate = std::max({A_max_abs, AQ.norm() / Q.norm(), RealScalar{1}});
             }
         }
-        status.rNorms_init      = status.rNorms;
         status.op_norm_estimate = get_op_norm_estimate();
+        Eigen::Index rows       = std::min(cfg().nev, status.rNorms.size());
+        status.rNorms_init      = status.rNorms.topRows(rows);
+        status.rNormScales_init = relative_rNormScales().topRows(rows);
         assert(V.cols() == cfg().block_size);
         assert_allFinite(V);
         last_log_time.tic();

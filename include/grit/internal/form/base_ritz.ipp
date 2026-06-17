@@ -85,7 +85,11 @@ namespace grit::form {
             status.rNorms.conservativeResize(cfg().block_size);
         }
 
-        if(status.rNorms_init.size() != status.rNorms.size()) status.rNorms_init = status.rNorms;
+        Eigen::Index rows = std::min(cfg().nev, status.rNorms.size());
+        if(status.rNorms_init.size() != rows || status.rNormScales_init.size() != rows) {
+            status.rNorms_init      = status.rNorms.topRows(rows).eval();
+            status.rNormScales_init = relative_rNormScales().topRows(rows).eval();
+        }
     }
 
     template<typename Scalar, grit::Form form_>

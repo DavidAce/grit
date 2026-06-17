@@ -95,6 +95,7 @@ namespace grit::algo {
         if(status.outer_iter == 0) {
             status.rNorms.setOnes(this->cfg().nev);
             status.rNorms_init.setOnes(this->cfg().nev);
+            status.rNormScales_init.setOnes(this->cfg().nev);
             status.eigVal.setOnes(this->cfg().nev);
             status.oldVal.setOnes(this->cfg().nev);
             status.absDiff.setOnes(this->cfg().nev);
@@ -389,7 +390,11 @@ namespace grit::algo {
             status.rNorms.conservativeResize(this->cfg().block_size);
         }
 
-        if(status.rNorms_init.size() != status.rNorms.size()) status.rNorms_init = status.rNorms;
+        Eigen::Index rows = std::min(this->cfg().nev, status.rNorms.size());
+        if(status.rNorms_init.size() != rows || status.rNormScales_init.size() != rows) {
+            status.rNorms_init      = status.rNorms.topRows(rows).eval();
+            status.rNormScales_init = this->relative_rNormScales().topRows(rows).eval();
+        }
     }
 
     template<typename Scalar, grit::Form form_>
