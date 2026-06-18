@@ -37,7 +37,8 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV, MatrixType &S,
-                                                 VectorReal &rNorms) {
+                                                 VectorReal &rNorms) requires(form_ == grit::Form::GENERALIZED)
+    {
         auto       token_extract_ritz = status.time_extract_ritz.tic_token();
         MatrixType Z                  = T_evecs(Eigen::placeholders::all, optIdx);
         VectorReal Y                  = T_evals(optIdx);
@@ -46,6 +47,7 @@ namespace grit::form {
         AV.noalias() = AQ * Z;
         BV.noalias() = BQ * Z;
         S            = get_residuals(Y, AV, BV, rNorms);
+        finalize_bm_ritz_vectors(optIdx, V, AV, BV, S, rNorms);
     }
 
     template<typename Scalar, grit::Form form_>
@@ -74,6 +76,7 @@ namespace grit::form {
             }
         }
 
+        k      = std::min<Eigen::Index>(k, V.cols());
         K_prev = K;
         K      = V.leftCols(k);
 
@@ -89,6 +92,49 @@ namespace grit::form {
         if(status.rNorms_init.size() != rows || status.rNormScales_init.size() != rows) {
             status.rNorms_init      = status.rNorms.topRows(rows).eval();
             status.rNormScales_init = relative_rNormScales().topRows(rows).eval();
+        }
+    }
+
+    template<typename Scalar, grit::Form form_>
+    void base<Scalar, form_>::finalize_bm_ritz_vectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV,
+                                                       MatrixType &S, VectorReal &rNorms) requires(form_ == grit::Form::GENERALIZED)
+    {
+        const Eigen::Index ritz_cols = V.cols();
+        if(ritz_cols <= 0 || !cfg().use_b_inner_product) return;
+        if(AV.cols() != ritz_cols || BV.cols() != ritz_cols) throw std::runtime_error("finalize_bm_ritz_vectors: Ritz block has inconsistent column counts");
+        if(optIdx.size() < static_cast<size_t>(ritz_cols)) throw std::runtime_error("finalize_bm_ritz_vectors: fewer Ritz indices than vectors");
+        if(S.cols() < ritz_cols || rNorms.size() < ritz_cols) throw std::runtime_error("finalize_bm_ritz_vectors: fewer residual columns than vectors");
+
+        OrthMeta meta;
+        meta.analyze_bm_orthonormality(V, BV);
+        RealScalar tol = std::max<RealScalar>(normTol * static_cast<RealScalar>(ritz_cols) * RealScalar{1000}, eps * static_cast<RealScalar>(V.rows()));
+        if(!std::isfinite(meta.symmError) || meta.symmError > tol) {
+            meta.maskPolicy = MaskPolicy::COMPRESS;
+            meta.refresh_by = true;
+            block_bm_orthonormalize(V, AV, BV, meta);
+        }
+
+        VectorReal Y = T_evals(optIdx).topRows(V.cols());
+        if(cfg().use_rayleigh_quotients_instead_of_evals) {
+            VectorReal rq1 = (V.adjoint() * AV).diagonal().real();
+            VectorReal rq2 = (V.adjoint() * BV).diagonal().real();
+            Y              = rq1.cwiseQuotient(rq2);
+        }
+
+        S = get_residuals(Y, AV, BV, rNorms);
+
+        status.optIdx.resize(static_cast<size_t>(V.cols()));
+        for(Eigen::Index n = 0; n < V.cols(); ++n) {
+            status.optIdx[static_cast<size_t>(n)] = optIdx[static_cast<size_t>(n)];
+            T_evals(status.optIdx[static_cast<size_t>(n)]) = Y(n);
+        }
+
+        meta = OrthMeta{};
+        meta.analyze_bm_orthonormality(V, BV);
+        assert_bm_orthonormal(V, BV, meta);
+        if constexpr(grit::settings::debug_ortho) {
+            MatrixType BV_debug = MultB(V);
+            assert_bm_orthonormal(V, BV_debug, meta);
         }
     }
 
@@ -295,6 +341,7 @@ namespace grit::form {
         }
 
         S = get_residuals(Y, AV, BV, rNorms);
+        finalize_bm_ritz_vectors(optIdx, V, AV, BV, S, rNorms);
     }
 
     template<typename Scalar, grit::Form form_>

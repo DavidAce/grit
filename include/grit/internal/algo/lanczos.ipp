@@ -374,6 +374,7 @@ namespace grit::algo {
             }
         }
 
+        k      = std::min<Eigen::Index>(k, V.cols());
         K_prev = K;
         K      = V.leftCols(k);
         AK     = AV.leftCols(k);

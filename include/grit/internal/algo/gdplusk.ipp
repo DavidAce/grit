@@ -58,6 +58,10 @@ namespace grit::algo {
         if(config.maxRetainBlocks > max_basis_blocks) {
             throw std::runtime_error("gdplusk config error: maxRetainBlocks must not exceed the number of basis blocks");
         }
+        if(config.maxPrevBlocks < 1) throw std::runtime_error("gdplusk config error: maxPrevBlocks must be at least 1");
+        if(config.maxPrevBlocks > max_basis_blocks) {
+            throw std::runtime_error("gdplusk config error: maxPrevBlocks must not exceed the number of basis blocks");
+        }
         if(config.max_extra_ritz_history < 0) throw std::runtime_error("gdplusk config error: max_extra_ritz_history must be nonnegative");
         if(config.max_extra_ritz_history > max_basis_blocks) {
             throw std::runtime_error("gdplusk config error: max_extra_ritz_history must not exceed the number of basis blocks");
@@ -122,7 +126,7 @@ namespace grit::algo {
         if(status.stopReason != StopReason::none) return;
         if(T_evals.size() < this->cfg().block_size) return;
 
-        Eigen::Index k     = std::min(config.maxRetainBlocks * this->cfg().block_size, T_evals.size());
+        Eigen::Index k     = std::min(config.maxPrevBlocks * this->cfg().block_size, T_evals.size());
         Eigen::Index nritz = std::max({this->cfg().nev, this->cfg().block_size, k});
 
         status.optIdx = this->get_ritz_indices(this->cfg().ritz, 0, nritz, T_evals);
@@ -143,9 +147,7 @@ namespace grit::algo {
             }
         }
 
-        if constexpr(form_ == grit::Form::GENERALIZED) {
-            if(config.use_b_inner_product) finalize_active_ritz_block_bm(std::min<Eigen::Index>(this->cfg().block_size, V.cols()));
-        }
+        k = std::min<Eigen::Index>(k, V.cols());
 
         K_prev = K;
         K      = V.leftCols(k);
@@ -168,83 +170,6 @@ namespace grit::algo {
     template<typename Scalar, grit::Form form_>
     void gdplusk<Scalar, form_>::run_user_callback() {
         if(config.user_callback) config.user_callback(*this);
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::finalize_active_ritz_block_bm(Eigen::Index active_ritz_cols) requires(form_ == grit::Form::GENERALIZED)
-    {
-        if(active_ritz_cols <= 0) return;
-        if(!config.use_b_inner_product) return;
-        if(V.cols() < active_ritz_cols || AV.cols() < active_ritz_cols || BV.cols() < active_ritz_cols)
-            throw std::runtime_error("gdplusk active Ritz block has fewer columns than expected");
-        if(status.optIdx.size() < static_cast<size_t>(active_ritz_cols))
-            throw std::runtime_error("gdplusk active Ritz block has fewer Ritz indices than expected");
-        if(S.cols() < active_ritz_cols || status.rNorms.size() < active_ritz_cols)
-            throw std::runtime_error("gdplusk active Ritz block has fewer residual columns than expected");
-
-        auto active_ritz_indices = std::vector<Eigen::Index>(status.optIdx.begin(), status.optIdx.begin() + active_ritz_cols);
-
-        OrthMeta stored_meta;
-        stored_meta.analyze_bm_orthonormality(V.leftCols(active_ritz_cols), BV.leftCols(active_ritz_cols));
-        RealScalar stored_tol =
-            std::max<RealScalar>(normTol * static_cast<RealScalar>(active_ritz_cols) * RealScalar{1000}, eps * static_cast<RealScalar>(V.rows()));
-        bool stored_block_is_orthonormal = std::isfinite(stored_meta.symmError) && stored_meta.symmError <= stored_tol;
-
-        if(stored_block_is_orthonormal) {
-            assert_bm_orthonormal(V.leftCols(active_ritz_cols), BV.leftCols(active_ritz_cols), stored_meta);
-            if constexpr(grit::settings::debug_ortho) {
-                MatrixType BV_debug = MultB(V.leftCols(active_ritz_cols));
-                assert_bm_orthonormal(V.leftCols(active_ritz_cols), BV_debug, stored_meta);
-            }
-            return;
-        }
-
-        MatrixType V_candidate  = V.leftCols(active_ritz_cols);
-        MatrixType AV_candidate = AV.leftCols(active_ritz_cols);
-        MatrixType BV_candidate = BV.leftCols(active_ritz_cols);
-        OrthMeta   candidate_meta;
-        candidate_meta.maskPolicy = Base::MaskPolicy::COMPRESS;
-        candidate_meta.refresh_by = true;
-        block_bm_orthonormalize_eig(V_candidate, AV_candidate, BV_candidate, candidate_meta);
-
-        bool refined_candidate_kept_required_cols = V_candidate.cols() == active_ritz_cols;
-        if(!refined_candidate_kept_required_cols) {
-            MatrixType Z_rr = T_evecs(Eigen::placeholders::all, active_ritz_indices);
-            V_candidate     = Q * Z_rr;
-            AV_candidate    = AQ * Z_rr;
-            BV_candidate    = BQ * Z_rr;
-
-            candidate_meta            = OrthMeta{};
-            candidate_meta.maskPolicy = Base::MaskPolicy::COMPRESS;
-            candidate_meta.refresh_by = true;
-            block_bm_orthonormalize_eig(V_candidate, AV_candidate, BV_candidate, candidate_meta);
-        }
-
-        bool ritz_candidate_kept_required_cols = V_candidate.cols() == active_ritz_cols;
-        if(!ritz_candidate_kept_required_cols) throw std::runtime_error("gdplusk failed to build a B-orthonormal active Ritz block");
-
-        V.leftCols(active_ritz_cols)  = V_candidate;
-        AV.leftCols(active_ritz_cols) = AV_candidate;
-        BV.leftCols(active_ritz_cols) = BV_candidate;
-
-        VectorReal Y = T_evals(active_ritz_indices);
-        if(this->cfg().use_rayleigh_quotients_instead_of_evals) {
-            VectorReal rq1       = (V.leftCols(active_ritz_cols).adjoint() * AV.leftCols(active_ritz_cols)).diagonal().real();
-            VectorReal rq2       = (V.leftCols(active_ritz_cols).adjoint() * BV.leftCols(active_ritz_cols)).diagonal().real();
-            Y                    = rq1.cwiseQuotient(rq2);
-            T_evals(active_ritz_indices) = Y;
-        }
-
-        VectorReal rNorms_active;
-        MatrixType S_active = get_residuals(Y, AV.leftCols(active_ritz_cols), BV.leftCols(active_ritz_cols), rNorms_active);
-        S.leftCols(active_ritz_cols)             = S_active;
-        status.rNorms.topRows(active_ritz_cols) = rNorms_active;
-
-        assert_bm_orthonormal(V.leftCols(active_ritz_cols), BV.leftCols(active_ritz_cols), candidate_meta);
-        if constexpr(grit::settings::debug_ortho) {
-            MatrixType BV_debug = MultB(V.leftCols(active_ritz_cols));
-            assert_bm_orthonormal(V.leftCols(active_ritz_cols), BV_debug, candidate_meta);
-        }
     }
 
     template<typename Scalar, grit::Form form_>

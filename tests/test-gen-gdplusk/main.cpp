@@ -99,6 +99,7 @@ TEST_CASE("generalized refined Ritz vector remains B-normalized with bm projecto
     solver.config.ncv                       = 8;
     solver.config.block_size                = 1;
     solver.config.maxRetainBlocks           = 2;
+    solver.config.maxPrevBlocks             = 2;
     solver.config.ritz                      = grit::Ritz::LM;
     solver.config.max_iters                 = 100;
     solver.config.tol                       = 1e-12;
@@ -112,6 +113,8 @@ TEST_CASE("generalized refined Ritz vector remains B-normalized with bm projecto
     solver.config.user_callback             = [&](const auto &s) {
         const Eigen::Index active_ritz_cols = std::min<Eigen::Index>(s.config.block_size, s.V.cols());
         if(active_ritz_cols == 0) return;
+
+        REQUIRE(s.K.cols() <= s.config.maxPrevBlocks * s.config.block_size);
 
         const auto V_active  = s.V.leftCols(active_ritz_cols);
         const auto BV_active = s.BV.leftCols(active_ritz_cols);

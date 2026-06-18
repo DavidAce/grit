@@ -452,7 +452,41 @@ namespace grit::form {
          * @param S Output residual block.
          * @param rNorms Output residual norms.
          */
-        void extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV, MatrixType &S, VectorReal &rNorms);
+        void extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV, MatrixType &S, VectorReal &rNorms)
+            requires(form_ == grit::Form::GENERALIZED);
+        /*!
+         * Finish generalized Ritz extraction with an order-preserving B-metric cleanup.
+         *
+         * Ordinary and refined extraction already choose and order the Ritz vectors through
+         * optIdx. Outside restart, GD+K relies on that order: the first columns are the active
+         * Ritz block, and any extra columns are retained history. This function therefore does
+         * not solve another projected problem and does not rotate the block. Its job is only to
+         * make the returned vectors safe to use in B-metric orthogonalization:
+         *
+         *   V^* B V ~= I, with the input column order preserved.
+         *
+         * Small loss of B orthonormality can arise from rounding or cancellation in B V. When
+         * that happens, this function uses the DGKS B orthonormalizer, which preserves column
+         * order. If DGKS compresses dependent columns, the reduced column count is left for the
+         * caller to handle; no replacement vectors are invented here.
+         *
+         * Control flow:
+         * 1. Return unchanged for empty blocks or when the B inner product is disabled.
+         * 2. Check that V, AV, BV, S, rNorms, and optIdx describe the same Ritz block.
+         * 3. If V^* B V is not close enough to I, refresh BV and run order-preserving DGKS.
+         * 4. Recompute residuals, residual norms, status.optIdx, and the matching T_evals
+         *    entries for the surviving columns.
+         * 5. Assert the final B-orthonormality invariant.
+         *
+         * @param optIdx Projected Ritz indices used to form the input block.
+         * @param V Ritz vectors, modified in place.
+         * @param AV Products A V, modified in place.
+         * @param BV Products B V, modified in place.
+         * @param S Residual block, modified in place.
+         * @param rNorms Residual norms, modified in place.
+         */
+        void finalize_bm_ritz_vectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV, MatrixType &S,
+                                      VectorReal &rNorms) requires(form_ == grit::Form::GENERALIZED);
         /*!
          * Orthonormalize projected eigenvectors in the projected metric.
          * @param Z Projected eigenvectors, modified in place.

@@ -84,7 +84,8 @@ namespace grit::algo {
             bool                        use_jd_b_only                    = false; /*!< Use only B in the generalized Jacobi-Davidson projector. */
             bool                        use_krylov_schur_gdplusk_restart = false; /*!< Use Krylov-Schur style restart for GD+K. */
             bool                        inject_randomness                = false; /*!< Randomize dependent correction vectors. */
-            Eigen::Index                maxRetainBlocks                  = 1;     /*!< Number of old Ritz blocks kept on restart. */
+            Eigen::Index                maxRetainBlocks                  = 1;     /*!< Number of Ritz blocks kept during restart compression. */
+            Eigen::Index                maxPrevBlocks                    = 1;     /*!< Number of previous active Ritz blocks kept between outer iterations. */
             RealScalar                  inner_tol                        = RealScalar{0.1f};   /*!< Initial tolerance for inner correction solves. */
             Eigen::Index                inner_max_iters                  = 1000;               /*!< Maximum inner iterations in each inner correction solve. */
             Eigen::Index                auto_min_dwell_iters             = 10;                 /*!< Minimum cheap Olsen outer iterations before AUTO may switch. */
@@ -128,7 +129,6 @@ namespace grit::algo {
         void         shift_blocks_right(Eigen::Ref<MatrixType> matrix, Eigen::Index offset_old, Eigen::Index offset_new, Eigen::Index extent);
         void         roll_blocks_left(Eigen::Ref<MatrixType> matrix, Eigen::Index offset, Eigen::Index extent);
         void         selective_orthonormalize(const Eigen::Ref<const MatrixType> X, Eigen::Ref<MatrixType> Y, RealScalar breakdownTol, VectorIdxT &mask);
-        void         finalize_active_ritz_block_bm(Eigen::Index active_ritz_cols) requires(form_ == grit::Form::GENERALIZED);
         void         make_new_Q_block();
         void         assert_config() const;
         void         assert_operator_config() const requires(form_ == grit::Form::STANDARD);
