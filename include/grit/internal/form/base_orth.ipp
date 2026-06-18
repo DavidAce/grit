@@ -1,6 +1,6 @@
 #pragma once
 
-#include <grit/form/base.h>
+#include "grit/form/base.h"
 
 namespace grit::form {
     template<typename Scalar, grit::Form form_>
@@ -262,7 +262,7 @@ namespace grit::form {
             if(orth_converged || Y.cols() == 0 || rep == 1) break;
             ynorms0 = ynorms1;
         }
-        if constexpr(settings::debug_ortho) {
+        if constexpr(grit::settings::debug_ortho) {
             if(log && log->should_log(spdlog::level::trace))
                 log->trace("rep {} orthError after l2 orthogonalization: {:.3e} | orthTol {:.3e}", rep, m.orthError, m.orthTol);
         }

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <grit/form/base.h>
+#include "grit/form/base.h"
 #include <stdexcept>
 
-namespace settings {
+namespace grit::settings {
 #if defined(NDEBUG)
     static constexpr bool debug_ortho = false;
 #else
