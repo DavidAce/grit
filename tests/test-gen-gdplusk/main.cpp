@@ -98,6 +98,7 @@ TEST_CASE("generalized refined Ritz vector remains B-normalized with bm projecto
     solver.config.nev                       = 1;
     solver.config.ncv                       = 8;
     solver.config.block_size                = 1;
+    solver.config.maxRetainBlocks           = 2;
     solver.config.ritz                      = grit::Ritz::LM;
     solver.config.max_iters                 = 100;
     solver.config.tol                       = 1e-12;
@@ -105,8 +106,24 @@ TEST_CASE("generalized refined Ritz vector remains B-normalized with bm projecto
     solver.config.inner_tol                 = 1e-8;
     solver.config.use_b_inner_product       = true;
     solver.config.use_refined_rayleigh_ritz = true;
+    solver.config.use_rayleigh_quotients_instead_of_evals = true;
     solver.config.use_jd_b_only             = true;
     solver.config.residual_correction_type  = grit::ResidualCorrectionType::JACOBI_DAVIDSON;
+    solver.config.user_callback             = [&](const auto &s) {
+        const Eigen::Index active_ritz_cols = std::min<Eigen::Index>(s.config.block_size, s.V.cols());
+        if(active_ritz_cols == 0) return;
+
+        const auto V_active  = s.V.leftCols(active_ritz_cols);
+        const auto BV_active = s.BV.leftCols(active_ritz_cols);
+        Matrix     G_stored  = V_active.adjoint() * BV_active;
+        Matrix     G_fresh   = V_active.adjoint() * (B_matrix * V_active);
+        Matrix     I         = Matrix::Identity(active_ritz_cols, active_ritz_cols);
+        G_stored             = (G_stored + G_stored.adjoint()) * 0.5;
+        G_fresh              = (G_fresh + G_fresh.adjoint()) * 0.5;
+
+        REQUIRE((G_stored - I).norm() < 1e-10);
+        REQUIRE((G_fresh - I).norm() < 1e-10);
+    };
     solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 72));
 
     REQUIRE_NOTHROW(solver.run());

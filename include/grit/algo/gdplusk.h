@@ -57,9 +57,11 @@ namespace grit::algo {
         using Base::T_evecs;
 
         using Base::assert_allFinite;
+        using Base::assert_bm_orthonormal;
         using Base::auto_residual_correction;
         using Base::block_bm_orthogonalize;
         using Base::block_bm_orthonormalize;
+        using Base::block_bm_orthonormalize_eig;
         using Base::block_l2_orthogonalize;
         using Base::block_l2_orthonormalize;
         using Base::cfg;
@@ -69,8 +71,10 @@ namespace grit::algo {
         using Base::get_optimal_rayleigh_ritz_matrix;
         using Base::get_refined_ritz_eigenvectors_gen;
         using Base::get_refined_ritz_eigenvectors_std;
+        using Base::get_residuals;
         using Base::get_standard_deviations;
         using Base::log;
+        using Base::normTol;
 
         /*! Configuration for GD+K. */
         struct Config : BaseConfig {
@@ -124,6 +128,7 @@ namespace grit::algo {
         void         shift_blocks_right(Eigen::Ref<MatrixType> matrix, Eigen::Index offset_old, Eigen::Index offset_new, Eigen::Index extent);
         void         roll_blocks_left(Eigen::Ref<MatrixType> matrix, Eigen::Index offset, Eigen::Index extent);
         void         selective_orthonormalize(const Eigen::Ref<const MatrixType> X, Eigen::Ref<MatrixType> Y, RealScalar breakdownTol, VectorIdxT &mask);
+        void         finalize_active_ritz_block_bm(Eigen::Index active_ritz_cols) requires(form_ == grit::Form::GENERALIZED);
         void         make_new_Q_block();
         void         assert_config() const;
         void         assert_operator_config() const requires(form_ == grit::Form::STANDARD);
