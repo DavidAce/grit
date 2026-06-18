@@ -498,22 +498,22 @@ namespace grit::form {
          * Apply refined Rayleigh-Ritz extraction for a generalized problem.
          * @param optIdx Selected projected indices.
          * @param V Output Ritz vectors.
-         * @param AQ Products A Q.
-         * @param BQ Products B Q.
+         * @param AV Output products A V.
+         * @param BV Output products B V.
          * @param S Output residual block.
          * @param rNorms Output residual norms.
          */
-        void refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AQ, MatrixType &BQ, MatrixType &S, VectorReal &rNorms)
+        void refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV, MatrixType &S, VectorReal &rNorms)
             requires(form_ == grit::Form::GENERALIZED);
         /*!
          * Apply refined Rayleigh-Ritz extraction for a standard problem.
          * @param optIdx Selected projected indices.
          * @param V Output Ritz vectors.
-         * @param AQ Products A Q.
+         * @param AV Output products A V.
          * @param S Output residual block.
          * @param rNorms Output residual norms.
          */
-        void refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AQ, MatrixType &S, VectorReal &rNorms);
+        void refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &S, VectorReal &rNorms);
         /*! Apply refined Rayleigh-Ritz extraction to the current selected vectors. */
         void refinedRitzVectors();
         /*! Prepare a solver run. */

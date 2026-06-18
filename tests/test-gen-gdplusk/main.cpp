@@ -80,6 +80,44 @@ TEST_CASE("generalized refined Rayleigh-Ritz reports the Rayleigh quotient of th
     REQUIRE(std::abs(view.eigVal()(0) - rq) < 1e-12);
 }
 
+TEST_CASE("generalized refined Ritz vector remains B-normalized with bm projector") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix(8, 8);
+    A_matrix << 9.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 7.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 6.0, 0.4, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.4, 5.0, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3, 4.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.2, 3.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 2.5, 0.05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.05, 2.0;
+
+    Matrix B_matrix = Matrix::Identity(8, 8);
+    B_matrix.diagonal() << 1.0, 1.2, 1.7, 2.3, 3.1, 4.2, 5.6, 7.4;
+
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+    auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
+
+    grit::generalized::gdplusk<double> solver(A, B);
+    solver.config.nev                       = 1;
+    solver.config.ncv                       = 8;
+    solver.config.block_size                = 1;
+    solver.config.ritz                      = grit::Ritz::LM;
+    solver.config.max_iters                 = 100;
+    solver.config.tol                       = 1e-12;
+    solver.config.inner_max_iters           = 40;
+    solver.config.inner_tol                 = 1e-8;
+    solver.config.use_b_inner_product       = true;
+    solver.config.use_refined_rayleigh_ritz = true;
+    solver.config.use_jd_b_only             = true;
+    solver.config.residual_correction_type  = grit::ResidualCorrectionType::JACOBI_DAVIDSON;
+    solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 72));
+
+    REQUIRE_NOTHROW(solver.run());
+    auto view = solver.get_result();
+    REQUIRE(view.eigVecs().cols() >= 1);
+
+    const auto v      = view.eigVecs().col(0);
+    const auto b_norm = std::real(v.dot(B_matrix * v));
+    REQUIRE(std::abs(b_norm - 1.0) < 1e-10);
+}
+
 TEST_CASE("generalized gdplusk matches dense eigensolver") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 

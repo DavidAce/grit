@@ -1,6 +1,6 @@
 #pragma once
 
-#include <grit/form/base.h>
+#include "grit/form/base.h"
 
 namespace grit::form {
     template<typename Scalar, grit::Form form_>
@@ -274,42 +274,56 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AQ, MatrixType &BQ, MatrixType &S,
+    void base<Scalar, form_>::refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV, MatrixType &S,
                                                  VectorReal &rNorms) requires(form_ == grit::Form::GENERALIZED)
     {
         auto       token_extract_ritz = status.time_extract_ritz.tic_token();
         VectorReal Y                  = T_evals(optIdx);
         MatrixType Z_rr               = T_evecs(Eigen::placeholders::all, optIdx);
-        MatrixType Z_ref              = get_refined_ritz_eigenvectors_gen(Z_rr, Y, AQ, BQ);
+        MatrixType Z_ref              = get_refined_ritz_eigenvectors_gen(Z_rr, Y, this->AQ, this->BQ);
         MatrixType Z_opt              = get_optimal_rayleigh_ritz_matrix(Z_rr, Z_ref, T1, T2);
 
         V.noalias()  = Q * Z_opt;
-        AQ.noalias() = this->AQ * Z_opt;
-        BQ.noalias() = this->BQ * Z_opt;
+        AV.noalias() = this->AQ * Z_opt;
+        BV.noalias() = this->BQ * Z_opt;
 
-        MatrixType T1h  = (T1.adjoint() + T1) * half;
-        MatrixType T2h  = (T2.adjoint() + T2) * half;
-        VectorReal rq1  = (Z_opt.adjoint() * T1h * Z_opt).diagonal().real();
-        VectorReal rq2  = (Z_opt.adjoint() * T2h * Z_opt).diagonal().real();
+        VectorReal rq1;
+        VectorReal rq2;
+        const Eigen::Index nritz = static_cast<Eigen::Index>(optIdx.size());
+        if(cfg().use_b_inner_product) {
+            OrthMeta m;
+            m.maskPolicy = MaskPolicy::COMPRESS;
+            m.refresh_by = false;
+            block_bm_orthonormalize_eig(V, AV, BV, m);
+            if(V.cols() != nritz)
+                throw std::runtime_error(fmt::format("generalized refined Ritz extraction lost B-independent columns: kept {} of {}", V.cols(), nritz));
+            rq1 = (V.adjoint() * AV).diagonal().real();
+            rq2 = (V.adjoint() * BV).diagonal().real();
+        } else {
+            MatrixType T1h = (T1.adjoint() + T1) * half;
+            MatrixType T2h = (T2.adjoint() + T2) * half;
+            rq1            = (Z_opt.adjoint() * T1h * Z_opt).diagonal().real();
+            rq2            = (Z_opt.adjoint() * T2h * Z_opt).diagonal().real();
+        }
         T_evals(optIdx) = rq1.cwiseQuotient(rq2);
         Y               = T_evals(optIdx);
 
-        S = get_residuals(Y, AQ, BQ, rNorms);
+        S = get_residuals(Y, AV, BV, rNorms);
     }
 
     template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AQ, MatrixType &S, VectorReal &rNorms) {
+    void base<Scalar, form_>::refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &S, VectorReal &rNorms) {
         auto       token_extract_ritz = status.time_extract_ritz.tic_token();
         MatrixType Z                  = T_evecs(Eigen::placeholders::all, optIdx);
         VectorReal Y                  = T_evals(optIdx);
         MatrixType Z_ref              = get_refined_ritz_eigenvectors_std(Z, Y, Q, this->AQ);
 
         V  = Q * Z_ref;
-        AQ = this->AQ * Z_ref;
+        AV = this->AQ * Z_ref;
 
-        if(cfg().use_rayleigh_quotients_instead_of_evals) { Y = (V.adjoint() * AQ).diagonal().real(); }
+        if(cfg().use_rayleigh_quotients_instead_of_evals) { Y = (V.adjoint() * AV).diagonal().real(); }
 
-        S = get_residuals(Y, AQ, V, rNorms);
+        S = get_residuals(Y, AV, V, rNorms);
     }
 
     template<typename Scalar, grit::Form form_>
