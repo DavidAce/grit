@@ -1,7 +1,7 @@
 #pragma once
 
-#include <grit/form/base.h>
-#include <grit/Result.h>
+#include "grit/form/base.h"
+#include "grit/Result.h"
 
 namespace grit {
     namespace internal {

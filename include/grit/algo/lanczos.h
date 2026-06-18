@@ -2,7 +2,7 @@
 
 #include <Eigen/Core>
 #include <functional>
-#include <grit/form/base.h>
+#include "grit/form/base.h"
 #include <limits>
 #include <optional>
 #include <spdlog/common.h>
@@ -103,5 +103,3 @@ namespace grit::algo {
         void build() final;
     };
 }
-
-#include <grit/internal/algo/lanczos.ipp>

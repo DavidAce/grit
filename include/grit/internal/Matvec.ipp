@@ -1,6 +1,6 @@
 #pragma once
 
-#include <grit/Matvec.h>
+#include "grit/Matvec.h"
 #include <stdexcept>
 
 namespace grit {
