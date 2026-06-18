@@ -287,26 +287,12 @@ namespace grit::form {
         AV.noalias() = this->AQ * Z_opt;
         BV.noalias() = this->BQ * Z_opt;
 
-        VectorReal rq1;
-        VectorReal rq2;
-        const Eigen::Index nritz = static_cast<Eigen::Index>(optIdx.size());
-        if(cfg().use_b_inner_product) {
-            OrthMeta m;
-            m.maskPolicy = MaskPolicy::COMPRESS;
-            m.refresh_by = false;
-            block_bm_orthonormalize_eig(V, AV, BV, m);
-            if(V.cols() != nritz)
-                throw std::runtime_error(fmt::format("generalized refined Ritz extraction lost B-independent columns: kept {} of {}", V.cols(), nritz));
-            rq1 = (V.adjoint() * AV).diagonal().real();
-            rq2 = (V.adjoint() * BV).diagonal().real();
-        } else {
-            MatrixType T1h = (T1.adjoint() + T1) * half;
-            MatrixType T2h = (T2.adjoint() + T2) * half;
-            rq1            = (Z_opt.adjoint() * T1h * Z_opt).diagonal().real();
-            rq2            = (Z_opt.adjoint() * T2h * Z_opt).diagonal().real();
+        if(cfg().use_rayleigh_quotients_instead_of_evals) {
+            VectorReal rq1  = (V.adjoint() * AV).diagonal().real();
+            VectorReal rq2  = (V.adjoint() * BV).diagonal().real();
+            T_evals(optIdx) = rq1.cwiseQuotient(rq2);
+            Y               = T_evals(optIdx);
         }
-        T_evals(optIdx) = rq1.cwiseQuotient(rq2);
-        Y               = T_evals(optIdx);
 
         S = get_residuals(Y, AV, BV, rNorms);
     }

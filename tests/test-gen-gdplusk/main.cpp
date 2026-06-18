@@ -65,7 +65,7 @@ TEST_CASE("generalized refined Rayleigh-Ritz reports the Rayleigh quotient of th
     solver.config.tol                                     = 1e-14;
     solver.config.residual_correction_type                = grit::ResidualCorrectionType::CHEAP_OLSEN;
     solver.config.use_refined_rayleigh_ritz               = true;
-    solver.config.use_rayleigh_quotients_instead_of_evals = false;
+    solver.config.use_rayleigh_quotients_instead_of_evals = true;
     solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 71));
     solver.run();
 
