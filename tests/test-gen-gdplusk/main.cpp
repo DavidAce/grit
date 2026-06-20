@@ -138,6 +138,47 @@ TEST_CASE("generalized refined Ritz vector remains B-normalized with bm projecto
     REQUIRE(std::abs(b_norm - 1.0) < 1e-10);
 }
 
+TEST_CASE("bm orthogonalization removes the one-sided B projection") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    constexpr double skew = 1e-5;
+    auto             A    = grit::matvec<double>(2, [](auto const &X) { return X; });
+    auto             B    = grit::matvec<double>(2, [skew](auto const &X) {
+        Matrix BX = X;
+        BX.row(0).array() += skew * X.row(1).array();
+        return BX;
+    });
+
+    grit::generalized::gdplusk<double> solver(A, B);
+    solver.config.use_b_inner_product = true;
+    solver.config.log_level           = spdlog::level::off;
+    if(solver.log) solver.log->set_level(spdlog::level::off);
+
+    Matrix X(2, 1);
+    X << 1.0, 0.0;
+    Matrix AX = X;
+    Matrix BX = X;
+
+    Matrix Y(2, 1);
+    Y << 0.0, 1.0;
+    Matrix AY = Y;
+    Matrix BY = Matrix::Zero(2, 1);
+
+    typename decltype(solver)::OrthMeta m;
+    m.refresh_by = true;
+
+    REQUIRE_NOTHROW(solver.block_bm_orthogonalize(X, AX, BX, Y, AY, BY, m, decltype(solver)::Base::RefreshMult::NO));
+    REQUIRE(std::abs((X.adjoint() * BY)(0, 0)) < 1e-12);
+    REQUIRE(std::abs((BX.adjoint() * Y)(0, 0)) > 1e-7);
+
+    typename decltype(solver)::OrthMeta meta;
+    meta.analyze_bm_orthogonality(X, BX, Y, BY);
+    REQUIRE(meta.Gram.norm() < 1e-12);
+    REQUIRE(meta.orthError < 1e-4);
+    REQUIRE(meta.orthError > 1e-7);
+    REQUIRE(meta.skewError > 1e-7);
+}
+
 TEST_CASE("generalized gdplusk matches dense eigensolver") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 

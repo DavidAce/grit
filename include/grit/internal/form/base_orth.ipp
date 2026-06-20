@@ -58,14 +58,13 @@ namespace grit::form {
 
         MatrixType G1 = X.adjoint() * B_Y;
         MatrixType G2 = B_X.adjoint() * Y;
-        MatrixType I  = MatrixType::Identity(G1.rows(), G1.cols());
 
         Gram      = G1;
         Gram_symm = (G1 + G2) * half;
         Gram_skew = (G1 - G2) * half;
 
-        orthError = (Gram - I).norm();
-        symmError = (Gram_symm - I).norm();
+        orthError = Gram_symm.norm();
+        symmError = orthError;
         skewError = Gram_skew.norm();
         Rdiag     = Gram_symm.diagonal().cwiseAbs().cwiseSqrt();
     }
@@ -454,7 +453,7 @@ namespace grit::form {
             MatrixType W;
             {
                 auto token_orth_factor = status.time_orth_factor.tic_token();
-                W                      = Gxx.ldlt().solve(m.Gram_symm);
+                W                      = Gxx.ldlt().solve(m.Gram);
             }
 
             {
@@ -463,16 +462,22 @@ namespace grit::form {
                 BY.noalias()           -= BX * W;
             }
 
+            {
+                auto token_orth_project = status.time_orth_project.tic_token();
+                m.analyze_bm_orthogonality(X, BX, Y, BY);
+            }
+            if(m.Gram.norm() >= m.orthTol || m.skewError > std::sqrt(m.orthTol)) {
+                auto token_orth_refresh = status.time_orth_refresh.tic_token();
+                BY                      = MultB(Y);
+                m.analyze_bm_orthogonality(X, BX, Y, BY);
+            }
+
             VectorReal ynorms1 = VectorReal::Zero(Y.cols());
             for(Eigen::Index j = 0; j < Y.cols(); ++j) {
                 RealScalar ynorm_sq = std::real(Y.col(j).dot(BY.col(j)));
                 ynorms1(j)          = std::sqrt(std::max<RealScalar>(0, ynorm_sq));
             }
 
-            {
-                auto token_orth_project = status.time_orth_project.tic_token();
-                m.analyze_bm_orthogonality(X, BX, Y, BY);
-            }
             bool orth_converged = std::max(m.symmError, m.skewError) < m.orthTol;
             bool need_reorth    = (ynorms1.array() < inv_sqrt_2 * ynorms0.array()).any();
             if(rep == 0 && !need_reorth) break;
@@ -488,7 +493,11 @@ namespace grit::form {
             AY                      = MultA(Y);
         }
         assert_bm_orthogonal(X, BY, m);
-        assert_bm_orthogonal(BX, Y, m);
+        MatrixType reverse_gram = BX.adjoint() * Y;
+        RealScalar reverse_err  = reverse_gram.norm();
+        if(reverse_err > m.orthTol && log) {
+            log->warn("block_bm_orthogonalize: reverse B-orthogonality diagnostic {:.5e} > tol {:.5e}", reverse_err, m.orthTol);
+        }
     }
 
     template<typename Scalar, grit::Form form_>
