@@ -24,9 +24,9 @@ namespace {
     }
 
     template<typename VecA, typename VecB>
-    void require_close(const VecA &a, const VecB &b, double tol) {
+    void require_close(const VecA &a, const VecB &b, double abstol) {
         REQUIRE(a.size() == b.size());
-        for(Eigen::Index i = 0; i < a.size(); ++i) REQUIRE(std::abs(a(i) - b(i)) < tol);
+        for(Eigen::Index i = 0; i < a.size(); ++i) REQUIRE(std::abs(a(i) - b(i)) < abstol);
     }
 
     template<typename VecA, typename VecB>
@@ -81,7 +81,7 @@ TEST_CASE("standard lobpcg handles nos4 restart block search") {
     solver.config.max_ritz_residual_history = 1;
     solver.config.ritz                      = grit::Ritz::SR;
     solver.config.max_iters                 = 1000;
-    solver.config.tol                       = 1e-9;
+    solver.config.abstol                       = 1e-9;
     solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 91));
     solver.run();
 
@@ -112,7 +112,7 @@ TEST_CASE("standard lobpcg supports all Ritz targets on nos4") {
         solver.config.max_ritz_residual_history = 1;
         solver.config.ritz                      = ritz;
         solver.config.max_iters                 = 140;
-        solver.config.tol                       = 1e-9;
+        solver.config.abstol                       = 1e-9;
         auto expected_idx                       = grit_test::expected_ritz_indices(exact.eigenvalues(), ritz, solver.config.nev);
         solver.set_initial_guess(exact.eigenvectors()(Eigen::placeholders::all, expected_idx));
         solver.run();

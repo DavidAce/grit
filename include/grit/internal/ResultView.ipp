@@ -38,8 +38,8 @@ namespace grit {
     }
 
     template<typename Scalar_>
-    const typename ResultView<Scalar_>::VectorReal &ResultView<Scalar_>::rNorms() const {
-        return internal::visit_solver_source(source, [](const auto &src) -> const VectorReal & { return src.status.rNorms; });
+    const typename ResultView<Scalar_>::VectorReal &ResultView<Scalar_>::rNormsAbs() const {
+        return internal::visit_solver_source(source, [](const auto &src) -> const VectorReal & { return src.status.rNormsAbs; });
     }
 
     template<typename Scalar_>
@@ -193,13 +193,13 @@ namespace grit {
     }
 
     template<typename Scalar_>
-    bool ResultView<Scalar_>::rnorm_below_tol() const {
-        return internal::visit_solver_source(source, [](const auto &src) { return src.status.rNorm_below_rnormTol; });
+    bool ResultView<Scalar_>::residual_converged() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.status.residual_converged; });
     }
 
     template<typename Scalar_>
-    bool ResultView<Scalar_>::rnorm_below_gap() const {
-        return internal::visit_solver_source(source, [](const auto &src) { return src.status.rNorm_below_gap; });
+    bool ResultView<Scalar_>::residual_below_gap() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.status.residual_below_gap; });
     }
 
     template<typename Scalar_>

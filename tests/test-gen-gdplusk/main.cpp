@@ -26,9 +26,9 @@ namespace {
     }
 
     template<typename VecA, typename VecB>
-    void require_close(const VecA &a, const VecB &b, double tol) {
+    void require_close(const VecA &a, const VecB &b, double abstol) {
         REQUIRE(a.size() == b.size());
-        for(Eigen::Index i = 0; i < a.size(); ++i) REQUIRE(std::abs(a(i) - b(i)) < tol);
+        for(Eigen::Index i = 0; i < a.size(); ++i) REQUIRE(std::abs(a(i) - b(i)) < abstol);
     }
 
     template<typename VecA, typename VecB>
@@ -62,7 +62,7 @@ TEST_CASE("generalized refined Rayleigh-Ritz reports the Rayleigh quotient of th
     solver.config.maxRetainBlocks                         = 1;
     solver.config.ritz                                    = grit::Ritz::SR;
     solver.config.max_iters                               = 20;
-    solver.config.tol                                     = 1e-14;
+    solver.config.abstol                                     = 1e-14;
     solver.config.residual_correction_type                = grit::ResidualCorrectionType::CHEAP_OLSEN;
     solver.config.use_refined_rayleigh_ritz               = true;
     solver.config.use_rayleigh_quotients_instead_of_evals = true;
@@ -102,7 +102,7 @@ TEST_CASE("generalized refined Ritz vector remains B-normalized with bm projecto
     solver.config.maxPrevBlocks             = 2;
     solver.config.ritz                      = grit::Ritz::LM;
     solver.config.max_iters                 = 100;
-    solver.config.tol                       = 1e-12;
+    solver.config.abstol                       = 1e-12;
     solver.config.inner_max_iters           = 40;
     solver.config.inner_tol                 = 1e-8;
     solver.config.use_b_inner_product       = true;
@@ -227,7 +227,7 @@ TEST_CASE("generalized gdplusk converges with l2 and bm projectors") {
         solver.config.block_size               = 1;
         solver.config.ritz                     = grit::Ritz::SR;
         solver.config.max_iters                = 20;
-        solver.config.tol                      = 1e-12;
+        solver.config.abstol                      = 1e-12;
         solver.config.use_b_inner_product      = use_b_inner_product;
         solver.config.residual_correction_type = grit::ResidualCorrectionType::CHEAP_OLSEN;
         solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 54));
@@ -237,7 +237,7 @@ TEST_CASE("generalized gdplusk converges with l2 and bm projectors") {
         print_eigenvalue_comparison(use_b_inner_product ? "generalized gdplusk bm projector" : "generalized gdplusk l2 projector", view.eigVal(),
                                     exact.eigenvalues(), view.eigVal().size());
         REQUIRE(view.stopReason() == grit::StopReason::converged);
-        REQUIRE(view.rNorms()(0) < 1e-10);
+        REQUIRE(view.rNormsAbs()(0) < 1e-10);
         require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
     }
 }
@@ -314,7 +314,7 @@ TEST_CASE("generalized gdplusk handles nos4 restart block search") {
     solver.config.block_size               = 2;
     solver.config.ritz                     = grit::Ritz::SR;
     solver.config.max_iters                = 200;
-    solver.config.tol                      = 1e-9;
+    solver.config.abstol                      = 1e-9;
     solver.config.use_b_inner_product      = false;
     solver.config.residual_correction_type = grit::ResidualCorrectionType::CHEAP_OLSEN;
     solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 31));
@@ -348,7 +348,7 @@ TEST_CASE("generalized gdplusk supports all Ritz targets on nos4") {
         solver.config.block_size               = 2;
         solver.config.ritz                     = ritz;
         solver.config.max_iters                = 250;
-        solver.config.tol                      = 1e-9;
+        solver.config.abstol                      = 1e-9;
         solver.config.use_b_inner_product      = true;
         solver.config.residual_correction_type = grit::ResidualCorrectionType::CHEAP_OLSEN;
         solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 40 + static_cast<int>(ritz)));
@@ -418,7 +418,7 @@ TEST_CASE("generalized jacobi-davidson b-only correction supports l2 and bm proj
         print_eigenvalue_comparison("generalized gdplusk jd b-only bm", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
         REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
         REQUIRE(view.eigVal().allFinite());
-        REQUIRE(view.rNorms().allFinite());
+        REQUIRE(view.rNormsAbs().allFinite());
         REQUIRE(view.num_inner_iters() > 0);
         REQUIRE(view.num_jdops_inner() > 0);
         require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
@@ -527,7 +527,7 @@ TEST_CASE("generalized gdplusk handles small ncv restart without invalid input")
     solver.config.block_size               = 1;
     solver.config.ritz                     = grit::Ritz::SR;
     solver.config.max_iters                = 200;
-    solver.config.tol                      = 1e-8;
+    solver.config.abstol                      = 1e-8;
     solver.config.use_b_inner_product      = true;
     solver.config.residual_correction_type = grit::ResidualCorrectionType::CHEAP_OLSEN;
     solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.ncv, 70));

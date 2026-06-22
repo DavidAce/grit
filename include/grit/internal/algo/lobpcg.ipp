@@ -58,8 +58,8 @@ namespace grit::algo {
         if(config.max_ritz_residual_history < 0) throw std::runtime_error("lobpcg config error: max_ritz_residual_history must be nonnegative");
         if(config.max_iters == 0) throw std::runtime_error("lobpcg config error: max_iters must be positive or negative for unlimited");
         if(config.max_matvecs == 0) throw std::runtime_error("lobpcg config error: max_matvecs must be positive or negative for unlimited");
-        if(config.tol <= RealScalar{0}) throw std::runtime_error("lobpcg config error: tol must be positive");
-        if(config.tol_rnorm_relative < RealScalar{0}) throw std::runtime_error("lobpcg config error: tol_rnorm_relative must be nonnegative");
+        if(config.abstol <= RealScalar{0}) throw std::runtime_error("lobpcg config error: abstol must be positive");
+        if(config.reltol < RealScalar{0}) throw std::runtime_error("lobpcg config error: reltol must be nonnegative");
         if(config.sat_eigval_threshold < RealScalar{0}) throw std::runtime_error("lobpcg config error: sat_eigval_threshold must be nonnegative");
         if(config.sat_rnorm_threshold < RealScalar{0}) throw std::runtime_error("lobpcg config error: sat_rnorm_threshold must be nonnegative");
         if(this->has_initial_guess()) {

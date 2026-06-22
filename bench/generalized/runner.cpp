@@ -52,11 +52,11 @@ namespace bench_generalized {
             return converted;
         }
 
-        double relative_rnorm(grit::ResultView<Scalar> view) {
-            if(view.rNorms().size() == 0) return 0.0;
+        double rnorm_rel(grit::ResultView<Scalar> view) {
+            if(view.rNormsAbs().size() == 0) return 0.0;
             auto scale = std::max(view.op_norm_estimate(), std::numeric_limits<double>::min());
             if(view.eigVecs().cols() > 0) scale = std::max(scale * view.eigVecs().col(0).norm(), std::numeric_limits<double>::min());
-            return view.rNorms()(0) / scale;
+            return view.rNormsAbs()(0) / scale;
         }
 
         template<typename Snapshot>
@@ -74,18 +74,18 @@ namespace bench_generalized {
             snapshot.block_size                    = static_cast<int32_t>(opts.block_size);
             snapshot.max_iters                     = static_cast<int32_t>(opts.max_iters);
             snapshot.max_matvecs                   = static_cast<int32_t>(opts.max_matvecs);
-            snapshot.tol                           = opts.tol;
-            snapshot.tol_rnorm_relative            = opts.tol_rnorm_relative;
+            snapshot.abstol                           = opts.abstol;
+            snapshot.reltol            = opts.reltol;
             snapshot.sat_eigval_threshold          = opts.sat_eigval_threshold;
             snapshot.sat_rnorm_threshold           = opts.sat_rnorm_threshold;
             snapshot.ritz                          = fixed_string<16>(std::string(grit::enum2sv(opts.ritz)), "ritz");
             snapshot.use_refined_rayleigh_ritz     = static_cast<uint8_t>(opts.use_refined_rayleigh_ritz);
             snapshot.use_b_inner_product           = static_cast<uint8_t>(opts.use_b_inner_product);
-            snapshot.use_relative_rnorm_tolerance  = static_cast<uint8_t>(opts.use_relative_rnorm_tolerance);
+            snapshot.use_rescaled_rnorm_tolerance  = static_cast<uint8_t>(opts.use_rescaled_rnorm_tolerance);
             snapshot.stop_reason                   = fixed_string<64>(grit::enum2s(view.stopReason()), "stop_reason");
             snapshot.eigenvalue                    = view.eigVal().size() > 0 ? view.eigVal()(0) : 0.0;
-            snapshot.rnorm                         = view.rNorms().size() > 0 ? view.rNorms()(0) : 0.0;
-            snapshot.rrnorm                        = relative_rnorm(view);
+            snapshot.rnorm_abs                         = view.rNormsAbs().size() > 0 ? view.rNormsAbs()(0) : 0.0;
+            snapshot.rnorm_rel                        = rnorm_rel(view);
             snapshot.outer_iterations                    = static_cast<int64_t>(view.outer_iter());
             snapshot.matvecs                       = static_cast<int64_t>(view.num_matvecs_total());
             snapshot.outer_matvecs                 = static_cast<int64_t>(view.num_matvecs());
@@ -102,8 +102,8 @@ namespace bench_generalized {
             snapshot.condition                     = view.condition();
             snapshot.sensitivity                   = view.sensitivity();
             snapshot.gap                           = view.gap();
-            snapshot.rnorm_below_tol               = static_cast<uint8_t>(view.rnorm_below_tol());
-            snapshot.rnorm_below_gap               = static_cast<uint8_t>(view.rnorm_below_gap());
+            snapshot.residual_converged               = static_cast<uint8_t>(view.residual_converged());
+            snapshot.residual_below_gap               = static_cast<uint8_t>(view.residual_below_gap());
             snapshot.time                       = view.time();
         }
 
@@ -194,11 +194,11 @@ namespace bench_generalized {
             solver.config.ritz                         = opts.ritz;
             solver.config.use_refined_rayleigh_ritz    = opts.use_refined_rayleigh_ritz;
             solver.config.use_b_inner_product          = opts.use_b_inner_product;
-            solver.config.use_relative_rnorm_tolerance = opts.use_relative_rnorm_tolerance;
+            solver.config.use_rescaled_rnorm_tolerance = opts.use_rescaled_rnorm_tolerance;
             solver.config.max_iters                    = opts.max_iters;
             solver.config.max_matvecs                  = opts.max_matvecs;
-            solver.config.tol                          = opts.tol;
-            solver.config.tol_rnorm_relative           = opts.use_relative_rnorm_tolerance ? (opts.tol_rnorm_relative > 0.0 ? opts.tol_rnorm_relative : opts.tol) : 0.0;
+            solver.config.abstol                       = opts.abstol;
+            solver.config.reltol                       = opts.reltol;
             solver.config.sat_eigval_threshold         = opts.sat_eigval_threshold;
             solver.config.sat_rnorm_threshold          = opts.sat_rnorm_threshold;
             solver.config.log_level                    = opts.log_level;

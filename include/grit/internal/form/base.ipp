@@ -81,7 +81,7 @@ namespace grit::form {
         setLogger(cfg().log_level, "grit");
         N    = A.get_size();
         size = A.get_size();
-        status.rNorms.setOnes(cfg().nev);
+        status.rNormsAbs.setOnes(cfg().nev);
         status.eigVal.setOnes(cfg().nev);
         status.oldVal.setOnes(cfg().nev);
         status.absDiff.setOnes(cfg().nev);
@@ -94,7 +94,7 @@ namespace grit::form {
         setLogger(cfg().log_level, "grit");
         N    = A.get_size();
         size = A.get_size();
-        status.rNorms.setOnes(cfg().nev);
+        status.rNormsAbs.setOnes(cfg().nev);
         status.eigVal.setOnes(cfg().nev);
         status.oldVal.setOnes(cfg().nev);
         status.absDiff.setOnes(cfg().nev);
@@ -111,35 +111,31 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     typename base<Scalar, form_>::MatrixType base<Scalar, form_>::get_residuals(const Eigen::Ref<const VectorReal> &Y, const Eigen::Ref<const MatrixType> &AV,
-                                                                                const Eigen::Ref<const MatrixType> &BV, VectorReal &rNorms) {
+                                                                                const Eigen::Ref<const MatrixType> &BV, VectorReal &rNormsAbs) {
         MatrixType S = AV - BV * Y.asDiagonal();
-        rNorms       = S.colwise().norm().transpose();
+        rNormsAbs       = S.colwise().norm().transpose();
         return S;
     }
 
     template<typename Scalar, grit::Form form_>
-    typename base<Scalar, form_>::RealScalar base<Scalar, form_>::rNormTol([[maybe_unused]] Eigen::Index n) const {
-        return rNormTols()(n);
+    typename base<Scalar, form_>::RealScalar base<Scalar, form_>::rNormAbsTarget([[maybe_unused]] Eigen::Index n) const {
+        return rNormAbsTargets()(n);
     }
 
     template<typename Scalar, grit::Form form_>
-    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::rNormTols() const {
-        if(!cfg().use_relative_rnorm_tolerance) return VectorReal::Constant(cfg().nev, cfg().tol);
+    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::rNormAbsTargets() const {
+        VectorReal rNormAbsTargets = VectorReal::Constant(cfg().nev, cfg().abstol);
+        if(cfg().use_rescaled_rnorm_tolerance) rNormAbsTargets = rNormAbsTargets.cwiseProduct(rNormScales());
 
-        VectorReal scales      = relative_rNormScales();
-        VectorReal rrnorm_tols = VectorReal::Constant(cfg().nev, cfg().tol);
-        Eigen::Index rows      = std::min({cfg().nev, status.rNorms_init.size(), status.rNormScales_init.size()});
-        if(cfg().tol_rnorm_relative > RealScalar{0} && rows > 0) {
-            VectorReal init_scales = status.rNormScales_init.topRows(rows).cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
-            VectorReal init_rr     = status.rNorms_init.topRows(rows).cwiseQuotient(init_scales);
-            rrnorm_tols.topRows(rows) =
-                rrnorm_tols.topRows(rows).cwiseMin((cfg().tol_rnorm_relative * init_rr).eval());
+        Eigen::Index rows = std::min(cfg().nev, status.rNormsAbsInit.size());
+        if(cfg().reltol > RealScalar{0} && rows > 0) {
+            rNormAbsTargets.topRows(rows) = rNormAbsTargets.topRows(rows).cwiseMax((cfg().reltol * status.rNormsAbsInit.topRows(rows)).eval());
         }
-        return (scales.array() * rrnorm_tols.array()).matrix();
+        return rNormAbsTargets;
     }
 
     template<typename Scalar, grit::Form form_>
-    typename base<Scalar, form_>::RealScalar base<Scalar, form_>::relative_rNormScale(Eigen::Index n) const {
+    typename base<Scalar, form_>::RealScalar base<Scalar, form_>::rNormScale(Eigen::Index n) const {
         auto op_norm = get_op_norm_estimate(status.eigVal.size() > n ? std::optional<RealScalar>{status.eigVal(n)} : std::nullopt);
         auto v_norm  = V.cols() > n ? V.col(n).norm() : RealScalar{1};
         if(!std::isfinite(v_norm) || v_norm <= RealScalar{0}) v_norm = RealScalar{1};
@@ -147,27 +143,27 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
-    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::relative_rNormScales() const {
+    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::rNormScales() const {
         const auto nev = cfg().nev;
         VectorReal scales(nev);
-        for(Eigen::Index n = 0; n < nev; ++n) scales(n) = relative_rNormScale(n);
+        for(Eigen::Index n = 0; n < nev; ++n) scales(n) = rNormScale(n);
         return scales;
     }
 
     template<typename Scalar, grit::Form form_>
-    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::relative_rNorms(const VectorReal &rNorms) const {
-        auto rows = std::min<Eigen::Index>(cfg().nev, rNorms.size());
+    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::rNormsRel(const VectorReal &rNormsAbs) const {
+        auto rows = std::min<Eigen::Index>(cfg().nev, rNormsAbs.size());
         if(rows <= 0) return {};
-        return rNorms.topRows(rows).cwiseQuotient(relative_rNormScales().topRows(rows));
+        return rNormsAbs.topRows(rows).cwiseQuotient(rNormScales().topRows(rows));
     }
 
     template<typename Scalar, grit::Form form_>
     typename base<Scalar, form_>::RealScalar base<Scalar, form_>::get_rNorms_log10_change_per_matvec() {
-        if(status.rNorms_history.size() < 2ul) return RealScalar{0};
-        auto size = status.rNorms_history.size();
+        if(status.rNormsAbsHistory.size() < 2ul) return RealScalar{0};
+        auto size = status.rNormsAbsHistory.size();
         assert(size == status.matvecs_history.size());
 
-        auto rNorm_change = status.rNorms_history[size - 1].array() / status.rNorms_history[size - 2].array();
+        auto rNorm_change = status.rNormsAbsHistory[size - 1].array() / status.rNormsAbsHistory[size - 2].array();
         auto sum_matvecs  = status.matvecs_history[size - 1] + status.matvecs_history[size - 2];
         if(sum_matvecs <= 0) return RealScalar{0};
         return std::log10(rNorm_change.minCoeff()) / static_cast<RealScalar>(sum_matvecs);
@@ -340,7 +336,7 @@ namespace grit::form {
                 // We may need to orthonormalize V in generalized problems
                 block_orthonormalize();
 
-                S             = get_residuals(Y, AV, BV, status.rNorms);
+                S             = get_residuals(Y, AV, BV, status.rNormsAbs);
                 status.eigVal = Y.topRows(cfg().nev); // Make sure we only take nev values here. In general, nev <= block_size
             } else {
                 block_orthonormalize();
@@ -358,7 +354,7 @@ namespace grit::form {
                 AV            = AQ * Z;
                 BV            = V;
                 BQ            = Q;
-                S             = get_residuals(Y, AV, V, status.rNorms);
+                S             = get_residuals(Y, AV, V, status.rNormsAbs);
                 status.eigVal = Y.topRows(cfg().nev); // Make sure we only take nev values here. In general, nev <= block_size
 
                 auto A_max_abs          = T_evals.cwiseAbs().maxCoeff();
@@ -368,9 +364,8 @@ namespace grit::form {
             }
         }
         status.op_norm_estimate = get_op_norm_estimate();
-        Eigen::Index rows       = std::min(cfg().nev, status.rNorms.size());
-        status.rNorms_init      = status.rNorms.topRows(rows);
-        status.rNormScales_init = relative_rNormScales().topRows(rows);
+        Eigen::Index rows     = std::min(cfg().nev, status.rNormsAbs.size());
+        status.rNormsAbsInit = status.rNormsAbs.topRows(rows);
         assert(V.cols() == cfg().block_size);
         assert_allFinite(V);
         last_log_time.tic();
@@ -422,18 +417,18 @@ namespace grit::form {
         if(cfg().sat_rnorm_threshold <= RealScalar{0}) return false;
         const auto min_history_size = std::min<size_t>(status.max_history_size, size_t{2});
         if(status.outer_iter < static_cast<Eigen::Index>(min_history_size)) return false;
-        if(status.rNorms_history.size() < static_cast<size_t>(min_history_size)) return false;
-        if(status.rNorms.size() == 0) return false;
+        if(status.rNormsAbsHistory.size() < static_cast<size_t>(min_history_size)) return false;
+        if(status.rNormsAbs.size() == 0) return false;
 
-        auto rows = std::min<Eigen::Index>(cfg().nev, status.rNorms.size());
+        auto rows = std::min<Eigen::Index>(cfg().nev, status.rNormsAbs.size());
         if(rows <= 0) return false;
-        VectorReal             scales = relative_rNormScales().topRows(rows);
+        VectorReal             scales = rNormScales().topRows(rows);
         std::deque<VectorReal> relative_history;
-        for(const auto &history : status.rNorms_history) {
-            if(history.size() < rows) throw std::runtime_error("rNorms_history has unequal size vectors");
+        for(const auto &history : status.rNormsAbsHistory) {
+            if(history.size() < rows) throw std::runtime_error("rNormsAbsHistory has unequal size vectors");
             relative_history.emplace_back(history.topRows(rows).cwiseQuotient(scales));
         }
-        VectorReal vals           = status.rNorms.topRows(rows).cwiseQuotient(scales);
+        VectorReal vals           = status.rNormsAbs.topRows(rows).cwiseQuotient(scales);
         VectorReal stds           = get_standard_deviations(relative_history, false);
         VectorReal threshold      = cfg().sat_rnorm_threshold * vals.cwiseMax(VectorReal::Constant(vals.size(), std::numeric_limits<RealScalar>::min()));
         VectorIdxT stds_saturated = (stds.array() < threshold.array()).template cast<Eigen::Index>();
@@ -472,10 +467,10 @@ namespace grit::form {
 
         status.op_norm_estimate = get_op_norm_estimate();
 
-        status.rNorms_history.push_back(status.rNorms.topRows(cfg().nev));
+        status.rNormsAbsHistory.push_back(status.rNormsAbs.topRows(cfg().nev));
         status.eigVals_history.push_back(status.eigVal.topRows(cfg().nev));
         status.matvecs_history.push_back(status.num_matvecs + status.num_matvecs_inner);
-        while(status.rNorms_history.size() > status.max_history_size) status.rNorms_history.pop_front();
+        while(status.rNormsAbsHistory.size() > status.max_history_size) status.rNormsAbsHistory.pop_front();
         while(status.eigVals_history.size() > status.max_history_size) status.eigVals_history.pop_front();
         while(status.matvecs_history.size() > status.max_history_size) status.matvecs_history.pop_front();
 
@@ -500,25 +495,18 @@ namespace grit::form {
         };
 
         constexpr auto beta    = RealScalar{0.5f};
-        VectorReal     rNorms  = status.rNorms.topRows(cfg().nev);
-        VectorReal     rrNorms = relative_rNorms(status.rNorms).topRows(cfg().nev);
-        VectorReal     tols    = rNormTols();
-        RealScalar     relGap  = status.gap * get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
-        if(rNorms.size() != tols.size()) throw std::logic_error("unequal residual norm and tolerance sizes");
-        status.rNorm_below_rnormTol = (rNorms.array() < tols.array()).all();
-        status.rNorm_below_gap      = rNorms.maxCoeff() < beta * relGap;
+        VectorReal rNormsAbs = status.rNormsAbs.topRows(cfg().nev);
+        VectorReal targets   = rNormAbsTargets();
+        RealScalar relGap    = status.gap * get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
+        if(rNormsAbs.size() != targets.size()) throw std::logic_error("unequal residual norm and target sizes");
+        status.residual_converged = (rNormsAbs.array() < targets.array()).all();
+        status.residual_below_gap      = rNormsAbs.maxCoeff() < beta * relGap;
 
-        if(status.rNorm_below_rnormTol) {
+        if(status.residual_converged) {
             std::string msg_rnorm_gap = fmt::format(" | gap {:.3e} (rel {:.3e})", status.gap, relGap);
-            if(cfg().use_relative_rnorm_tolerance) {
-                status.stopMessage.emplace_back(fmt::format("converged rNorm {} < relative tol {}{} | rrNorm {} | outer_iter {} | mv {} | {:.3e} s",
-                                                            format_vector(VectorReal(status.rNorms.topRows(cfg().nev))), format_vector(tols), msg_rnorm_gap,
-                                                            format_vector(rrNorms), status.outer_iter + 1, status.num_matvecs_total, status.time_elapsed.get_time()));
-            } else {
-                status.stopMessage.emplace_back(fmt::format("converged rNorm {} < tol {}{} | rrNorm {} | outer_iter {} | mv {} | {:.3e} s",
-                                                            format_vector(VectorReal(status.rNorms.topRows(cfg().nev))), format_vector(tols), msg_rnorm_gap,
-                                                            format_vector(rrNorms), status.outer_iter + 1, status.num_matvecs_total, status.time_elapsed.get_time()));
-            }
+            status.stopMessage.emplace_back(fmt::format("converged rNormAbs {} < target {}{} | outer_iter {} | mv {} | {:.3e} s",
+                                                        format_vector(VectorReal(status.rNormsAbs.topRows(cfg().nev))), format_vector(targets), msg_rnorm_gap,
+                                                        status.outer_iter + 1, status.num_matvecs_total, status.time_elapsed.get_time()));
             status.stopReason |= StopReason::converged;
         }
 
@@ -556,7 +544,7 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::printStatus() {
-        if(!log || status.eigVal.size() == 0 || status.rNorms.size() == 0) return;
+        if(!log || status.eigVal.size() == 0 || status.rNormsAbs.size() == 0) return;
 
         auto format_vector = [](const VectorReal &v, std::string_view spec = "{:.8e}") {
             std::string msg = "[";
@@ -610,18 +598,16 @@ namespace grit::form {
         if(!log->should_log(loglevel)) return;
         [[maybe_unused]] auto lap = last_log_time.restart_lap();
 
-        const auto active_tols     = rNormTols();
-        const auto active_tol_name = "rNormTol";
-        const auto rrNorms         = relative_rNorms(status.rNorms);
+        const auto rNormAbsTargets = this->rNormAbsTargets();
 
         log->log(loglevel,
                  "outer_iter {:3} mv {:3} pc {:3} t {:.1e}s dim {} {}eigVal {}{} "
-                 "oErr {:.3e} rNorms {} rrNorms {} {} {} tol {:.2e} (rel {:.2e}) "
+                 "oErr {:.3e} rNormsAbs {} target {} abstol {:.2e} reltol {:.2e} rescaled {} "
                  "({:9.2e}/mv) sat {}:{}/{} col {:2} block_size {} ritz {} "
                  "op norm {:.2e} cond {:.2e} sens {:.2e}{}",
                  status.outer_iter, status.num_matvecs, status.num_precond, status.time_elapsed.get_time(), N, innerMsg,
-                 format_vector(VectorReal(status.eigVal), "{:.16f}"), evMsg, orthError, format_vector(VectorReal(status.rNorms)),
-                 format_vector(VectorReal(rrNorms)), active_tol_name, format_vector(active_tols, "{:.3e}"), cfg().tol, cfg().tol_rnorm_relative,
+                 format_vector(VectorReal(status.eigVal), "{:.16f}"), evMsg, orthError, format_vector(VectorReal(status.rNormsAbs)),
+                 format_vector(rNormAbsTargets, "{:.3e}"), cfg().abstol, cfg().reltol, cfg().use_rescaled_rnorm_tolerance,
                  get_rNorms_log10_change_per_matvec(), status.saturation_count_eigVal, status.saturation_count_rNorm, status.saturation_count_max, Q.cols(),
                  cfg().block_size, enum2sv(cfg().ritz), op_norm_estimate, status.condition, status.sensitivity, msg_rnorm_gap);
     }
@@ -647,11 +633,11 @@ namespace grit::form {
     void base<Scalar, form_>::run() {
         status.stopReason = StopReason::none;
         status.stopMessage.clear();
-        status.rNorm_below_rnormTol    = false;
-        status.rNorm_below_gap         = false;
+        status.residual_converged    = false;
+        status.residual_below_gap         = false;
         status.saturation_count_eigVal = 0;
         status.saturation_count_rNorm  = 0;
-        status.rNorms_history.clear();
+        status.rNormsAbsHistory.clear();
         status.eigVals_history.clear();
         status.matvecs_history.clear();
         status.time_orthogonalize.reset();

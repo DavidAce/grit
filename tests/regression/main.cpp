@@ -121,7 +121,7 @@ namespace {
         solver.config.ritz                          = grit::Ritz::SR;
         solver.config.max_iters                     = -1;
         solver.config.inner_max_iters               = 2000;
-        solver.config.tol                           = 1e-12;
+        solver.config.abstol                           = 1e-12;
         solver.config.inner_tol                     = 0.1;
         solver.config.residual_correction_type      = grit::ResidualCorrectionType::AUTO;
         solver.config.use_refined_rayleigh_ritz     = true;
@@ -136,8 +136,8 @@ namespace {
 
         auto view = solver.get_result();
         REQUIRE(view.stopReason() == grit::StopReason::converged);
-        REQUIRE(view.rNorms().size() == 1);
-        REQUIRE(view.rNorms()(0) < 1e-12);
+        REQUIRE(view.rNormsAbs().size() == 1);
+        REQUIRE(view.rNormsAbs()(0) < 1e-12);
         return view.num_matvecs_total();
     }
 }

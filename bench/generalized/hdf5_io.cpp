@@ -60,18 +60,18 @@ namespace bench_generalized {
             insert_field(h5type, "block_size", &Row::block_size);
             insert_field(h5type, "max_iters", &Row::max_iters);
             insert_field(h5type, "max_matvecs", &Row::max_matvecs);
-            insert_field(h5type, "tol", &Row::tol);
-            insert_field(h5type, "tol_rnorm_relative", &Row::tol_rnorm_relative);
+            insert_field(h5type, "abstol", &Row::abstol);
+            insert_field(h5type, "reltol", &Row::reltol);
             insert_field(h5type, "sat_eigval_threshold", &Row::sat_eigval_threshold);
             insert_field(h5type, "sat_rnorm_threshold", &Row::sat_rnorm_threshold);
             insert_field(h5type, "ritz", &Row::ritz);
             insert_field(h5type, "use_refined_rayleigh_ritz", &Row::use_refined_rayleigh_ritz);
             insert_field(h5type, "use_b_inner_product", &Row::use_b_inner_product);
-            insert_field(h5type, "use_relative_rnorm_tolerance", &Row::use_relative_rnorm_tolerance);
+            insert_field(h5type, "use_rescaled_rnorm_tolerance", &Row::use_rescaled_rnorm_tolerance);
             insert_field(h5type, "stop_reason", &Row::stop_reason);
             insert_field(h5type, "eigenvalue", &Row::eigenvalue);
-            insert_field(h5type, "rnorm", &Row::rnorm);
-            insert_field(h5type, "rrnorm", &Row::rrnorm);
+            insert_field(h5type, "rnorm_abs", &Row::rnorm_abs);
+            insert_field(h5type, "rnorm_rel", &Row::rnorm_rel);
             insert_field(h5type, "outer_iterations", &Row::outer_iterations);
             insert_field(h5type, "matvecs", &Row::matvecs);
             insert_field(h5type, "outer_matvecs", &Row::outer_matvecs);
@@ -88,8 +88,8 @@ namespace bench_generalized {
             insert_field(h5type, "condition", &Row::condition);
             insert_field(h5type, "sensitivity", &Row::sensitivity);
             insert_field(h5type, "gap", &Row::gap);
-            insert_field(h5type, "rnorm_below_tol", &Row::rnorm_below_tol);
-            insert_field(h5type, "rnorm_below_gap", &Row::rnorm_below_gap);
+            insert_field(h5type, "residual_converged", &Row::residual_converged);
+            insert_field(h5type, "residual_below_gap", &Row::residual_below_gap);
             insert_field(h5type, "time", &Row::time);
             insert_field(h5type, "vmrss_mib", &Row::vmrss_mib);
             insert_field(h5type, "vmhwm_mib", &Row::vmhwm_mib);
@@ -179,8 +179,8 @@ namespace bench_generalized {
             int64_t     count     = 0;
             int64_t     converged = 0;
             RunningStats eigval;
-            RunningStats rnorm;
-            RunningStats rrnorm;
+            RunningStats rnorm_abs;
+            RunningStats rnorm_rel;
             RunningStats outer_iterations;
             RunningStats matvecs;
             RunningStats time;
@@ -202,8 +202,8 @@ namespace bench_generalized {
                 count++;
                 if(to_string(value.stop_reason).find("converged") != std::string::npos) converged++;
                 eigval.add(value.eigenvalue);
-                rnorm.add(value.rnorm);
-                rrnorm.add(value.rrnorm);
+                rnorm_abs.add(value.rnorm_abs);
+                rnorm_rel.add(value.rnorm_rel);
                 outer_iterations.add(static_cast<double>(value.outer_iterations));
                 matvecs.add(static_cast<double>(value.matvecs));
                 time.add(value.time);
@@ -258,7 +258,7 @@ namespace bench_generalized {
             file.writeAttribute(to_string(snapshot.ritz), group_path(algo), "ritz");
             file.writeAttribute(static_cast<bool>(snapshot.use_refined_rayleigh_ritz), group_path(algo), "use_refined_rayleigh_ritz");
             file.writeAttribute(static_cast<bool>(snapshot.use_b_inner_product), group_path(algo), "use_b_inner_product");
-            file.writeAttribute(snapshot.tol, group_path(algo), "tol");
+            file.writeAttribute(snapshot.abstol, group_path(algo), "abstol");
             file.writeAttribute(snapshot.sat_eigval_threshold, group_path(algo), "sat_eigval_threshold");
             file.writeAttribute(snapshot.sat_rnorm_threshold, group_path(algo), "sat_rnorm_threshold");
             if constexpr(std::is_same_v<Result, GdpluskSolveResult>) {
@@ -273,8 +273,8 @@ namespace bench_generalized {
                 file.writeAttribute(snapshot.auto_cheap_probe_factor, group_path(algo), "auto_cheap_probe_factor");
             }
             file.writeAttribute(snapshot.eigenvalue, group_path(algo), "eigenvalue");
-            file.writeAttribute(snapshot.rnorm, group_path(algo), "rnorm");
-            file.writeAttribute(snapshot.rrnorm, group_path(algo), "rrnorm");
+            file.writeAttribute(snapshot.rnorm_abs, group_path(algo), "rnorm_abs");
+            file.writeAttribute(snapshot.rnorm_rel, group_path(algo), "rnorm_rel");
             file.writeAttribute(snapshot.outer_iterations, group_path(algo), "outer_iterations");
             file.writeAttribute(snapshot.matvecs, group_path(algo), "matvecs");
             file.writeAttribute(to_string(snapshot.stop_reason), group_path(algo), "stop_reason");
@@ -308,26 +308,26 @@ namespace bench_generalized {
             std::println("summary: {}", path.string());
             if constexpr(std::is_same_v<Row, GdpluskSnapshot>) {
                 std::println("{:<5} {:>8} {:>5} {:>5} {:<17} {:>9} {:>9} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18}",
-                             "case", "algo", "ncv", "blk", "correction", "conv", "reps", "eigval mean", "rnorm mean", "rrnorm mean", "outer_iter mean±se",
+                             "case", "algo", "ncv", "blk", "correction", "conv", "reps", "eigval mean", "rnorm_abs mean", "rnorm_rel mean", "outer_iter mean±se",
                              "matvec mean±se", "time mean±se", "jd switch ±se");
                 for(const auto &[case_id, group] : groups) {
                     (void)case_id;
                     std::println("{:<5} {:>8} {:>5} {:>5} {:<17} {:>4}/{:<4} {:>9} {:>18.10e} {:>18.4e} {:>18.4e} {:>18} {:>18} {:>18} {:>18}",
                                  group.row.case_id, to_string(group.row.algo), group.row.ncv, group.row.block_size, to_string(group.row.residual_correction),
-                                 group.converged, group.count, group.count, group.eigval.mean(), group.rnorm.mean(), group.rrnorm.mean(),
+                                 group.converged, group.count, group.count, group.eigval.mean(), group.rnorm_abs.mean(), group.rnorm_rel.mean(),
                                  mean_stderr_text(group.outer_iterations, "{:.1f}"), mean_stderr_text(group.matvecs, "{:.1f}"),
                                  mean_stderr_text(group.time, "{:.4f}"), mean_stderr_text(group.first_jd_switch, "{:.1f}"));
                 }
             } else if constexpr(std::is_same_v<Row, LanczosSnapshot>) {
                 std::println("{:<5} {:>8} {:>5} {:>5} {:>6} {:>9} {:>9} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18}",
-                             "case", "algo", "ncv", "blk", "retain", "conv", "reps", "eigval mean", "rnorm mean", "rrnorm mean", "outer_iter mean±se", "matvec mean±se",
+                             "case", "algo", "ncv", "blk", "retain", "conv", "reps", "eigval mean", "rnorm_abs mean", "rnorm_rel mean", "outer_iter mean±se", "matvec mean±se",
                              "time mean±se", "orth mean±se", "orthn mean±se", "proj mean±se", "factor mean±se", "update mean±se", "refresh mean±se",
                              "mask mean±se", "diag mean±se", "ritz mean±se", "restart mean±se");
                 for(const auto &[case_id, group] : groups) {
                     (void)case_id;
                     std::println("{:<5} {:>8} {:>5} {:>5} {:>6} {:>4}/{:<4} {:>9} {:>18.10e} {:>18.4e} {:>18.4e} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18}",
                                  group.row.case_id, to_string(group.row.algo), group.row.ncv, group.row.block_size, group.row.max_retain_blocks, group.converged, group.count,
-                                 group.count, group.eigval.mean(), group.rnorm.mean(), group.rrnorm.mean(), mean_stderr_text(group.outer_iterations, "{:.1f}"),
+                                 group.count, group.eigval.mean(), group.rnorm_abs.mean(), group.rnorm_rel.mean(), mean_stderr_text(group.outer_iterations, "{:.1f}"),
                                  mean_stderr_text(group.matvecs, "{:.1f}"), mean_stderr_text(group.time, "{:.4f}"),
                                  mean_stderr_text(group.time_orthogonalize, "{:.4f}"), mean_stderr_text(group.time_orthonormalize, "{:.4f}"),
                                  mean_stderr_text(group.time_orth_project, "{:.4f}"), mean_stderr_text(group.time_orth_factor, "{:.4f}"),
@@ -338,13 +338,13 @@ namespace bench_generalized {
                 }
             } else {
                 std::println("{:<5} {:>8} {:>5} {:>5} {:>9} {:>9} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18}",
-                             "case", "algo", "ncv", "blk", "conv", "reps", "eigval mean", "rnorm mean", "rrnorm mean", "outer_iter mean±se", "matvec mean±se",
+                             "case", "algo", "ncv", "blk", "conv", "reps", "eigval mean", "rnorm_abs mean", "rnorm_rel mean", "outer_iter mean±se", "matvec mean±se",
                              "time mean±se");
                 for(const auto &[case_id, group] : groups) {
                     (void)case_id;
                     std::println("{:<5} {:>8} {:>5} {:>5} {:>4}/{:<4} {:>9} {:>18.10e} {:>18.4e} {:>18.4e} {:>18} {:>18} {:>18}",
                                  group.row.case_id, to_string(group.row.algo), group.row.ncv, group.row.block_size, group.converged, group.count, group.count,
-                                 group.eigval.mean(), group.rnorm.mean(), group.rrnorm.mean(), mean_stderr_text(group.outer_iterations, "{:.1f}"),
+                                 group.eigval.mean(), group.rnorm_abs.mean(), group.rnorm_rel.mean(), mean_stderr_text(group.outer_iterations, "{:.1f}"),
                                  mean_stderr_text(group.matvecs, "{:.1f}"), mean_stderr_text(group.time, "{:.4f}"));
                 }
             }

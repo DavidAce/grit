@@ -20,7 +20,7 @@ namespace grit {
          * @param view Solver result view to copy from.
          */
         explicit Result(const ResultView<Scalar> &view)
-            : eigVal_(view.eigVal()), eigVecs_(view.eigVecs()), rNorms_(view.rNorms()), stopReason_(view.stopReason()), outer_iter_(view.outer_iter()),
+            : eigVal_(view.eigVal()), eigVecs_(view.eigVecs()), rNorms_(view.rNormsAbs()), stopReason_(view.stopReason()), outer_iter_(view.outer_iter()),
               num_matvecs_(view.num_matvecs()), num_inner_iters_(view.num_inner_iters()), num_matvecs_inner_(view.num_matvecs_inner()),
               num_jdops_inner_(view.num_jdops_inner()), num_matvecs_total_(view.num_matvecs_total()), num_precond_(view.num_precond()),
               num_precond_inner_(view.num_precond_inner()), num_precond_total_(view.num_precond_total()), time_(view.time()),
@@ -31,7 +31,7 @@ namespace grit {
               inner_error_last_(view.inner_error_last()), inner_tol_last_(view.inner_tol_last()), saturation_count_eigval_(view.saturation_count_eigval()),
               saturation_count_rnorm_(view.saturation_count_rnorm()), saturation_count_max_(view.saturation_count_max()),
               op_norm_estimate_(view.op_norm_estimate()), condition_(view.condition()), sensitivity_(view.sensitivity()), gap_(view.gap()),
-              rnorm_below_tol_(view.rnorm_below_tol()), rnorm_below_gap_(view.rnorm_below_gap()),
+              residual_converged_(view.residual_converged()), residual_below_gap_(view.residual_below_gap()),
               residual_correction_active_name_(view.residual_correction_active_name()),
               residual_correction_iteration_name_(view.residual_correction_iteration_name()), auto_dwell_(view.auto_dwell()),
               auto_jd_outer_iters_since_probe_(view.auto_jd_outer_iters_since_probe()),
@@ -47,9 +47,9 @@ namespace grit {
         /*! Selected Ritz vectors in columns. */
         [[nodiscard]] MatrixType &eigVecs() { return eigVecs_; }
         /*! Residual norms for the selected Ritz pairs. */
-        [[nodiscard]] const VectorReal &rNorms() const { return rNorms_; }
+        [[nodiscard]] const VectorReal &rNormsAbs() const { return rNorms_; }
         /*! Residual norms for the selected Ritz pairs. */
-        [[nodiscard]] VectorReal &rNorms() { return rNorms_; }
+        [[nodiscard]] VectorReal &rNormsAbs() { return rNorms_; }
         /*! Reason why the solver stopped. */
         [[nodiscard]] StopReason stopReason() const { return stopReason_; }
         /*! Current outer iteration count. */
@@ -102,7 +102,7 @@ namespace grit {
         [[nodiscard]] Eigen::Index saturation_count_rnorm() const { return saturation_count_rnorm_; }
         /*! Saturation count required before a saturation stop. */
         [[nodiscard]] Eigen::Index saturation_count_max() const { return saturation_count_max_; }
-        /*! Current operator norm estimate used for relative residuals. */
+        /*! Current operator norm estimate used for rescaled residuals. */
         [[nodiscard]] RealScalar op_norm_estimate() const { return op_norm_estimate_; }
         /*! Current projected-problem condition estimate. */
         [[nodiscard]] RealScalar condition() const { return condition_; }
@@ -111,9 +111,9 @@ namespace grit {
         /*! Current Ritz gap estimate. */
         [[nodiscard]] RealScalar gap() const { return gap_; }
         /*! Whether all selected residual norms are below tolerance. */
-        [[nodiscard]] bool rnorm_below_tol() const { return rnorm_below_tol_; }
+        [[nodiscard]] bool residual_converged() const { return residual_converged_; }
         /*! Whether all selected residual norms are below the Ritz gap criterion. */
-        [[nodiscard]] bool rnorm_below_gap() const { return rnorm_below_gap_; }
+        [[nodiscard]] bool residual_below_gap() const { return residual_below_gap_; }
         /*! AUTO residual correction method currently in use. */
         [[nodiscard]] std::string_view residual_correction_active_name() const { return residual_correction_active_name_; }
         /*! Residual correction method used in the last outer iteration. */
@@ -161,8 +161,8 @@ namespace grit {
         RealScalar                condition_ = RealScalar{0};
         RealScalar                sensitivity_ = RealScalar{0};
         RealScalar                gap_ = RealScalar{0};
-        bool                      rnorm_below_tol_ = false;
-        bool                      rnorm_below_gap_ = false;
+        bool                      residual_converged_ = false;
+        bool                      residual_below_gap_ = false;
         std::string               residual_correction_active_name_;
         std::string               residual_correction_iteration_name_;
         Eigen::Index              auto_dwell_ = 0;

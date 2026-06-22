@@ -39,12 +39,12 @@ TEST_CASE("common config is read directly from solver.config") {
     auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
 
     grit::standard::gdplusk<double> solver(A);
-    solver.config.tol = 3.25e-7;
+    solver.config.abstol = 3.25e-7;
 
-    REQUIRE(solver.rNormTol(0) == Approx(3.25e-7));
+    REQUIRE(solver.rNormAbsTarget(0) == Approx(3.25e-7));
 }
 
-TEST_CASE("relative residual tolerance requires initial residual progress") {
+TEST_CASE("residual tolerance uses the larger floor") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
     Matrix A_matrix = Matrix::Identity(3, 3);
@@ -52,16 +52,15 @@ TEST_CASE("relative residual tolerance requires initial residual progress") {
 
     grit::standard::gdplusk<double> solver(A);
     solver.config.nev                          = 1;
-    solver.config.use_relative_rnorm_tolerance = true;
-    solver.config.tol                          = 1e-5;
-    solver.config.tol_rnorm_relative           = 1e-1;
+    solver.config.use_rescaled_rnorm_tolerance = true;
+    solver.config.abstol                          = 1e-5;
+    solver.config.reltol           = 1e-1;
 
     solver.status.eigVal            = Eigen::VectorXd::Constant(1, 1.0);
     solver.status.op_norm_estimate  = 10.0;
-    solver.status.rNorms_init       = Eigen::VectorXd::Constant(1, 2.0e-3);
-    solver.status.rNormScales_init  = Eigen::VectorXd::Constant(1, 1.0e3);
+    solver.status.rNormsAbsInit       = Eigen::VectorXd::Constant(1, 2.0e-3);
 
-    REQUIRE(solver.rNormTol(0) == Approx(2.0e-6));
+    REQUIRE(solver.rNormAbsTarget(0) == Approx(2.0e-4));
 }
 
 int main(int argc, char **argv) {

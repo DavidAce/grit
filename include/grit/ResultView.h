@@ -40,7 +40,7 @@ namespace grit {
         /*! Selected Ritz vectors in columns. */
         [[nodiscard]] const MatrixType &eigVecs() const;
         /*! Residual norms for the selected Ritz pairs. */
-        [[nodiscard]] const VectorReal &rNorms() const;
+        [[nodiscard]] const VectorReal &rNormsAbs() const;
         /*! Reason why the solver stopped. */
         [[nodiscard]] StopReason stopReason() const;
         /*! Current outer iteration count. */
@@ -93,7 +93,7 @@ namespace grit {
         [[nodiscard]] Eigen::Index saturation_count_rnorm() const;
         /*! Saturation count required before a saturation stop. */
         [[nodiscard]] Eigen::Index saturation_count_max() const;
-        /*! Current operator norm estimate used for relative residuals. */
+        /*! Current operator norm estimate used for rescaled residuals. */
         [[nodiscard]] RealScalar op_norm_estimate() const;
         /*! Current projected-problem condition estimate. */
         [[nodiscard]] RealScalar condition() const;
@@ -102,9 +102,9 @@ namespace grit {
         /*! Current Ritz gap estimate. */
         [[nodiscard]] RealScalar gap() const;
         /*! Whether all selected residual norms are below tolerance. */
-        [[nodiscard]] bool rnorm_below_tol() const;
+        [[nodiscard]] bool residual_converged() const;
         /*! Whether all selected residual norms are below the Ritz gap criterion. */
-        [[nodiscard]] bool rnorm_below_gap() const;
+        [[nodiscard]] bool residual_below_gap() const;
         /*! AUTO residual correction method currently in use. */
         [[nodiscard]] std::string_view residual_correction_active_name() const;
         /*! Residual correction method used in the last outer iteration. */

@@ -47,8 +47,8 @@ namespace grit::algo {
         using Base::N;
         using Base::orthonormalize_Z;
         using Base::qBlocks;
-        using Base::relative_rNorms;
-        using Base::relative_rNormScales;
+        using Base::rNormsRel;
+        using Base::rNormScales;
         using Base::residual_correction_type_internal;
         using Base::status;
         using Base::T1;
@@ -90,7 +90,7 @@ namespace grit::algo {
             Eigen::Index                inner_max_iters                  = 1000;               /*!< Maximum inner iterations in each inner correction solve. */
             Eigen::Index                auto_min_dwell_iters             = 10;                 /*!< Minimum cheap Olsen outer iterations before AUTO may switch. */
             RealScalar                  auto_sat_eigval_threshold        = RealScalar{1e-3f};  /*!< AUTO eigenvalue saturation threshold. */
-            RealScalar                  auto_sat_rnorm_threshold         = RealScalar{1e-2f};  /*!< AUTO relative residual saturation threshold. */
+            RealScalar                  auto_sat_rnorm_threshold         = RealScalar{1e-2f};  /*!< AUTO rescaled residual saturation threshold. */
             RealScalar                  auto_jd_start_rnorm_threshold    = RealScalar{1e-5f};  /*!< AUTO residual threshold for allowing Jacobi-Davidson. */
             Eigen::Index                auto_cheap_probe_interval        = 5;                  /*!< Jacobi-Davidson outer iterations between cheap Olsen probes. */
             RealScalar                  auto_cheap_probe_factor          = RealScalar{1.0f};   /*!< Scale factor for judging cheap Olsen probe progress. */

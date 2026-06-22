@@ -54,17 +54,17 @@ TEST_CASE("get_result returns an owning copy") {
         auto view                = solver.get_result_view();
         auto original_eigval     = view.eigVal();
         auto original_eigvecs    = view.eigVecs();
-        auto original_rnorms     = view.rNorms();
+        auto original_rnorms     = view.rNormsAbs();
         auto original_stopReason = view.stopReason();
 
         auto result = solver.get_result();
         result.eigVal().setConstant(-7.0);
         result.eigVecs().setZero();
-        result.rNorms().setConstant(11.0);
+        result.rNormsAbs().setConstant(11.0);
 
         REQUIRE((view.eigVal() - original_eigval).norm() == Approx(0.0));
         REQUIRE((view.eigVecs() - original_eigvecs).norm() == Approx(0.0));
-        REQUIRE((view.rNorms() - original_rnorms).norm() == Approx(0.0));
+        REQUIRE((view.rNormsAbs() - original_rnorms).norm() == Approx(0.0));
         REQUIRE(view.stopReason() == original_stopReason);
         REQUIRE((result.eigVecs() - view.eigVecs()).norm() > 0.1);
     });
@@ -77,7 +77,7 @@ TEST_CASE("result view can be copied explicitly") {
 
         REQUIRE((result.eigVal() - view.eigVal()).norm() == Approx(0.0));
         REQUIRE((result.eigVecs() - view.eigVecs()).norm() == Approx(0.0));
-        REQUIRE((result.rNorms() - view.rNorms()).norm() == Approx(0.0));
+        REQUIRE((result.rNormsAbs() - view.rNormsAbs()).norm() == Approx(0.0));
         REQUIRE(result.stopReason() == view.stopReason());
     });
 }

@@ -5,9 +5,9 @@
 
 namespace {
     template<typename VecA, typename VecB>
-    void require_close(const VecA &a, const VecB &b, double tol) {
+    void require_close(const VecA &a, const VecB &b, double abstol) {
         REQUIRE(a.size() == b.size());
-        for(Eigen::Index i = 0; i < a.size(); ++i) REQUIRE(std::abs(a(i) - b(i)) < tol);
+        for(Eigen::Index i = 0; i < a.size(); ++i) REQUIRE(std::abs(a(i) - b(i)) < abstol);
     }
 }
 

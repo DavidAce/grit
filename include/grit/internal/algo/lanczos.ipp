@@ -55,8 +55,8 @@ namespace grit::algo {
             throw std::runtime_error("lanczos config error: maxRetainBlocks must not exceed ncv / block_size");
         if(config.max_iters == 0) throw std::runtime_error("lanczos config error: max_iters must be positive or negative for unlimited");
         if(config.max_matvecs == 0) throw std::runtime_error("lanczos config error: max_matvecs must be positive or negative for unlimited");
-        if(config.tol <= RealScalar{0}) throw std::runtime_error("lanczos config error: tol must be positive");
-        if(config.tol_rnorm_relative < RealScalar{0}) throw std::runtime_error("lanczos config error: tol_rnorm_relative must be nonnegative");
+        if(config.abstol <= RealScalar{0}) throw std::runtime_error("lanczos config error: abstol must be positive");
+        if(config.reltol < RealScalar{0}) throw std::runtime_error("lanczos config error: reltol must be nonnegative");
         if(config.sat_eigval_threshold < RealScalar{0}) throw std::runtime_error("lanczos config error: sat_eigval_threshold must be nonnegative");
         if(config.sat_rnorm_threshold < RealScalar{0}) throw std::runtime_error("lanczos config error: sat_rnorm_threshold must be nonnegative");
         if(this->has_initial_guess()) {
@@ -72,11 +72,11 @@ namespace grit::algo {
         this->setLogger(config.log_level, std::string("grit|") + std::string(this->form_name()));
         status.stopReason = StopReason::none;
         status.stopMessage.clear();
-        status.rNorm_below_rnormTol    = false;
-        status.rNorm_below_gap         = false;
+        status.residual_converged    = false;
+        status.residual_below_gap         = false;
         status.saturation_count_eigVal = 0;
         status.saturation_count_rNorm  = 0;
-        status.rNorms_history.clear();
+        status.rNormsAbsHistory.clear();
         status.eigVals_history.clear();
         status.matvecs_history.clear();
         status.time_orthogonalize.reset();
@@ -93,9 +93,8 @@ namespace grit::algo {
         status.saturation_count_max = this->cfg().ncv;
 
         if(status.outer_iter == 0) {
-            status.rNorms.setOnes(this->cfg().nev);
-            status.rNorms_init.setOnes(this->cfg().nev);
-            status.rNormScales_init.setOnes(this->cfg().nev);
+            status.rNormsAbs.setOnes(this->cfg().nev);
+            status.rNormsAbsInit.setOnes(this->cfg().nev);
             status.eigVal.setOnes(this->cfg().nev);
             status.oldVal.setOnes(this->cfg().nev);
             status.absDiff.setOnes(this->cfg().nev);
@@ -360,16 +359,16 @@ namespace grit::algo {
 
         if(this->cfg().use_refined_rayleigh_ritz) {
             if constexpr(form_ == grit::Form::GENERALIZED) {
-                Base::refinedRitzVectors(status.optIdx, V, AV, BV, S, status.rNorms);
+                Base::refinedRitzVectors(status.optIdx, V, AV, BV, S, status.rNormsAbs);
             } else {
-                Base::refinedRitzVectors(status.optIdx, V, AV, S, status.rNorms);
+                Base::refinedRitzVectors(status.optIdx, V, AV, S, status.rNormsAbs);
                 BV = V;
             }
         } else {
             if constexpr(form_ == grit::Form::GENERALIZED) {
-                Base::extractRitzVectors(status.optIdx, V, AV, BV, S, status.rNorms);
+                Base::extractRitzVectors(status.optIdx, V, AV, BV, S, status.rNormsAbs);
             } else {
-                Base::extractRitzVectors(status.optIdx, V, AV, S, status.rNorms);
+                Base::extractRitzVectors(status.optIdx, V, AV, S, status.rNormsAbs);
                 BV = V;
             }
         }
@@ -388,20 +387,17 @@ namespace grit::algo {
             AV.conservativeResize(Eigen::NoChange, this->cfg().block_size);
             BV.conservativeResize(Eigen::NoChange, this->cfg().block_size);
             S.conservativeResize(Eigen::NoChange, this->cfg().block_size);
-            status.rNorms.conservativeResize(this->cfg().block_size);
+            status.rNormsAbs.conservativeResize(this->cfg().block_size);
         }
 
-        Eigen::Index rows = std::min(this->cfg().nev, status.rNorms.size());
-        if(status.rNorms_init.size() != rows || status.rNormScales_init.size() != rows) {
-            status.rNorms_init      = status.rNorms.topRows(rows).eval();
-            status.rNormScales_init = this->relative_rNormScales().topRows(rows).eval();
-        }
+        Eigen::Index rows = std::min(this->cfg().nev, status.rNormsAbs.size());
+        if(status.rNormsAbsInit.size() != rows) status.rNormsAbsInit = status.rNormsAbs.topRows(rows).eval();
     }
 
     template<typename Scalar, grit::Form form_>
     void lanczos<Scalar, form_>::updateStatus() {
         if(T_evals.size() < this->cfg().block_size) return;
-        if(T_evals.size() < this->cfg().nev || status.optIdx.size() < static_cast<size_t>(this->cfg().nev) || status.rNorms.size() < this->cfg().nev) {
+        if(T_evals.size() < this->cfg().nev || status.optIdx.size() < static_cast<size_t>(this->cfg().nev) || status.rNormsAbs.size() < this->cfg().nev) {
             status.stopReason |= StopReason::subspace_exhausted;
             status.stopMessage.emplace_back("lanczos updateStatus: projected problem has fewer Ritz values than requested nev");
             return;

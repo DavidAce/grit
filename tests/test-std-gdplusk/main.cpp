@@ -25,9 +25,9 @@ namespace {
     }
 
     template<typename VecA, typename VecB>
-    void require_close(const VecA &a, const VecB &b, double tol) {
+    void require_close(const VecA &a, const VecB &b, double abstol) {
         REQUIRE(a.size() == b.size());
-        for(Eigen::Index i = 0; i < a.size(); ++i) REQUIRE(std::abs(a(i) - b(i)) < tol);
+        for(Eigen::Index i = 0; i < a.size(); ++i) REQUIRE(std::abs(a(i) - b(i)) < abstol);
     }
 
     template<typename VecA, typename VecB>
@@ -78,7 +78,7 @@ TEST_CASE("standard gdplusk owns temporary initial guess") {
     solver.config.block_size               = 1;
     solver.config.ritz                     = grit::Ritz::SR;
     solver.config.max_iters                = 100;
-    solver.config.tol                      = 1e-12;
+    solver.config.abstol                      = 1e-12;
     solver.config.residual_correction_type = grit::ResidualCorrectionType::CHEAP_OLSEN;
     solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.ncv, 10));
     solver.run();
@@ -102,7 +102,7 @@ TEST_CASE("standard gdplusk handles nos4 restart block search") {
     solver.config.block_size               = 2;
     solver.config.ritz                     = grit::Ritz::SR;
     solver.config.max_iters                = 200;
-    solver.config.tol                      = 1e-9;
+    solver.config.abstol                      = 1e-9;
     solver.config.residual_correction_type = grit::ResidualCorrectionType::CHEAP_OLSEN;
     solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 11));
     solver.run();
@@ -130,7 +130,7 @@ TEST_CASE("standard gdplusk handles small ncv restart without invalid input") {
     solver.config.block_size               = 1;
     solver.config.ritz                     = grit::Ritz::SR;
     solver.config.max_iters                = 200;
-    solver.config.tol                      = 1e-8;
+    solver.config.abstol                      = 1e-8;
     solver.config.residual_correction_type = grit::ResidualCorrectionType::CHEAP_OLSEN;
     solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.ncv, 12));
     solver.run();
@@ -140,7 +140,7 @@ TEST_CASE("standard gdplusk handles small ncv restart without invalid input") {
     print_eigenvalue_comparison("standard gdplusk small ncv restart", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     REQUIRE_FALSE(grit::has_flag(view.stopReason(), grit::StopReason::invalid_input));
     REQUIRE(view.eigVal().allFinite());
-    REQUIRE(view.rNorms().allFinite());
+    REQUIRE(view.rNormsAbs().allFinite());
 }
 
 TEST_CASE("standard gdplusk supports all Ritz targets on nos4") {
@@ -157,7 +157,7 @@ TEST_CASE("standard gdplusk supports all Ritz targets on nos4") {
         solver.config.block_size               = 2;
         solver.config.ritz                     = ritz;
         solver.config.max_iters                = 250;
-        solver.config.tol                      = 1e-9;
+        solver.config.abstol                      = 1e-9;
         solver.config.residual_correction_type = grit::ResidualCorrectionType::CHEAP_OLSEN;
         solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 20 + static_cast<int>(ritz)));
         solver.run();
@@ -186,7 +186,7 @@ TEST_CASE("standard gdplusk converges with an exact zero eigenvalue") {
     solver.config.block_size = 1;
     solver.config.ritz       = grit::Ritz::SR;
     solver.config.max_iters  = 20;
-    solver.config.tol        = 1e-12;
+    solver.config.abstol        = 1e-12;
     solver.set_initial_guess(V);
     solver.run();
 
@@ -195,7 +195,7 @@ TEST_CASE("standard gdplusk converges with an exact zero eigenvalue") {
     REQUIRE(view.stopReason() == grit::StopReason::converged);
     print_eigenvalue_comparison("standard gdplusk zero eigenvalue", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     REQUIRE(std::abs(view.eigVal()(0)) < 1e-12);
-    REQUIRE(view.rNorms()(0) < 1e-12);
+    REQUIRE(view.rNormsAbs()(0) < 1e-12);
 }
 
 TEST_CASE("standard gdplusk user callback reports initial and final view") {
@@ -348,13 +348,13 @@ TEST_CASE("standard auto residual correction does not start Jacobi-Davidson unle
     solver.auto_residual_correction.dwell       = solver.config.auto_min_dwell_iters;
     solver.status.outer_iter                          = 2;
     solver.status.eigVal                        = VectorReal::Constant(1, -1.0);
-    solver.status.rNorms                        = VectorReal::Constant(1, 1.0e-2);
+    solver.status.rNormsAbs                        = VectorReal::Constant(1, 1.0e-2);
     solver.status.eigVals_history.clear();
-    solver.status.rNorms_history.clear();
+    solver.status.rNormsAbsHistory.clear();
     solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, -1.0));
     solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, -1.5));
-    solver.status.rNorms_history.emplace_back(VectorReal::Constant(1, 1.0e-2));
-    solver.status.rNorms_history.emplace_back(VectorReal::Constant(1, 1.0e-2 + 1.0e-8));
+    solver.status.rNormsAbsHistory.emplace_back(VectorReal::Constant(1, 1.0e-2));
+    solver.status.rNormsAbsHistory.emplace_back(VectorReal::Constant(1, 1.0e-2 + 1.0e-8));
     solver.status.num_matvecs       = 1;
     solver.status.num_matvecs_inner = 0;
 
@@ -383,7 +383,7 @@ TEST_CASE("standard auto residual correction switches to Jacobi-Davidson when re
     solver.status.outer_iter                          = 7;
     solver.status.oldVal                        = grit::form::base<double>::VectorReal::Constant(1, 1.0 + 1.0e-6);
     solver.status.eigVal                        = grit::form::base<double>::VectorReal::Constant(1, 1.0);
-    solver.status.rNorms                        = grit::form::base<double>::VectorReal::Constant(1, 1.0e-6);
+    solver.status.rNormsAbs                        = grit::form::base<double>::VectorReal::Constant(1, 1.0e-6);
 
     solver.update_auto_residual_correction_state();
 
@@ -412,7 +412,7 @@ TEST_CASE("standard auto residual correction does not let residual threshold byp
     solver.status.outer_iter                          = 7;
     solver.status.oldVal                        = grit::form::base<double>::VectorReal::Constant(1, 1.0 + 1.0e-6);
     solver.status.eigVal                        = grit::form::base<double>::VectorReal::Constant(1, 1.0);
-    solver.status.rNorms                        = grit::form::base<double>::VectorReal::Constant(1, 1.0e-6);
+    solver.status.rNormsAbs                        = grit::form::base<double>::VectorReal::Constant(1, 1.0e-6);
 
     solver.update_auto_residual_correction_state();
 
@@ -438,7 +438,7 @@ TEST_CASE("standard auto residual correction returns to cheap Olsen after produc
     solver.status.outer_iter                                   = 11;
     solver.status.oldVal                                 = grit::form::base<double>::VectorReal::Constant(1, 2.0);
     solver.status.eigVal                                 = grit::form::base<double>::VectorReal::Constant(1, 1.9);
-    solver.status.rNorms                                 = grit::form::base<double>::VectorReal::Constant(1, 1.0e-6);
+    solver.status.rNormsAbs                                 = grit::form::base<double>::VectorReal::Constant(1, 1.0e-6);
 
     solver.update_auto_residual_correction_state();
 
@@ -468,7 +468,7 @@ TEST_CASE("standard auto residual correction keeps cheap Olsen after relative Ri
     solver.status.outer_iter                                   = 11;
     solver.status.oldVal                                 = grit::form::base<double>::VectorReal::Constant(1, 100.0);
     solver.status.eigVal                                 = grit::form::base<double>::VectorReal::Constant(1, 90.0);
-    solver.status.rNorms                                 = grit::form::base<double>::VectorReal::Constant(1, 1.0e4);
+    solver.status.rNormsAbs                                 = grit::form::base<double>::VectorReal::Constant(1, 1.0e4);
 
     solver.update_auto_residual_correction_state();
 

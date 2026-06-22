@@ -71,10 +71,10 @@ namespace grit::form {
             bool                      use_b_inner_product                     = false; /*!< Use the B-metric inner product in generalized problems. */
             bool                      use_refined_rayleigh_ritz               = false; /*!< Use refined Rayleigh-Ritz extraction. */
             bool                      use_rayleigh_quotients_instead_of_evals = false; /*!< Report full Rayleigh quotients instead of projected Ritz values. */
-            bool                      use_relative_rnorm_tolerance            = false; /*!< Use tol as a relative residual tolerance scaled by the operator. */
+            bool                      use_rescaled_rnorm_tolerance            = false; /*!< Rescale abstol by the current operator norm estimate. */
             Ritz                      ritz                                    = Ritz::SR; /*!< Which Ritz values to target. */
-            RealScalar                tol                  = eps * 10000;         /*!< Residual-norm tolerance, absolute unless relative mode is enabled. */
-            RealScalar                tol_rnorm_relative   = 0; /*!< Initial residual improvement factor in relative residual units; zero disables it. */
+            RealScalar                abstol                  = eps * 10000;         /*!< Absolute residual tolerance floor. */
+            RealScalar                reltol                  = 0;                   /*!< Improvement factor relative to the initial residual; zero disables it. */
             Eigen::Index              max_iters            = 100l;                /*!< Maximum outer iterations; negative means unlimited. */
             Eigen::Index              max_matvecs          = -1l;                 /*!< Maximum total matrix-vector products; negative means unlimited. */
             RealScalar                sat_eigval_threshold = RealScalar{0};       /*!< Eigenvalue saturation threshold for stopping; zero disables it. */
@@ -184,12 +184,11 @@ namespace grit::form {
             tid::ur                   time_restart;                               /*!< Timer for search-space restarts. */
             RealScalar                inner_error_last     = RealScalar{0};       /*!< Last inner correction residual. */
             RealScalar                inner_tol_last       = RealScalar{0};       /*!< Last inner correction tolerance. */
-            bool                      rNorm_below_rnormTol = false;               /*!< Whether selected residual norms are below tolerance. */
-            bool                      rNorm_below_gap      = false;               /*!< Whether selected residual norms are below the Ritz gap criterion. */
-            VectorReal                rNorms;                                     /*!< Current selected residual norms. */
-            VectorReal                rNorms_init;                                /*!< Initial selected residual norms. */
-            VectorReal                rNormScales_init;                           /*!< Initial residual scales for relative residual norms. */
-            std::deque<VectorReal>    rNorms_history;                             /*!< Recent residual-norm history. */
+            bool                      residual_converged = false;              /*!< Whether selected residuals satisfy the active tolerance. */
+            bool                      residual_below_gap = false;              /*!< Whether selected residuals are below the Ritz gap criterion. */
+            VectorReal                rNormsAbs;                               /*!< Current selected absolute residual norms. */
+            VectorReal                rNormsAbsInit;                           /*!< Initial selected absolute residual norms. */
+            std::deque<VectorReal>    rNormsAbsHistory;                        /*!< Recent absolute residual-norm history. */
             std::deque<VectorReal>    eigVals_history;                            /*!< Recent Ritz-value history. */
             std::deque<Eigen::Index>  matvecs_history;                            /*!< Recent matrix-vector count history. */
             size_t                    max_history_size        = 5;                /*!< Maximum stored history length. */
@@ -228,7 +227,7 @@ namespace grit::form {
         /*! Combined AUTO saturation diagnostics. */
         struct AutoSaturationStatus {
             AutoSaturationInfo eigval;        /*!< Eigenvalue saturation diagnostic. */
-            AutoSaturationInfo rnorm;         /*!< Residual saturation diagnostic. */
+            AutoSaturationInfo rnorm_rel;         /*!< Residual saturation diagnostic. */
             bool               ready = false; /*!< Whether AUTO may use these diagnostics. */
         };
 
@@ -329,33 +328,33 @@ namespace grit::form {
          * @param Y Ritz values.
          * @param AV Products A V.
          * @param BV Products B V, or an empty block for standard problems.
-         * @param rNorms Output residual norms.
+         * @param rNormsAbs Output residual norms.
          * @return Residual block.
          */
         MatrixType get_residuals(const Eigen::Ref<const VectorReal> &Y, const Eigen::Ref<const MatrixType> &AV, const Eigen::Ref<const MatrixType> &BV,
-                                 VectorReal &rNorms);
+                                 VectorReal &rNormsAbs);
         /*!
-         * Residual-norm tolerance for the nth selected eigenpair.
+         * Absolute residual target for the nth selected eigenpair.
          * @param n Selected eigenpair index.
-         * @return Absolute tolerance used for this residual.
+         * @return Computed convergence target max(reltol * initial rNormAbs, abstol * scale).
          */
-        RealScalar rNormTol(Eigen::Index n) const;
-        /*! Residual-norm tolerances for all selected eigenpairs. */
-        VectorReal rNormTols() const;
+        RealScalar rNormAbsTarget(Eigen::Index n) const;
+        /*! Absolute residual targets for all selected eigenpairs. */
+        VectorReal rNormAbsTargets() const;
         /*!
-         * Relative residual scale for the nth selected eigenpair.
+         * Residual scale for the nth selected eigenpair.
          * @param n Selected eigenpair index.
-         * @return Scale used to turn an absolute residual into a relative residual.
+         * @return Scale used to turn an absolute residual into a rescaled residual.
          */
-        RealScalar relative_rNormScale(Eigen::Index n) const;
-        /*! Relative residual scales for all selected eigenpairs. */
-        VectorReal relative_rNormScales() const;
+        RealScalar rNormScale(Eigen::Index n) const;
+        /*! Residual scales for all selected eigenpairs. */
+        VectorReal rNormScales() const;
         /*!
-         * Convert absolute residual norms to relative residual norms.
-         * @param rNorms Absolute residual norms.
-         * @return Relative residual norms.
+         * Convert absolute residual norms to rescaled residual norms.
+         * @param rNormsAbs Absolute residual norms.
+         * @return Rescaled residual norms.
          */
-        VectorReal relative_rNorms(const VectorReal &rNorms) const;
+        VectorReal rNormsRel(const VectorReal &rNormsAbs) const;
         /*! Log10 residual-norm change per matrix-vector product. */
         RealScalar get_rNorms_log10_change_per_matvec();
         /*!
@@ -440,9 +439,9 @@ namespace grit::form {
          * @param V Output Ritz vectors.
          * @param AV Output products A V.
          * @param S Output residual block.
-         * @param rNorms Output residual norms.
+         * @param rNormsAbs Output residual norms.
          */
-        void extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &S, VectorReal &rNorms);
+        void extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &S, VectorReal &rNormsAbs);
         /*!
          * Extract Ritz vectors for a generalized problem.
          * @param optIdx Selected projected indices.
@@ -450,9 +449,9 @@ namespace grit::form {
          * @param AV Output products A V.
          * @param BV Output products B V.
          * @param S Output residual block.
-         * @param rNorms Output residual norms.
+         * @param rNormsAbs Output residual norms.
          */
-        void extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV, MatrixType &S, VectorReal &rNorms)
+        void extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV, MatrixType &S, VectorReal &rNormsAbs)
             requires(form_ == grit::Form::GENERALIZED);
         /*!
          * Finish generalized Ritz extraction with an order-preserving B-metric cleanup.
@@ -472,7 +471,7 @@ namespace grit::form {
          *
          * Control flow:
          * 1. Return unchanged for empty blocks or when the B inner product is disabled.
-         * 2. Check that V, AV, BV, S, rNorms, and optIdx describe the same Ritz block.
+         * 2. Check that V, AV, BV, S, rNormsAbs, and optIdx describe the same Ritz block.
          * 3. If V^* B V is not close enough to I, refresh BV and run order-preserving DGKS.
          * 4. Recompute residuals, residual norms, status.optIdx, and the matching T_evals
          *    entries for the surviving columns.
@@ -483,10 +482,10 @@ namespace grit::form {
          * @param AV Products A V, modified in place.
          * @param BV Products B V, modified in place.
          * @param S Residual block, modified in place.
-         * @param rNorms Residual norms, modified in place.
+         * @param rNormsAbs Residual norms, modified in place.
          */
         void finalize_bm_ritz_vectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV, MatrixType &S,
-                                      VectorReal &rNorms) requires(form_ == grit::Form::GENERALIZED);
+                                      VectorReal &rNormsAbs) requires(form_ == grit::Form::GENERALIZED);
         /*!
          * Orthonormalize projected eigenvectors in the projected metric.
          * @param Z Projected eigenvectors, modified in place.
@@ -535,9 +534,9 @@ namespace grit::form {
          * @param AV Output products A V.
          * @param BV Output products B V.
          * @param S Output residual block.
-         * @param rNorms Output residual norms.
+         * @param rNormsAbs Output residual norms.
          */
-        void refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV, MatrixType &S, VectorReal &rNorms)
+        void refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV, MatrixType &S, VectorReal &rNormsAbs)
             requires(form_ == grit::Form::GENERALIZED);
         /*!
          * Apply refined Rayleigh-Ritz extraction for a standard problem.
@@ -545,9 +544,9 @@ namespace grit::form {
          * @param V Output Ritz vectors.
          * @param AV Output products A V.
          * @param S Output residual block.
-         * @param rNorms Output residual norms.
+         * @param rNormsAbs Output residual norms.
          */
-        void refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &S, VectorReal &rNorms);
+        void refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &S, VectorReal &rNormsAbs);
         /*! Apply refined Rayleigh-Ritz extraction to the current selected vectors. */
         void refinedRitzVectors();
         /*! Prepare a solver run. */

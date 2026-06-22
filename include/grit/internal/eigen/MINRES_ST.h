@@ -9,7 +9,7 @@
 //   Copyright (C) 2025 David Aceituno Chavez <aceituno@kth.se>
 //   - Renamed the class MINRES -> MINRES_ST to avoid collision with the original.
 //   - Added optional stall termination logic based on history statistics.
-//   - Added diagnostics (rrnorm/deltax) and configurable correction checks.
+//   - Added diagnostics (rnorm_rel/deltax) and configurable correction checks.
 //   - Adjusted the stopping metric to use a consistent preconditioned residual norm (when enabled).
 //
 // This Source Code Form is subject to the terms of the Mozilla
@@ -236,13 +236,13 @@ namespace Eigen {
                 bool rrnorm_has_converged  = residualNorm2 < threshold2;
 
                 static constexpr RealScalar rrnorm_floor = std::numeric_limits<RealScalar>::denorm_min();
-                RealScalar                  rrnorm       = std::sqrt(residualNorm2 / rhsNorm2); // Relative residual norm
+                RealScalar                  rnorm_rel       = std::sqrt(residualNorm2 / rhsNorm2); // Relative residual norm
 
-                rrnorm            = std::max(rrnorm, rrnorm_floor);
+                rnorm_rel            = std::max(rnorm_rel, rrnorm_floor);
                 RealScalar deltax = RealScalar{1};
 
-                if(!std::isfinite(rrnorm)) {
-                    std::printf(" -- minres: rrnorm is not finite ... quitting\n");
+                if(!std::isfinite(rnorm_rel)) {
+                    std::printf(" -- minres: rnorm_rel is not finite ... quitting\n");
                     break;
                 }
 
@@ -260,7 +260,7 @@ namespace Eigen {
 
                 static constexpr RealScalar tiny = std::numeric_limits<RealScalar>::denorm_min();
                 if(iters >= rate_rrnorm and iters % rate_rrnorm == 0) {
-                    rrnorm_history.push_back(-std::log10(std::max(rrnorm, tiny)));
+                    rrnorm_history.push_back(-std::log10(std::max(rnorm_rel, tiny)));
                     while(rrnorm_history.size() > max_history_size) rrnorm_history.pop_front();
                 }
                 auto refresh_deltax = [&x, &deltax, &step, &p]() {
@@ -282,7 +282,7 @@ namespace Eigen {
                     auto rr_stats = get_stats(rrnorm_history, RealScalar{rate_rrnorm});
                     auto dx_stats = get_stats(deltax_history, RealScalar{rate_deltax});
 
-                    bool rrnorm_has_made_progress = rrnorm < rrnorm0 * std::max(tol_error, RealScalar{0.63f});
+                    bool rrnorm_has_made_progress = rnorm_rel < rrnorm0 * std::max(tol_error, RealScalar{0.63f});
                     bool rrnorm_large_history     = rrnorm_history.size() >= max_history_size / 2;
                     bool rrnorm_slope_issmall     = rrnorm_large_history and std::abs(rr_stats.slope_avg) < RealScalar{1e-4f};
                     bool rrnorm_slope_isclean     = rrnorm_large_history and std::abs(rr_stats.slope_sdv) < RealScalar{1e-3f};
@@ -303,14 +303,14 @@ namespace Eigen {
                                 std::printf("MINRES k: %4ld |rk|=%.3e |r0|=%.3e |rk|/|r0|=%.3e δ=%.3e log10 "
                                             "| rr avg: %.3e  std: %.3e  rel: %.3e sla: %.3e sls: %.3e "
                                             "| dx avg: %.3e  std: %.3e  rel: %.3e sla: %.3e sls: %.3e",
-                                            iters, std::sqrt(residualNorm2), std::sqrt(rhsNorm2), rrnorm, deltax,                 //
+                                            iters, std::sqrt(residualNorm2), std::sqrt(rhsNorm2), rnorm_rel, deltax,                 //
                                             rr_stats.avg, rr_stats.sdv, rr_stats.rel_sdv, rr_stats.slope_avg, rr_stats.slope_sdv, //
                                             dx_stats.avg, dx_stats.sdv, dx_stats.rel_sdv, dx_stats.slope_avg, dx_stats.slope_sdv  //
                                 );
                                 has_printed = true;
                             }
                             if(minres_has_saturated) {
-                                // std::printf(" -- minres has saturated (rrnorm %d, deltax %d)\n", rrnorm_has_saturated, deltax_has_saturated);
+                                // std::printf(" -- minres has saturated (rnorm_rel %d, deltax %d)\n", rrnorm_has_saturated, deltax_has_saturated);
                                 // break;
                             } else if(minres_has_converged >= 1) {
                                 // std::printf(" -- minres has converged for %d iters\n", minres_has_converged);

@@ -80,7 +80,7 @@ axes include:
 --ncv=[8,16,32]
 --block-size=[1,2]
 --ritz=[SR,LM]
---tol=[1e-8,1e-10]
+--abstol=[1e-8,1e-10]
 --use-b-inner-product=[false,true]
 ```
 
@@ -102,7 +102,7 @@ Save eigenvectors:
   --matrix-a-path bench/data/bcsstk19/bcsstk19.mtx \
   --matrix-b-path bench/data/bcsstm19/bcsstm19.mtx \
   --residual-correction=cheap-olsen \
-  --tol=1e-3 \
+  --abstol=1e-3 \
   --save-eigvec=bench/data/bcs19/warmstart.h5
 ```
 
@@ -115,7 +115,7 @@ Use them as an initial guess:
   --matrix-b-path bench/data/bcsstm19/bcsstm19.mtx \
   --initial-guess=bench/data/bcs19/warmstart.h5 \
   --residual-correction=jacobi-davidson \
-  --tol=1e-5
+  --abstol=1e-5
 ```
 
 Saved eigvecs are stored under `/grit/generalized/<algo>/eigvecs`.

@@ -37,7 +37,7 @@ namespace Eigen {
             typedef typename Dest::RealScalar  RealScalar;
             typedef typename Dest::Scalar      Scalar;
             typedef Matrix<Scalar, Dynamic, 1> VectorType;
-            RealScalar                         tol      = tol_error;
+            RealScalar                         abstol      = tol_error;
             Index                              maxIters = iters;
 
             Index      n  = mat.cols();
@@ -114,7 +114,7 @@ namespace Eigen {
             error_history.push_back(error);
             // END BiCGSTAB -> BiCGSTAB_ST
 
-            while(r_norm > tol && i < maxIters) {
+            while(r_norm > abstol && i < maxIters) {
                 Scalar rho_old = rho;
                 rho            = r0.dot(r);
                 if(Eigen::numext::abs(rho) / Eigen::numext::maxi(r0_norm, r_norm) < eps * Eigen::numext::mini(r0_norm, r_norm)) {
@@ -164,10 +164,10 @@ namespace Eigen {
                 r_norm  = r.stableNorm();
 
                 // BEGIN BiCGSTAB -> BiCGSTAB_ST
-                RealScalar rrnorm = r_norm / rhs_norm; // Relative residual norm
-                error_history.push_back(-std::log10(rrnorm));
-                bool rrnorm_has_converged     = rrnorm < tol_error;
-                bool rrnorm_has_made_progress = rrnorm < std::max(tol_error, RealScalar{0.1f});
+                RealScalar rnorm_rel = r_norm / rhs_norm; // Relative residual norm
+                error_history.push_back(-std::log10(rnorm_rel));
+                bool rrnorm_has_converged     = rnorm_rel < tol_error;
+                bool rrnorm_has_made_progress = rnorm_rel < std::max(tol_error, RealScalar{0.1f});
                 bool bicgstab_has_converged   = rrnorm_has_converged;
 
                 if(i > 20 and i % 20 == 0) {
@@ -178,7 +178,7 @@ namespace Eigen {
                     bool bicgstab_has_saturated = rrnorm_has_saturated and rrnorm_has_made_progress;
                     // auto error_prev = error_history[error_history.size()-2];
                     // auto relnow = std::abs(error - error_prev)/error;
-                    // std::printf("iter %4ld tol_error: %.5e rnorm: %.5e rhsNorm: %.5e error: %.5e (avg: %.5e  sdv: %.5e  rel: %.5e relnow: %.5e slope:
+                    // std::printf("iter %4ld tol_error: %.5e rnorm_abs: %.5e rhsNorm: %.5e error: %.5e (avg: %.5e  sdv: %.5e  rel: %.5e relnow: %.5e slope:
                     // %.5e)\n",
                     //  i, tol_error, std::sqrt(residualNorm2), std::sqrt(rhsNorm2), error_history.back(),  avg, sdv, rel, relnow, slope);
 

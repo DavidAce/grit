@@ -25,19 +25,19 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &S, VectorReal &rNorms) {
+    void base<Scalar, form_>::extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &S, VectorReal &rNormsAbs) {
         auto       token_extract_ritz = status.time_extract_ritz.tic_token();
         MatrixType Z                  = T_evecs(Eigen::placeholders::all, optIdx);
         VectorReal Y                  = T_evals(optIdx);
 
         V  = Q * Z;
         AV = AQ * Z;
-        S  = get_residuals(Y, AV, V, rNorms);
+        S  = get_residuals(Y, AV, V, rNormsAbs);
     }
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV, MatrixType &S,
-                                                 VectorReal &rNorms) requires(form_ == grit::Form::GENERALIZED)
+                                                 VectorReal &rNormsAbs) requires(form_ == grit::Form::GENERALIZED)
     {
         auto       token_extract_ritz = status.time_extract_ritz.tic_token();
         MatrixType Z                  = T_evecs(Eigen::placeholders::all, optIdx);
@@ -46,8 +46,8 @@ namespace grit::form {
         V.noalias()  = Q * Z;
         AV.noalias() = AQ * Z;
         BV.noalias() = BQ * Z;
-        S            = get_residuals(Y, AV, BV, rNorms);
-        finalize_bm_ritz_vectors(optIdx, V, AV, BV, S, rNorms);
+        S            = get_residuals(Y, AV, BV, rNormsAbs);
+        finalize_bm_ritz_vectors(optIdx, V, AV, BV, S, rNormsAbs);
     }
 
     template<typename Scalar, grit::Form form_>
@@ -62,16 +62,16 @@ namespace grit::form {
 
         if(cfg().use_refined_rayleigh_ritz) {
             if constexpr(form_ == grit::Form::GENERALIZED) {
-                refinedRitzVectors(status.optIdx, V, AV, BV, S, status.rNorms);
+                refinedRitzVectors(status.optIdx, V, AV, BV, S, status.rNormsAbs);
             } else {
-                refinedRitzVectors(status.optIdx, V, AV, S, status.rNorms);
+                refinedRitzVectors(status.optIdx, V, AV, S, status.rNormsAbs);
                 BV = V;
             }
         } else {
             if constexpr(form_ == grit::Form::GENERALIZED) {
-                extractRitzVectors(status.optIdx, V, AV, BV, S, status.rNorms);
+                extractRitzVectors(status.optIdx, V, AV, BV, S, status.rNormsAbs);
             } else {
-                extractRitzVectors(status.optIdx, V, AV, S, status.rNorms);
+                extractRitzVectors(status.optIdx, V, AV, S, status.rNormsAbs);
                 BV = V;
             }
         }
@@ -85,30 +85,27 @@ namespace grit::form {
             AV.conservativeResize(Eigen::NoChange, cfg().block_size);
             BV.conservativeResize(Eigen::NoChange, cfg().block_size);
             S.conservativeResize(Eigen::NoChange, cfg().block_size);
-            status.rNorms.conservativeResize(cfg().block_size);
+            status.rNormsAbs.conservativeResize(cfg().block_size);
         }
 
-        Eigen::Index rows = std::min(cfg().nev, status.rNorms.size());
-        if(status.rNorms_init.size() != rows || status.rNormScales_init.size() != rows) {
-            status.rNorms_init      = status.rNorms.topRows(rows).eval();
-            status.rNormScales_init = relative_rNormScales().topRows(rows).eval();
-        }
+        Eigen::Index rows = std::min(cfg().nev, status.rNormsAbs.size());
+        if(status.rNormsAbsInit.size() != rows) status.rNormsAbsInit = status.rNormsAbs.topRows(rows).eval();
     }
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::finalize_bm_ritz_vectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV,
-                                                       MatrixType &S, VectorReal &rNorms) requires(form_ == grit::Form::GENERALIZED)
+                                                       MatrixType &S, VectorReal &rNormsAbs) requires(form_ == grit::Form::GENERALIZED)
     {
         const Eigen::Index ritz_cols = V.cols();
         if(ritz_cols <= 0 || !cfg().use_b_inner_product) return;
         if(AV.cols() != ritz_cols || BV.cols() != ritz_cols) throw std::runtime_error("finalize_bm_ritz_vectors: Ritz block has inconsistent column counts");
         if(optIdx.size() < static_cast<size_t>(ritz_cols)) throw std::runtime_error("finalize_bm_ritz_vectors: fewer Ritz indices than vectors");
-        if(S.cols() < ritz_cols || rNorms.size() < ritz_cols) throw std::runtime_error("finalize_bm_ritz_vectors: fewer residual columns than vectors");
+        if(S.cols() < ritz_cols || rNormsAbs.size() < ritz_cols) throw std::runtime_error("finalize_bm_ritz_vectors: fewer residual columns than vectors");
 
         OrthMeta meta;
         meta.analyze_bm_orthonormality(V, BV);
-        RealScalar tol = std::max<RealScalar>(normTol * static_cast<RealScalar>(ritz_cols) * RealScalar{1000}, eps * static_cast<RealScalar>(V.rows()));
-        if(!std::isfinite(meta.symmError) || meta.symmError > tol) {
+        RealScalar abstol = std::max<RealScalar>(normTol * static_cast<RealScalar>(ritz_cols) * RealScalar{1000}, eps * static_cast<RealScalar>(V.rows()));
+        if(!std::isfinite(meta.symmError) || meta.symmError > abstol) {
             meta.maskPolicy = MaskPolicy::COMPRESS;
             meta.refresh_by = true;
             block_bm_orthonormalize(V, AV, BV, meta);
@@ -121,7 +118,7 @@ namespace grit::form {
             Y              = rq1.cwiseQuotient(rq2);
         }
 
-        S = get_residuals(Y, AV, BV, rNorms);
+        S = get_residuals(Y, AV, BV, rNormsAbs);
 
         status.optIdx.resize(static_cast<size_t>(V.cols()));
         for(Eigen::Index n = 0; n < V.cols(); ++n) {
@@ -180,7 +177,7 @@ namespace grit::form {
             } else {
                 Z_ref.col(j)            = Z.col(j);
                 RealScalar refinedRnorm = svd.singularValues()(min_idx);
-                if(log) log->warn("refinement failed on ritz vector {} | refined rnorm={:.5e} | info {} ", j, refinedRnorm, static_cast<int>(svd.info()));
+                if(log) log->warn("refinement failed on ritz vector {} | refined rnorm_abs={:.5e} | info {} ", j, refinedRnorm, static_cast<int>(svd.info()));
             }
         }
         return Z_ref;
@@ -321,7 +318,7 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV, MatrixType &S,
-                                                 VectorReal &rNorms) requires(form_ == grit::Form::GENERALIZED)
+                                                 VectorReal &rNormsAbs) requires(form_ == grit::Form::GENERALIZED)
     {
         auto       token_extract_ritz = status.time_extract_ritz.tic_token();
         VectorReal Y                  = T_evals(optIdx);
@@ -340,12 +337,12 @@ namespace grit::form {
             Y               = T_evals(optIdx);
         }
 
-        S = get_residuals(Y, AV, BV, rNorms);
-        finalize_bm_ritz_vectors(optIdx, V, AV, BV, S, rNorms);
+        S = get_residuals(Y, AV, BV, rNormsAbs);
+        finalize_bm_ritz_vectors(optIdx, V, AV, BV, S, rNormsAbs);
     }
 
     template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &S, VectorReal &rNorms) {
+    void base<Scalar, form_>::refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &S, VectorReal &rNormsAbs) {
         auto       token_extract_ritz = status.time_extract_ritz.tic_token();
         MatrixType Z                  = T_evecs(Eigen::placeholders::all, optIdx);
         VectorReal Y                  = T_evals(optIdx);
@@ -356,17 +353,17 @@ namespace grit::form {
 
         if(cfg().use_rayleigh_quotients_instead_of_evals) { Y = (V.adjoint() * AV).diagonal().real(); }
 
-        S = get_residuals(Y, AV, V, rNorms);
+        S = get_residuals(Y, AV, V, rNormsAbs);
     }
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::refinedRitzVectors() {
         if(!cfg().use_refined_rayleigh_ritz) return;
-        if(status.rNorms.size() == 0) throw std::runtime_error("refineRitzVectors() called before extractRitzVectors()");
+        if(status.rNormsAbs.size() == 0) throw std::runtime_error("refineRitzVectors() called before extractRitzVectors()");
         if constexpr(form_ == grit::Form::GENERALIZED) {
-            refinedRitzVectors(status.optIdx, V, AV, BV, S, status.rNorms);
+            refinedRitzVectors(status.optIdx, V, AV, BV, S, status.rNormsAbs);
         } else {
-            refinedRitzVectors(status.optIdx, V, AV, S, status.rNorms);
+            refinedRitzVectors(status.optIdx, V, AV, S, status.rNormsAbs);
         }
     }
 

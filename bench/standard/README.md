@@ -123,10 +123,10 @@ The following options are `gdplusk`-only and will be rejected for `lanczos` and
 
 `--residual-correction=auto` starts with cheap Olsen. Once cheap Olsen has
 dwelled for `--auto-min-dwell-iters` outer iterations and both the eigenvalue and derived
-relative-residual histories saturate, AUTO switches to Jacobi-Davidson. AUTO
-also switches to Jacobi-Davidson once the derived relative residual norm is below
+rescaled-residual histories saturate, AUTO switches to Jacobi-Davidson. AUTO
+also switches to Jacobi-Davidson once the derived rescaled residual norm is below
 `--auto-jd-start-rnorm-threshold`; set that option to `0` to disable this
-relative residual trigger.
+rescaled residual trigger.
 
 While Jacobi-Davidson is active, AUTO periodically forces one cheap-Olsen probe.
 If that probe improves the selected Ritz value by more than
@@ -142,7 +142,7 @@ The main AUTO controls are `--auto-sat-eigval-threshold`,
 magnitude in the recent history window, so `1e-3` means roughly that the recent
 Ritz values agree to about three significant digits.
 
-`--auto-sat-rnorm-threshold` is applied to derived relative residual norms, not
+`--auto-sat-rnorm-threshold` is applied to derived rescaled residual norms, not
 to the stored absolute residual norms. `--auto-cheap-probe-factor` deliberately
 uses the stored absolute residual norm squared as the improvement scale.
 
@@ -155,7 +155,7 @@ Save a partial cheap-Olsen solution:
   --algo gdplusk \
   --matrix-path bench/data/finance256/finance256.mtx \
   --residual-correction=cheap-olsen \
-  --tol=1e-3 \
+  --abstol=1e-3 \
   --save-eigvec=bench/data/finance256/warmstart.h5
 ```
 
@@ -167,7 +167,7 @@ Use it as the initial guess in a later run:
   --matrix-path bench/data/finance256/finance256.mtx \
   --initial-guess=bench/data/finance256/warmstart.h5 \
   --residual-correction=jacobi-davidson \
-  --tol=1e-5 \
+  --abstol=1e-5 \
   --refined-rayleigh-ritz
 ```
 

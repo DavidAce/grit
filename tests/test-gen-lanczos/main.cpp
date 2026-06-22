@@ -24,9 +24,9 @@ namespace {
     }
 
     template<typename VecA, typename VecB>
-    void require_close(const VecA &a, const VecB &b, double tol) {
+    void require_close(const VecA &a, const VecB &b, double abstol) {
         REQUIRE(a.size() == b.size());
-        for(Eigen::Index i = 0; i < a.size(); ++i) REQUIRE(std::abs(a(i) - b(i)) < tol);
+        for(Eigen::Index i = 0; i < a.size(); ++i) REQUIRE(std::abs(a(i) - b(i)) < abstol);
     }
 
     template<typename VecA, typename VecB>
@@ -84,7 +84,7 @@ TEST_CASE("generalized lanczos handles nos4 restart block search") {
     solver.config.block_size          = 2;
     solver.config.ritz                = grit::Ritz::SR;
     solver.config.max_iters           = 80;
-    solver.config.tol                 = 1e-9;
+    solver.config.abstol                 = 1e-9;
     solver.config.use_b_inner_product = false;
     solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 71));
     solver.run();
@@ -116,7 +116,7 @@ TEST_CASE("generalized lanczos supports retained restart basis on nos4") {
     solver.config.maxRetainBlocks     = 3;
     solver.config.ritz                = grit::Ritz::SR;
     solver.config.max_iters           = 80;
-    solver.config.tol                 = 1e-9;
+    solver.config.abstol                 = 1e-9;
     solver.config.use_b_inner_product = false;
     solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 171));
     solver.run();
@@ -146,7 +146,7 @@ TEST_CASE("generalized lanczos supports all Ritz targets on nos4") {
         solver.config.block_size          = 2;
         solver.config.ritz                = ritz;
         solver.config.max_iters           = 100;
-        solver.config.tol                 = 1e-9;
+        solver.config.abstol                 = 1e-9;
         solver.config.use_b_inner_product = true;
         solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 80 + static_cast<int>(ritz)));
         solver.run();
