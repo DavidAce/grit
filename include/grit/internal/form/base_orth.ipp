@@ -245,10 +245,11 @@ namespace grit::form {
         MatrixType reverse_gram   = BX.adjoint() * Y;
         RealScalar reverse_err    = reverse_gram.norm();
         RealScalar reverse_dotTol = gamma_n * BX.norm() * Y.norm();
-        RealScalar reverse_tol    = RealScalar{10} * std::max(m.orthTol, reverse_dotTol * cancellation_multiplier);
+        RealScalar reverse_cancel = bm_cancellation_multiplier(X, BX);
+        RealScalar reverse_tol    = RealScalar{10} * std::max({orthTol, reverse_dotTol * reverse_cancel, maskTol});
         if(reverse_err > reverse_tol && log) {
             log->warn("{}:{}: {}: reverse B-orthogonality diagnostic {:.5e} > tol {:.5e} | dotTol {:.5e} cancel_mult {:.5e}", location.file_name(),
-                      location.line(), location.function_name(), reverse_err, reverse_tol, reverse_dotTol, cancellation_multiplier);
+                      location.line(), location.function_name(), reverse_err, reverse_tol, reverse_dotTol, reverse_cancel);
         }
         if constexpr(grit::settings::debug_ortho) {
             if(orthError > RealScalar{1000} * finalTol)
