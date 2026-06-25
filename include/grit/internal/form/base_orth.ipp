@@ -4,6 +4,38 @@
 
 namespace grit::form {
     template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::RealScalar base<Scalar, form_>::bm_cancellation_multiplier(const Eigen::Ref<const MatrixType> &Y,
+                                                                                             const Eigen::Ref<const MatrixType> &BY) const {
+        if(Y.cols() == 0 || Y.rows() != BY.rows() || Y.cols() != BY.cols()) return RealScalar{1};
+
+        RealScalar local_rayleigh_scale = std::numeric_limits<RealScalar>::infinity();
+        for(Eigen::Index j = 0; j < Y.cols(); ++j) {
+            const RealScalar ynorm_sq = std::real(Y.col(j).dot(Y.col(j)));
+            const RealScalar denom    = std::max({std::abs(ynorm_sq), quotTolB, std::numeric_limits<RealScalar>::min()});
+            const RealScalar numer    = std::abs(Y.col(j).dot(BY.col(j)));
+            const RealScalar rq       = numer / denom;
+            if(std::isfinite(rq) && rq > RealScalar{0}) local_rayleigh_scale = std::min(local_rayleigh_scale, rq);
+        }
+        if(!std::isfinite(local_rayleigh_scale) || local_rayleigh_scale <= RealScalar{0}) local_rayleigh_scale = RealScalar{1};
+
+        const RealScalar ynorm          = Y.norm();
+        const RealScalar bynorm         = BY.norm();
+        const RealScalar observed_scale = ynorm > std::numeric_limits<RealScalar>::min() ? bynorm / ynorm : RealScalar{1};
+        RealScalar       operator_scale = RealScalar{1};
+        if constexpr(form_ == grit::Form::GENERALIZED) {
+            if(B) operator_scale = B->get().get_op_norm();
+        }
+
+        operator_scale = std::max({operator_scale, status.op_norm_estimate, observed_scale, RealScalar{1}});
+        if(!std::isfinite(operator_scale) || operator_scale <= RealScalar{0}) operator_scale = RealScalar{1};
+
+        const RealScalar multiplier_max = RealScalar{1} / std::sqrt(eps);
+        const RealScalar multiplier_raw = operator_scale / std::max(local_rayleigh_scale, std::numeric_limits<RealScalar>::min());
+
+        return std::clamp(std::max(RealScalar{1}, multiplier_raw), RealScalar{1}, multiplier_max);
+    }
+
+    template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::OrthMeta::analyze_l2_orthonormality(const Eigen::Ref<const MatrixType> &Y) {
         if(Y.cols() == 0) return;
         MatrixType I = MatrixType::Identity(Y.cols(), Y.cols());
@@ -17,16 +49,16 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::OrthMeta::analyze_b_orthonormality(const Eigen::Ref<const MatrixType> &Y, const Eigen::Ref<const MatrixType> &B_Y) {
-        analyze_bm_orthonormality(Y, B_Y);
+    void base<Scalar, form_>::OrthMeta::analyze_b_orthonormality(const Eigen::Ref<const MatrixType> &Y, const Eigen::Ref<const MatrixType> &BY) {
+        analyze_bm_orthonormality(Y, BY);
     }
 
     template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::OrthMeta::analyze_bm_orthonormality(const Eigen::Ref<const MatrixType> &Y, const Eigen::Ref<const MatrixType> &B_Y) {
-        if(Y.cols() != B_Y.cols() || Y.rows() != B_Y.rows()) return;
+    void base<Scalar, form_>::OrthMeta::analyze_bm_orthonormality(const Eigen::Ref<const MatrixType> &Y, const Eigen::Ref<const MatrixType> &BY) {
+        if(Y.cols() != BY.cols() || Y.rows() != BY.rows()) return;
         MatrixType I  = MatrixType::Identity(Y.cols(), Y.cols());
-        MatrixType G1 = Y.adjoint() * B_Y;
-        MatrixType G2 = B_Y.adjoint() * Y;
+        MatrixType G1 = Y.adjoint() * BY;
+        MatrixType G2 = BY.adjoint() * Y;
         Gram          = G1;
         Gram_symm     = (G1 + G2) * half;
         Gram_skew     = (G1 - G2) * half;
@@ -50,19 +82,18 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::OrthMeta::analyze_bm_orthogonality(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &B_X,
-                                                                 const Eigen::Ref<const MatrixType> &Y, const Eigen::Ref<const MatrixType> &B_Y) {
-        if(Y.cols() != B_Y.cols() || Y.rows() != B_Y.rows()) return;
-        if(X.cols() != B_X.cols() || X.rows() != B_X.rows()) return;
+    void base<Scalar, form_>::OrthMeta::analyze_bm_orthogonality(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &BX,
+                                                                 const Eigen::Ref<const MatrixType> &Y, const Eigen::Ref<const MatrixType> &BY) {
+        if(Y.cols() != BY.cols() || Y.rows() != BY.rows()) return;
+        if(X.cols() != BX.cols() || X.rows() != BX.rows()) return;
         if(Y.rows() != X.rows()) return;
 
-        MatrixType G1 = X.adjoint() * B_Y;
-        MatrixType G2 = B_X.adjoint() * Y;
+        MatrixType G1 = X.adjoint() * BY;
+        MatrixType G2 = BX.adjoint() * Y;
 
         Gram      = G1;
         Gram_symm = (G1 + G2) * half;
         Gram_skew = (G1 - G2) * half;
-
         orthError = Gram_symm.norm();
         symmError = orthError;
         skewError = Gram_skew.norm();
@@ -118,15 +149,15 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::assert_bm_orthonormal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &B_X, const OrthMeta &m,
+    void base<Scalar, form_>::assert_bm_orthonormal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &BX, const OrthMeta &m,
                                                     const std::source_location &location) {
         if(X.cols() == 0) return;
-        if(X.cols() != B_X.cols() || X.rows() != B_X.rows())
+        if(X.cols() != BX.cols() || X.rows() != BX.rows())
             throw std::runtime_error(
-                fmt::format("{}:{}: {}: X and B_X have incompatible dimensions", location.file_name(), location.line(), location.function_name()));
+                fmt::format("{}:{}: {}: X and BX have incompatible dimensions", location.file_name(), location.line(), location.function_name()));
 
-        MatrixType G1        = X.adjoint() * B_X;
-        MatrixType G2        = B_X.adjoint() * X;
+        MatrixType G1        = X.adjoint() * BX;
+        MatrixType G2        = BX.adjoint() * X;
         MatrixType Gram      = G1;
         MatrixType Gram_symm = (G1 + G2) * half;
         MatrixType Gram_skew = (G1 - G2) * half;
@@ -136,31 +167,34 @@ namespace grit::form {
         RealScalar skewError = Gram_skew.norm();
 
         Eigen::SelfAdjointEigenSolver<MatrixType> esG(Gram_symm);
-        VectorReal                                evG_abs = esG.eigenvalues().cwiseAbs();
-        RealScalar                                evG_max = evG_abs.size() > 0 ? evG_abs.maxCoeff() : RealScalar{1};
-        RealScalar                                evG_min = evG_abs.size() > 0 ? evG_abs.minCoeff() : RealScalar{1};
-        evG_max                                           = std::max(evG_max, eps);
-        evG_min                                           = std::max(evG_min, eps);
-        RealScalar normG_max                              = std::sqrt(evG_max);
 
-        RealScalar xnorm     = X.norm();
-        RealScalar bxnorm    = B_X.norm();
-        RealScalar c_abs     = static_cast<RealScalar>(X.size());
-        RealScalar c_rel     = static_cast<RealScalar>(X.size());
-        RealScalar t_abs     = c_abs * eps * (xnorm + bxnorm);
-        RealScalar t_rel     = c_rel * std::sqrt(eps) * normG_max;
-        RealScalar kappaG    = evG_max / evG_min;
-        RealScalar kappaGTol = RealScalar{20} * eps * kappaG;
-        RealScalar maskTol   = std::isfinite(m.maskTol) ? m.maskTol : orthTol;
-        RealScalar finalTol  = std::max({t_abs, t_rel, orthTol, kappaGTol, maskTol}) * RealScalar{10};
+        VectorReal evG_abs = esG.eigenvalues().cwiseAbs();
+        RealScalar evG_max = evG_abs.size() > 0 ? evG_abs.maxCoeff() : RealScalar{1};
+        RealScalar evG_min = evG_abs.size() > 0 ? evG_abs.minCoeff() : RealScalar{1};
+        evG_max            = std::max(evG_max, eps);
+        evG_min            = std::max(evG_min, eps);
+
+        RealScalar one     = RealScalar{1};
+        RealScalar xnorm   = X.norm();
+        RealScalar bxnorm  = BX.norm();
+        RealScalar xrows   = static_cast<RealScalar>(X.rows());
+        RealScalar gamma_n = xrows * eps / std::max(one - xrows * eps, eps);
+        // The raw dot-product floor assumes B X lives at the same scale as X.
+        // Inflate it when the B-product is cancellation dominated.
+        const RealScalar cancellation_multiplier = bm_cancellation_multiplier(X, BX);
+        const RealScalar dotTol                  = gamma_n * cancellation_multiplier * xnorm * bxnorm;
+        const RealScalar kappaG                  = evG_max / evG_min;
+        const RealScalar kappaGTol               = RealScalar{20} * eps * kappaG;
+        const RealScalar maskTol                 = std::isfinite(m.maskTol) ? m.maskTol : orthTol;
+        const RealScalar finalTol                = std::max({orthTol, dotTol, kappaGTol, maskTol}) * RealScalar{10};
 
         if(skewError > RealScalar{1e-2f} && log) {
             log->warn("{}:{}: {}: skew-Hermitian B Gram diagnostic {:.5e} | orth {:.5e} symm {:.5e}", location.file_name(), location.line(),
                       location.function_name(), skewError, orthError, symmError);
         }
         if(symmError > finalTol && log) {
-            log->warn("{}:{}: {}: matrix is not B-orthonormal: error {:.5e} > tol {:.5e} | symm {:.5e} skew {:.5e}", location.file_name(), location.line(),
-                      location.function_name(), orthError, finalTol, symmError, skewError);
+            log->warn("{}:{}: {}: matrix is not B-orthonormal: error {:.5e} > tol {:.5e} | symm {:.5e} skew {:.5e} | dotTol {:.5e} kappaG {:.5e}",
+                      location.file_name(), location.line(), location.function_name(), orthError, finalTol, symmError, skewError, dotTol, kappaG);
         }
         if(symmError > finalTol && orthError > RealScalar{1000} * finalTol)
             throw std::runtime_error(fmt::format("{}:{}: {}: matrix is not B-orthonormal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
@@ -168,24 +202,60 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::assert_bm_orthogonal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &B_Y, const OrthMeta &m,
+    void base<Scalar, form_>::assert_bm_orthogonal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &BX,
+                                                   const Eigen::Ref<const MatrixType> &Y, const Eigen::Ref<const MatrixType> &BY, const OrthMeta &m,
                                                    const std::source_location &location) {
-        if(X.cols() == 0 || B_Y.cols() == 0) return;
+        if(X.cols() == 0 || BY.cols() == 0) return;
+        if(X.cols() != BX.cols() || X.rows() != BX.rows())
+            throw std::runtime_error(
+                fmt::format("{}:{}: {}: X and BX have incompatible dimensions", location.file_name(), location.line(), location.function_name()));
+        if(Y.cols() != BY.cols() || Y.rows() != BY.rows())
+            throw std::runtime_error(
+                fmt::format("{}:{}: {}: Y and BY have incompatible dimensions", location.file_name(), location.line(), location.function_name()));
 
-        MatrixType Gram      = X.adjoint() * B_Y;
+        MatrixType Gram      = X.adjoint() * BY;
         RealScalar orthError = Gram.norm();
+        RealScalar one       = RealScalar{1};
+        RealScalar xrows     = static_cast<RealScalar>(X.rows());
         RealScalar xnorm     = X.norm();
-        RealScalar bynorm    = B_Y.norm();
-        RealScalar bnorm     = std::isfinite(status.op_norm_estimate) ? status.op_norm_estimate : RealScalar{1};
-        RealScalar t_abs     = orthTol * static_cast<RealScalar>(X.cols()) * (xnorm + bynorm);
-        RealScalar bmTol     = orthTol * static_cast<RealScalar>(X.cols()) * bnorm;
-        RealScalar maskTol   = std::isfinite(m.maskTol) ? m.maskTol : orthTol;
-        RealScalar finalTol  = std::max({t_abs, orthTol, bmTol, maskTol}) * RealScalar{10};
+        RealScalar bynorm    = BY.norm();
+        RealScalar gamma_n   = xrows * eps / std::max(one - xrows * eps, eps);
+        ;
+        // Same idea as in the orthonormality check: inflate the dot-product floor
+        // when the local B-product appears to be cancellation dominated.
+        const RealScalar cancellation_multiplier = bm_cancellation_multiplier(Y, BY);
+        const RealScalar dotTol                  = gamma_n * cancellation_multiplier * xnorm * bynorm;
+        const RealScalar maskTol                 = std::isfinite(m.maskTol) ? m.maskTol : orthTol;
+        const RealScalar finalTol                = std::max({orthTol, dotTol, maskTol}) * RealScalar{10};
+        RealScalar       metric_cond             = RealScalar{1};
 
-        if(orthError > finalTol && log)
-            log->warn("{}:{}: {}: matrices are not B-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(), location.function_name(),
-                      orthError, finalTol);
-        if(orthError > RealScalar{1000} * finalTol)
+        if(orthError > finalTol && log) {
+            MatrixType Gxx = X.adjoint() * BX;
+            Gxx            = (Gxx + Gxx.adjoint()).eval() * half;
+            Eigen::SelfAdjointEigenSolver<MatrixType> esG(Gxx);
+            if(esG.info() == Eigen::Success && esG.eigenvalues().size() > 0) {
+                VectorReal ev_abs = esG.eigenvalues().cwiseAbs();
+                RealScalar ev_max = std::max(ev_abs.maxCoeff(), eps);
+                RealScalar ev_min = std::max(ev_abs.minCoeff(), eps);
+                metric_cond       = ev_max / ev_min;
+            }
+            log->warn("{}:{}: {}: matrices are not B-orthogonal: error {:.5e} > tol {:.5e} | dotTol {:.5e} kappaG {:.5e}", location.file_name(),
+                      location.line(), location.function_name(), orthError, finalTol, dotTol, metric_cond);
+        }
+        MatrixType reverse_gram   = BX.adjoint() * Y;
+        RealScalar reverse_err    = reverse_gram.norm();
+        RealScalar reverse_dotTol = gamma_n * BX.norm() * Y.norm();
+        RealScalar reverse_tol    = RealScalar{10} * std::max(m.orthTol, reverse_dotTol * cancellation_multiplier);
+        if(reverse_err > reverse_tol && log) {
+            log->warn("{}:{}: {}: reverse B-orthogonality diagnostic {:.5e} > tol {:.5e} | dotTol {:.5e} cancel_mult {:.5e}", location.file_name(),
+                      location.line(), location.function_name(), reverse_err, reverse_tol, reverse_dotTol, cancellation_multiplier);
+        }
+        if constexpr(grit::settings::debug_ortho) {
+            if(orthError > RealScalar{1000} * finalTol)
+                throw std::runtime_error(fmt::format("{}:{}: {}: matrices are not B-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(),
+                                                     location.line(), location.function_name(), orthError, finalTol));
+        }
+        if(!std::isfinite(orthError))
             throw std::runtime_error(fmt::format("{}:{}: {}: matrices are not B-orthogonal: error {:.5e} > tol {:.5e}", location.file_name(), location.line(),
                                                  location.function_name(), orthError, finalTol));
     }
@@ -492,12 +562,7 @@ namespace grit::form {
             auto token_orth_refresh = status.time_orth_refresh.tic_token();
             AY                      = MultA(Y);
         }
-        assert_bm_orthogonal(X, BY, m);
-        MatrixType reverse_gram = BX.adjoint() * Y;
-        RealScalar reverse_err  = reverse_gram.norm();
-        if(reverse_err > m.orthTol && log) {
-            log->warn("block_bm_orthogonalize: reverse B-orthogonality diagnostic {:.5e} > tol {:.5e}", reverse_err, m.orthTol);
-        }
+        assert_bm_orthogonal(X, BX, Y, BY, m);
     }
 
     template<typename Scalar, grit::Form form_>
@@ -608,8 +673,7 @@ namespace grit::form {
         MatrixLType G;
         RealLScalar symmError;
         template<typename Scalar>
-        BmEigOrthoStepMeta(Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> &Y_Scalar,
-                           Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> &BY_Scalar)
+        BmEigOrthoStepMeta(Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> &Y_Scalar, Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> &BY_Scalar)
             : Y(Y_Scalar.template cast<LScalar>()), BY(BY_Scalar.template cast<LScalar>()) {}
     };
 
@@ -617,7 +681,7 @@ namespace grit::form {
     void do_bm_eig_orthonormalization_step(
         BmEigOrthoStepMeta<LScalar> &m,
         std::function<Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>(const Eigen::Ref<const Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>> &)>
-                                                  applyB,
+                                                     applyB,
         [[maybe_unused]] const Logger::LoggerHandle &log) {
         using RealLScalar = typename BmEigOrthoStepMeta<LScalar>::RealLScalar;
         using MatrixLType = typename BmEigOrthoStepMeta<LScalar>::MatrixLType;
@@ -686,8 +750,8 @@ namespace grit::form {
         Y  = (Y * W).eval();
         BY = (BY * W).eval();
         if(log && log->should_log(spdlog::level::debug)) {
-            MatrixLType B_YW      = applyB(Y.template cast<Scalar>()).template cast<LScalar>();
-            MatrixLType Delta     = B_YW - BY;
+            MatrixLType BYW       = applyB(Y.template cast<Scalar>()).template cast<LScalar>();
+            MatrixLType Delta     = BYW - BY;
             MatrixLType E_predict = Y.adjoint() * Delta;
             log->debug("do_bm_eig_orthonormalization_step: refreshed BY mismatch {:.4e} | predicted Gram error {:.4e}", Delta.norm(), E_predict.norm());
         }
@@ -783,8 +847,8 @@ namespace grit::form {
             assert_finite();
 
             if(log && log->should_log(spdlog::level::trace))
-                log->trace("block_bm_orthonormalize_eig: eig rep {} | orthError {:.4e} symmError {:.4e} skewError {:.4e} | tol {:.5e}", rep,
-                           m.orthError, m.symmError, m.skewError, normTol);
+                log->trace("block_bm_orthonormalize_eig: eig rep {} | orthError {:.4e} symmError {:.4e} skewError {:.4e} | tol {:.5e}", rep, m.orthError,
+                           m.symmError, m.skewError, normTol);
         }
         if(m.skewError >= RealScalar{1e-3f} && log) {
             log->warn("block_bm_orthonormalize_eig: large skew error on rep {} | orthError {:.4e} symmError {:.4e} skewError {:.4e} | cols {}", rep,

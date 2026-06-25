@@ -115,15 +115,15 @@ namespace grit::form {
             /*!
              * Analyze B-orthonormality using Y and B Y.
              * @param Y Block to check.
-             * @param B_Y Product B Y.
+             * @param BY Product B Y.
              */
-            void analyze_b_orthonormality(const Eigen::Ref<const MatrixType> &Y, const Eigen::Ref<const MatrixType> &B_Y);
+            void analyze_b_orthonormality(const Eigen::Ref<const MatrixType> &Y, const Eigen::Ref<const MatrixType> &BY);
             /*!
              * Analyze B-metric orthonormality using Y and B Y.
              * @param Y Block to check.
-             * @param B_Y Product B Y.
+             * @param BY Product B Y.
              */
-            void analyze_bm_orthonormality(const Eigen::Ref<const MatrixType> &Y, const Eigen::Ref<const MatrixType> &B_Y);
+            void analyze_bm_orthonormality(const Eigen::Ref<const MatrixType> &Y, const Eigen::Ref<const MatrixType> &BY);
             /*!
              * Analyze l2 orthogonality between X and Y.
              * @param X First block.
@@ -133,11 +133,11 @@ namespace grit::form {
             /*!
              * Analyze B-metric orthogonality between X and Y.
              * @param X First block.
-             * @param B_X Product B X.
+             * @param BX Product B X.
              * @param Y Second block.
              * @param B_Y Product B Y.
              */
-            void analyze_bm_orthogonality(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &B_X, const Eigen::Ref<const MatrixType> &Y,
+            void analyze_bm_orthogonality(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &BX, const Eigen::Ref<const MatrixType> &Y,
                                           const Eigen::Ref<const MatrixType> &B_Y);
         };
 
@@ -587,22 +587,38 @@ namespace grit::form {
         void assert_l2_orthogonal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &Y, const OrthMeta &m,
                                   const std::source_location &location = std::source_location::current());
         /*!
+         * Estimate how much the raw dot-product floor should be inflated for a B-product block.
+         *
+         * The returned value is an inflation factor >= 1. It compares a practical operator-scale
+         * estimate against the smallest finite local B-Rayleigh scale seen in the block. The ratio
+         * is a proxy for how much cancellation the B product is hiding from the dot products used
+         * by the orthogonality tests, so the result is applied directly as a tolerance multiplier.
+         *
+         * @param Y Block used for the local B-Rayleigh scale.
+         * @param BY Product B Y.
+         * @return Cancellation multiplier for the B-metric tolerance floor.
+         */
+        RealScalar bm_cancellation_multiplier(const Eigen::Ref<const MatrixType> &Y, const Eigen::Ref<const MatrixType> &BY) const;
+        /*!
          * Assert B-metric orthonormality using stored diagnostics.
          * @param X Block to check.
-         * @param B_X Product B X.
+         * @param BX Product B X.
          * @param m Orthogonalization diagnostics.
          * @param location Source location used in the error message.
          */
-        void assert_bm_orthonormal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &B_X, const OrthMeta &m,
+        void assert_bm_orthonormal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &BX, const OrthMeta &m,
                                    const std::source_location &location = std::source_location::current());
         /*!
          * Assert B-metric orthogonality using stored diagnostics.
          * @param X First block.
-         * @param B_Y Product B Y.
+         * @param BX Product B X.
+         * @param Y Second block.
+         * @param BY Product B Y.
          * @param m Orthogonalization diagnostics.
          * @param location Source location used in the error message.
          */
-        void assert_bm_orthogonal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &B_Y, const OrthMeta &m,
+        void assert_bm_orthogonal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &BX, const Eigen::Ref<const MatrixType> &Y,
+                                  const Eigen::Ref<const MatrixType> &BY, const OrthMeta &m,
                                   const std::source_location &location = std::source_location::current());
         /*!
          * Keep only columns selected by the mask.

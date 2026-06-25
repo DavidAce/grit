@@ -263,6 +263,86 @@ TEST_CASE("B-metric orthonormality check does not throw on skew-only Gram error"
     REQUIRE_NOTHROW(solver.assert_bm_orthonormal(X, B_X, meta));
 }
 
+TEST_CASE("B-metric orthogonality check accepts cancellation-scaled defects") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    constexpr double op_scale = 1e4;
+    Matrix           A_matrix = Matrix::Identity(4, 4);
+    Matrix           B_matrix = op_scale * Matrix::Identity(4, 4);
+
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+    auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
+    B.set_op_norm(op_scale);
+
+    grit::generalized::gdplusk<double> solver(A, B);
+    solver.config.use_b_inner_product = true;
+    solver.setLogger(spdlog::level::off);
+
+    Matrix X  = Matrix::Zero(4, 1);
+    Matrix BX = Matrix::Zero(4, 1);
+    Matrix BY = Matrix::Zero(4, 1);
+    X(0, 0)   = 2.0e4;
+    BX(0, 0)  = 1.0 / X(0, 0);
+    BY(0, 0)  = 5.0e-13;
+    BY(1, 0)  = 2.0e-4;
+
+    Matrix Y = Matrix::Zero(4, 1);
+    Y(0, 0)  = 1.0e4;
+
+    const double gamma_n = static_cast<double>(X.rows()) * std::numeric_limits<double>::epsilon() /
+                           (1.0 - static_cast<double>(X.rows()) * std::numeric_limits<double>::epsilon());
+    const double cancellation_multiplier = solver.bm_cancellation_multiplier(Y, BY);
+    const double dotTol    = gamma_n * X.norm() * BY.norm();
+    const double scaledTol = 10.0 * std::max(solver.orthTol, dotTol * cancellation_multiplier);
+    const double oldTol    = 10.0 * std::max({solver.orthTol * static_cast<double>(X.cols()) * (X.norm() + BY.norm()), solver.orthTol,
+                                           solver.orthTol * static_cast<double>(X.cols()) * op_scale});
+    const double orthError = (X.adjoint() * BY).norm();
+
+    grit::generalized::gdplusk<double>::OrthMeta meta;
+    REQUIRE(orthError > oldTol);
+    REQUIRE(orthError < scaledTol);
+    REQUIRE_NOTHROW(solver.assert_bm_orthogonal(X, BX, Y, BY, meta));
+}
+
+TEST_CASE("B-metric orthonormality check scales by local Rayleigh quotient") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    constexpr double op_scale = 1e6;
+    Matrix           A_matrix = Matrix::Identity(4, 4);
+    Matrix           B_matrix = op_scale * Matrix::Identity(4, 4);
+
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+    auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
+    B.set_op_norm(op_scale);
+
+    grit::generalized::gdplusk<double> solver(A, B);
+    solver.config.use_b_inner_product = true;
+    solver.setLogger(spdlog::level::off);
+
+    Matrix X = Matrix::Zero(4, 1);
+    X(0, 0)  = 1.0e4;
+
+    Matrix B_X = Matrix::Zero(4, 1);
+    B_X(0, 0)  = (1.0 + 1.0e-8) / X(0, 0);
+
+    grit::generalized::gdplusk<double>::OrthMeta meta;
+
+    const double gamma_n = static_cast<double>(X.rows()) * std::numeric_limits<double>::epsilon() /
+                           (1.0 - static_cast<double>(X.rows()) * std::numeric_limits<double>::epsilon());
+    const double rq       = std::abs(X.col(0).dot(B_X.col(0))) / X.col(0).squaredNorm();
+    const double cancellation_multiplier = std::clamp(op_scale / rq, 1.0, 1.0 / std::sqrt(std::numeric_limits<double>::epsilon()));
+    const double dotTol    = gamma_n * X.norm() * B_X.norm();
+    const double scaledTol = 10.0 * std::max(solver.orthTol, dotTol * cancellation_multiplier);
+    const double symmError = std::abs((X.adjoint() * B_X)(0, 0) - 1.0);
+
+    REQUIRE(cancellation_multiplier > 1.0);
+    REQUIRE(symmError < scaledTol);
+    REQUIRE_NOTHROW(solver.assert_bm_orthonormal(X, B_X, meta));
+
+    B_X(0, 0) = 1.02 / X(0, 0);
+    REQUIRE_THROWS(solver.assert_bm_orthonormal(X, B_X, meta));
+}
+
 TEST_CASE("B-metric eig orthonormalizer compresses and normalizes dependent blocks") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
