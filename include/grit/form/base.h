@@ -157,14 +157,19 @@ namespace grit::form {
             Eigen::Index              num_outer_iters_last_restart     = 0;       /*!< Outer iteration count at the last restart. */
             Eigen::Index              num_inner_iters                  = 0;       /*!< Inner correction iterations in the last outer iteration. */
             Eigen::Index              num_inner_iters_prev             = 0;       /*!< Inner correction iterations in the previous outer iteration. */
+            Eigen::Index              num_inner_iters_total            = 0;       /*!< Total inner correction iterations. */
             Eigen::Index              num_matvecs_inner    = 0;                   /*!< Matrix-vector products in the last inner solve. */
+            Eigen::Index              num_matvecs_inner_total = 0;                /*!< Total inner matrix-vector products. */
             Eigen::Index              num_jdops_inner      = 0;                   /*!< Jacobi-Davidson operator applications in the last inner solve. */
+            Eigen::Index              num_jdops_inner_total = 0;                  /*!< Total inner Jacobi-Davidson operator applications. */
             Eigen::Index              num_matvecs          = 0;                   /*!< Matrix-vector products in the last outer iteration. */
             Eigen::Index              num_matvecs_total    = 0;                   /*!< Total matrix-vector products. */
             Eigen::Index              num_precond          = 0;                   /*!< Preconditioner applications in the last outer iteration. */
             Eigen::Index              num_precond_inner    = 0;                   /*!< Preconditioner applications in the last inner solve. */
+            Eigen::Index              num_precond_inner_total = 0;                /*!< Total inner preconditioner applications. */
             Eigen::Index              num_precond_total    = 0;                   /*!< Total preconditioner applications. */
             tid::ur                   time_elapsed;                               /*!< Total solver timer. */
+            tid::ur                   time_inner_total;                           /*!< Total inner correction timer. */
             tid::ur                   time_matvecs;                               /*!< Timer for matrix-vector products in the last outer iteration. */
             tid::ur                   time_matvecs_inner;                         /*!< Timer for matrix-vector products in the last inner solve. */
             tid::ur                   time_matvecs_total;                         /*!< Timer for all matrix-vector products. */
@@ -555,6 +560,8 @@ namespace grit::form {
         virtual void updateStatus();
         /*! Print the current solver status. */
         void printStatus();
+        /*! Print a final one-line summary per requested eigenpair. */
+        void printFinal();
         /*! Call the user callback, if present. */
         virtual void run_user_callback();
 

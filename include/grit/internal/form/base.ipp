@@ -452,9 +452,14 @@ namespace grit::form {
     void base<Scalar, form_>::updateStatus() {
         // Accumulate counters from the inner solver
         status.num_matvecs_total  += status.num_matvecs + status.num_matvecs_inner;
+        status.num_matvecs_inner_total += status.num_matvecs_inner;
         status.num_precond_total  += status.num_precond + status.num_precond_inner;
+        status.num_precond_inner_total += status.num_precond_inner;
+        status.num_jdops_inner_total += status.num_jdops_inner;
+        status.num_inner_iters_total += status.num_inner_iters;
         status.time_matvecs_total += status.time_matvecs.get_time() + status.time_matvecs_inner.get_time();
         status.time_precond_total += status.time_precond.get_time() + status.time_precond_inner.get_time();
+        status.time_inner_total += status.time_matvecs_inner.get_time() + status.time_jdops_inner.get_time() + status.time_precond_inner.get_time();
 
         // Eigenvalues are sorted in ascending order.
         status.oldVal  = status.eigVal.topRows(cfg().nev);
@@ -613,6 +618,29 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
+    void base<Scalar, form_>::printFinal() {
+        if(!log || status.eigVal.size() == 0 || status.rNormsAbs.size() == 0) return;
+
+        const Eigen::Index nev      = std::min(cfg().nev, std::min(status.eigVal.size(), status.rNormsAbs.size()));
+        const Eigen::Index inner_mv = status.num_matvecs_inner_total;
+        const Eigen::Index outer_mv = status.num_matvecs_total - inner_mv;
+        const Eigen::Index inner_pc = status.num_precond_inner_total;
+        const Eigen::Index outer_pc = status.num_precond_total - inner_pc;
+        const RealScalar   inner_t  = status.time_inner_total.get_time();
+        const RealScalar   outer_t  = status.time_elapsed.get_time() - inner_t;
+
+        for(Eigen::Index i = 0; i < nev; ++i) {
+            const RealScalar op_norm_estimate = get_op_norm_estimate(std::optional<RealScalar>{status.eigVal(i)});
+            log->info("grit finished: {} | idx {}/{} | eigVal {:.16e} | rNormAbs {:.3e} | "
+                      "outer: it {} mv {} pc {} t {:.1e}s | inner: it {} mv {} jd {} pc {} t {:.1e}s | "
+                      "total: mv {} pc {} t {:.1e}s | op norm {:.2e} cond {:.2e} sens {:.2e}",
+                      enum2s(status.stopReason), i + 1, nev, status.eigVal(i), status.rNormsAbs(i), status.outer_iter, outer_mv, outer_pc, outer_t,
+                      status.num_inner_iters_total, inner_mv, status.num_jdops_inner_total, inner_pc, inner_t, status.num_matvecs_total,
+                      status.num_precond_total, status.time_elapsed.get_time(), op_norm_estimate, status.condition, status.sensitivity);
+        }
+    }
+
+    template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::run_user_callback() {
         return;
     }
@@ -647,6 +675,7 @@ namespace grit::form {
         status.time_orth_update.reset();
         status.time_orth_refresh.reset();
         status.time_orth_mask.reset();
+        status.time_inner_total.reset();
         status.time_diagonalize.reset();
         status.time_extract_ritz.reset();
         status.time_restart.reset();
@@ -662,6 +691,7 @@ namespace grit::form {
             do_outer_iteration();
             if(status.stopReason != StopReason::none) break;
         }
+        printFinal();
     }
 
 }
