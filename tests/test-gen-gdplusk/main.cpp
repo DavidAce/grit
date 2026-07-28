@@ -480,7 +480,12 @@ TEST_CASE("generalized jacobi-davidson b-only correction supports l2 and bm proj
         print_eigenvalue_comparison("generalized gdplusk jd b-only l2", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
         REQUIRE(view.stopReason() == grit::StopReason::converged);
         REQUIRE(view.num_inner_iters() > 0);
-        REQUIRE(view.num_jdops_inner() > 0);
+        REQUIRE(view.num_operator_inner() > 0);
+        REQUIRE(view.num_matvecs_a_inner() == 0);
+        REQUIRE(view.num_matvecs_b_inner() > 0);
+        REQUIRE(view.time_solve_inner() > 0.0);
+        REQUIRE(view.time_solve_inner() <= view.time());
+        REQUIRE(view.time_matvecs_inner() == Approx(view.time_matvecs_a_inner() + view.time_matvecs_b_inner()));
         require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
     }
 
@@ -500,7 +505,11 @@ TEST_CASE("generalized jacobi-davidson b-only correction supports l2 and bm proj
         REQUIRE(view.eigVal().allFinite());
         REQUIRE(view.rNormsAbs().allFinite());
         REQUIRE(view.num_inner_iters() > 0);
-        REQUIRE(view.num_jdops_inner() > 0);
+        REQUIRE(view.num_operator_inner() > 0);
+        REQUIRE(view.num_matvecs_a_inner() == 0);
+        REQUIRE(view.num_matvecs_b_inner() > 0);
+        REQUIRE(view.time_solve_inner() > 0.0);
+        REQUIRE(view.time_solve_inner() <= view.time());
         require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
     }
 }
@@ -551,9 +560,14 @@ TEST_CASE("generalized jacobi-davidson correction invokes preconditioner callbac
     print_eigenvalue_comparison("generalized gdplusk jacobi-davidson preconditioner", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     REQUIRE(view.stopReason() == grit::StopReason::converged);
     REQUIRE(view.num_inner_iters() > 0);
-    REQUIRE(view.num_jdops_inner() > 0);
+    REQUIRE(view.num_operator_inner() > 0);
     REQUIRE(update_count > 0);
     REQUIRE(apply_count > 0);
+    REQUIRE(view.num_preconditioner_updates_total() == update_count);
+    REQUIRE(view.num_preconditioner_apply_inner_total() == apply_count);
+    REQUIRE(view.time_preconditioner_update_inner() >= 0.0);
+    REQUIRE(view.time_preconditioner_apply_inner() >= 0.0);
+    REQUIRE(view.time_preconditioner_inner() >= view.time_preconditioner_apply_inner());
     REQUIRE_FALSE(theta_values.empty());
     require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
 }
@@ -588,7 +602,11 @@ TEST_CASE("generalized jacobi-davidson correction defaults to identity precondit
     print_eigenvalue_comparison("generalized gdplusk identity preconditioner", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     REQUIRE(view.stopReason() == grit::StopReason::converged);
     REQUIRE(view.num_inner_iters() > 0);
-    REQUIRE(view.num_jdops_inner() > 0);
+    REQUIRE(view.num_operator_inner() > 0);
+    REQUIRE(view.num_matvecs_a_inner() > 0);
+    REQUIRE(view.num_matvecs_b_inner() > 0);
+    REQUIRE(view.num_preconditioner_updates_total() == 0);
+    REQUIRE(view.num_preconditioner_apply_inner_total() == 0);
     require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
 }
 

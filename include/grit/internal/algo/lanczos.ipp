@@ -72,8 +72,8 @@ namespace grit::algo {
         this->setLogger(config.log_level, std::string("grit|") + std::string(this->form_name()));
         status.stopReason = StopReason::none;
         status.stopMessage.clear();
-        status.residual_converged    = false;
-        status.residual_below_gap         = false;
+        status.residual_converged      = false;
+        status.residual_below_gap      = false;
         status.saturation_count_eigVal = 0;
         status.saturation_count_rNorm  = 0;
         status.rNormsAbsHistory.clear();

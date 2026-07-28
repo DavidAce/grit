@@ -19,24 +19,79 @@ namespace grit {
          * Copy an owning snapshot from a non-owning result view.
          * @param view Solver result view to copy from.
          */
-        explicit Result(const ResultView<Scalar> &view)
-            : eigVal_(view.eigVal()), eigVecs_(view.eigVecs()), rNorms_(view.rNormsAbs()), stopReason_(view.stopReason()), outer_iter_(view.outer_iter()),
-              num_matvecs_(view.num_matvecs()), num_inner_iters_(view.num_inner_iters()), num_matvecs_inner_(view.num_matvecs_inner()),
-              num_jdops_inner_(view.num_jdops_inner()), num_matvecs_total_(view.num_matvecs_total()), num_precond_(view.num_precond()),
-              num_precond_inner_(view.num_precond_inner()), num_precond_total_(view.num_precond_total()), time_(view.time()),
-              time_orthogonalize_(view.time_orthogonalize()), time_orthonormalize_(view.time_orthonormalize()),
-              time_orth_project_(view.time_orth_project()), time_orth_factor_(view.time_orth_factor()),
-              time_orth_update_(view.time_orth_update()), time_orth_refresh_(view.time_orth_refresh()), time_orth_mask_(view.time_orth_mask()),
-              time_diagonalize_(view.time_diagonalize()), time_extract_ritz_(view.time_extract_ritz()), time_restart_(view.time_restart()),
-              inner_error_last_(view.inner_error_last()), inner_tol_last_(view.inner_tol_last()), saturation_count_eigval_(view.saturation_count_eigval()),
-              saturation_count_rnorm_(view.saturation_count_rnorm()), saturation_count_max_(view.saturation_count_max()),
-              op_norm_estimate_(view.op_norm_estimate()), condition_(view.condition()), sensitivity_(view.sensitivity()), gap_(view.gap()),
-              residual_converged_(view.residual_converged()), residual_below_gap_(view.residual_below_gap()),
-              residual_correction_active_name_(view.residual_correction_active_name()),
-              residual_correction_iteration_name_(view.residual_correction_iteration_name()), auto_dwell_(view.auto_dwell()),
-              auto_jd_outer_iters_since_probe_(view.auto_jd_outer_iters_since_probe()),
-              cheap_to_jd_switch_outer_iters_(view.cheap_to_jd_switch_outer_iters()),
-              jd_to_cheap_switch_outer_iters_(view.jd_to_cheap_switch_outer_iters()) {}
+        explicit Result(const ResultView<Scalar> &view) {
+            eigVal_                               = view.eigVal();
+            eigVecs_                              = view.eigVecs();
+            rNorms_                               = view.rNormsAbs();
+            stopReason_                           = view.stopReason();
+            outer_iter_                           = view.outer_iter();
+            num_matvecs_                          = view.num_matvecs();
+            num_inner_iters_                      = view.num_inner_iters();
+            num_matvecs_inner_                    = view.num_matvecs_inner();
+            num_matvecs_a_                        = view.num_matvecs_a();
+            num_matvecs_b_                        = view.num_matvecs_b();
+            num_matvecs_a_inner_                  = view.num_matvecs_a_inner();
+            num_matvecs_b_inner_                  = view.num_matvecs_b_inner();
+            num_matvecs_a_total_                  = view.num_matvecs_a_total();
+            num_matvecs_b_total_                  = view.num_matvecs_b_total();
+            num_operator_inner_                   = view.num_operator_inner();
+            num_matvecs_total_                    = view.num_matvecs_total();
+            num_precond_                          = view.num_precond();
+            num_precond_inner_                    = view.num_precond_inner();
+            num_precond_total_                    = view.num_precond_total();
+            num_preconditioner_updates_           = view.num_preconditioner_updates();
+            num_preconditioner_updates_inner_     = view.num_preconditioner_updates_inner();
+            num_preconditioner_updates_total_     = view.num_preconditioner_updates_total();
+            num_preconditioner_apply_inner_       = view.num_preconditioner_apply_inner();
+            num_preconditioner_apply_inner_total_ = view.num_preconditioner_apply_inner_total();
+            num_preconditioner_apply_total_       = view.num_preconditioner_apply_total();
+            time_                                 = view.time();
+            time_solve_inner_                     = view.time_solve_inner();
+            time_operator_inner_                  = view.time_operator_inner();
+            time_matvecs_                         = view.time_matvecs();
+            time_matvecs_a_                       = view.time_matvecs_a();
+            time_matvecs_b_                       = view.time_matvecs_b();
+            time_matvecs_a_inner_                 = view.time_matvecs_a_inner();
+            time_matvecs_b_inner_                 = view.time_matvecs_b_inner();
+            time_preconditioner_inner_            = view.time_preconditioner_inner();
+            time_preconditioner_update_           = view.time_preconditioner_update();
+            time_preconditioner_update_inner_     = view.time_preconditioner_update_inner();
+            time_preconditioner_update_total_     = view.time_preconditioner_update_total();
+            time_preconditioner_apply_inner_      = view.time_preconditioner_apply_inner();
+            time_preconditioner_apply_total_      = view.time_preconditioner_apply_total();
+            time_project_left_inner_              = view.time_project_left_inner();
+            time_project_right_inner_             = view.time_project_right_inner();
+            time_residual_correction_             = view.time_residual_correction();
+            time_build_                           = view.time_build();
+            time_status_update_                   = view.time_status_update();
+            time_orthogonalize_                   = view.time_orthogonalize();
+            time_orthonormalize_                  = view.time_orthonormalize();
+            time_orth_project_                    = view.time_orth_project();
+            time_orth_factor_                     = view.time_orth_factor();
+            time_orth_update_                     = view.time_orth_update();
+            time_orth_refresh_                    = view.time_orth_refresh();
+            time_orth_mask_                       = view.time_orth_mask();
+            time_diagonalize_                     = view.time_diagonalize();
+            time_extract_ritz_                    = view.time_extract_ritz();
+            time_restart_                         = view.time_restart();
+            inner_error_last_                     = view.inner_error_last();
+            inner_tol_last_                       = view.inner_tol_last();
+            saturation_count_eigval_              = view.saturation_count_eigval();
+            saturation_count_rnorm_               = view.saturation_count_rnorm();
+            saturation_count_max_                 = view.saturation_count_max();
+            op_norm_estimate_                     = view.op_norm_estimate();
+            condition_                            = view.condition();
+            sensitivity_                          = view.sensitivity();
+            gap_                                  = view.gap();
+            residual_converged_                   = view.residual_converged();
+            residual_below_gap_                   = view.residual_below_gap();
+            residual_correction_active_name_      = view.residual_correction_active_name();
+            residual_correction_iteration_name_   = view.residual_correction_iteration_name();
+            auto_dwell_                           = view.auto_dwell();
+            auto_jd_outer_iters_since_probe_      = view.auto_jd_outer_iters_since_probe();
+            cheap_to_jd_switch_outer_iters_       = view.cheap_to_jd_switch_outer_iters();
+            jd_to_cheap_switch_outer_iters_       = view.jd_to_cheap_switch_outer_iters();
+        }
 
         /*! Selected Ritz values. */
         [[nodiscard]] const VectorReal &eigVal() const { return eigVal_; }
@@ -60,18 +115,80 @@ namespace grit {
         [[nodiscard]] Eigen::Index num_inner_iters() const { return num_inner_iters_; }
         /*! Matrix-vector products in the last inner correction solve. */
         [[nodiscard]] Eigen::Index num_matvecs_inner() const { return num_matvecs_inner_; }
-        /*! Jacobi-Davidson operator applications in the last inner solve. */
-        [[nodiscard]] Eigen::Index num_jdops_inner() const { return num_jdops_inner_; }
+        /*! A matrix-vector products in the last outer iteration. */
+        [[nodiscard]] Eigen::Index num_matvecs_a() const { return num_matvecs_a_; }
+        /*! B matrix-vector products in the last outer iteration. */
+        [[nodiscard]] Eigen::Index num_matvecs_b() const { return num_matvecs_b_; }
+        /*! A matrix-vector products in the last inner solve. */
+        [[nodiscard]] Eigen::Index num_matvecs_a_inner() const { return num_matvecs_a_inner_; }
+        /*! B matrix-vector products in the last inner solve. */
+        [[nodiscard]] Eigen::Index num_matvecs_b_inner() const { return num_matvecs_b_inner_; }
+        /*! Total A matrix-vector products. */
+        [[nodiscard]] Eigen::Index num_matvecs_a_total() const { return num_matvecs_a_total_; }
+        /*! Total B matrix-vector products. */
+        [[nodiscard]] Eigen::Index num_matvecs_b_total() const { return num_matvecs_b_total_; }
+        /*! Projected correction-operator applications in the last inner solve. */
+        [[nodiscard]] Eigen::Index num_operator_inner() const { return num_operator_inner_; }
         /*! Total matrix-vector products. */
         [[nodiscard]] Eigen::Index num_matvecs_total() const { return num_matvecs_total_; }
         /*! Preconditioner applications in the last outer iteration. */
         [[nodiscard]] Eigen::Index num_precond() const { return num_precond_; }
-        /*! Preconditioner applications in the last inner correction solve. */
+        /*! Projected-preconditioner applications in the last inner correction solve, including identity applications. */
         [[nodiscard]] Eigen::Index num_precond_inner() const { return num_precond_inner_; }
         /*! Total preconditioner applications. */
         [[nodiscard]] Eigen::Index num_precond_total() const { return num_precond_total_; }
+        /*! Preconditioner update callbacks in the last outer iteration. */
+        [[nodiscard]] Eigen::Index num_preconditioner_updates() const { return num_preconditioner_updates_; }
+        /*! Preconditioner update callbacks for the last inner correction. */
+        [[nodiscard]] Eigen::Index num_preconditioner_updates_inner() const { return num_preconditioner_updates_inner_; }
+        /*! Total preconditioner update callbacks. */
+        [[nodiscard]] Eigen::Index num_preconditioner_updates_total() const { return num_preconditioner_updates_total_; }
+        /*! User preconditioner apply callbacks in the last inner solve. */
+        [[nodiscard]] Eigen::Index num_preconditioner_apply_inner() const { return num_preconditioner_apply_inner_; }
+        /*! Total user preconditioner apply callbacks in inner solves. */
+        [[nodiscard]] Eigen::Index num_preconditioner_apply_inner_total() const { return num_preconditioner_apply_inner_total_; }
+        /*! Total user preconditioner apply callbacks. */
+        [[nodiscard]] Eigen::Index num_preconditioner_apply_total() const { return num_preconditioner_apply_total_; }
         /*! Total wall time measured by the solver. */
         [[nodiscard]] RealScalar time() const { return time_; }
+        /*! Complete wall time spent in inner correction solves. */
+        [[nodiscard]] RealScalar time_solve_inner() const { return time_solve_inner_; }
+        /*! Inclusive projected correction-operator time. */
+        [[nodiscard]] RealScalar time_operator_inner() const { return time_operator_inner_; }
+        /*! Outer A and B callback time. */
+        [[nodiscard]] RealScalar time_matvecs() const { return time_matvecs_; }
+        /*! Inner callback time, computed as A callback time plus B callback time. */
+        [[nodiscard]] RealScalar time_matvecs_inner() const { return time_matvecs_a_inner_ + time_matvecs_b_inner_; }
+        /*! Outer A callback time. */
+        [[nodiscard]] RealScalar time_matvecs_a() const { return time_matvecs_a_; }
+        /*! Outer B callback time. */
+        [[nodiscard]] RealScalar time_matvecs_b() const { return time_matvecs_b_; }
+        /*! Inner A callback time. */
+        [[nodiscard]] RealScalar time_matvecs_a_inner() const { return time_matvecs_a_inner_; }
+        /*! Inner B callback time. */
+        [[nodiscard]] RealScalar time_matvecs_b_inner() const { return time_matvecs_b_inner_; }
+        /*! Inclusive projected-preconditioner time. */
+        [[nodiscard]] RealScalar time_preconditioner_inner() const { return time_preconditioner_inner_; }
+        /*! Outer preconditioner update callback time. */
+        [[nodiscard]] RealScalar time_preconditioner_update() const { return time_preconditioner_update_; }
+        /*! Inner preconditioner update callback time. */
+        [[nodiscard]] RealScalar time_preconditioner_update_inner() const { return time_preconditioner_update_inner_; }
+        /*! Total preconditioner update callback time. */
+        [[nodiscard]] RealScalar time_preconditioner_update_total() const { return time_preconditioner_update_total_; }
+        /*! Inner user preconditioner apply callback time. */
+        [[nodiscard]] RealScalar time_preconditioner_apply_inner() const { return time_preconditioner_apply_inner_; }
+        /*! Total user preconditioner apply callback time. */
+        [[nodiscard]] RealScalar time_preconditioner_apply_total() const { return time_preconditioner_apply_total_; }
+        /*! Inner left-projector time. */
+        [[nodiscard]] RealScalar time_project_left_inner() const { return time_project_left_inner_; }
+        /*! Inner right-projector time. */
+        [[nodiscard]] RealScalar time_project_right_inner() const { return time_project_right_inner_; }
+        /*! Residual-correction construction time. */
+        [[nodiscard]] RealScalar time_residual_correction() const { return time_residual_correction_; }
+        /*! Search-space build time. */
+        [[nodiscard]] RealScalar time_build() const { return time_build_; }
+        /*! Convergence and status-update time. */
+        [[nodiscard]] RealScalar time_status_update() const { return time_status_update_; }
         /*! Time spent orthogonalizing new vectors. */
         [[nodiscard]] RealScalar time_orthogonalize() const { return time_orthogonalize_; }
         /*! Time spent orthonormalizing new vectors. */
@@ -128,47 +245,77 @@ namespace grit {
         [[nodiscard]] const std::vector<Eigen::Index> &jd_to_cheap_switch_outer_iters() const { return jd_to_cheap_switch_outer_iters_; }
 
         private:
-        VectorReal                eigVal_;
-        MatrixType                eigVecs_;
-        VectorReal                rNorms_;
-        StopReason                stopReason_ = StopReason::none;
-        Eigen::Index              outer_iter_ = 0;
-        Eigen::Index              num_matvecs_ = 0;
-        Eigen::Index              num_inner_iters_ = 0;
-        Eigen::Index              num_matvecs_inner_ = 0;
-        Eigen::Index              num_jdops_inner_ = 0;
-        Eigen::Index              num_matvecs_total_ = 0;
-        Eigen::Index              num_precond_ = 0;
-        Eigen::Index              num_precond_inner_ = 0;
-        Eigen::Index              num_precond_total_ = 0;
-        RealScalar                time_ = RealScalar{0};
-        RealScalar                time_orthogonalize_ = RealScalar{0};
-        RealScalar                time_orthonormalize_ = RealScalar{0};
-        RealScalar                time_orth_project_ = RealScalar{0};
-        RealScalar                time_orth_factor_ = RealScalar{0};
-        RealScalar                time_orth_update_ = RealScalar{0};
-        RealScalar                time_orth_refresh_ = RealScalar{0};
-        RealScalar                time_orth_mask_ = RealScalar{0};
-        RealScalar                time_diagonalize_ = RealScalar{0};
-        RealScalar                time_extract_ritz_ = RealScalar{0};
-        RealScalar                time_restart_ = RealScalar{0};
-        RealScalar                inner_error_last_ = RealScalar{0};
-        RealScalar                inner_tol_last_ = RealScalar{0};
-        Eigen::Index              saturation_count_eigval_ = 0;
-        Eigen::Index              saturation_count_rnorm_ = 0;
-        Eigen::Index              saturation_count_max_ = 0;
-        RealScalar                op_norm_estimate_ = RealScalar{0};
-        RealScalar                condition_ = RealScalar{0};
-        RealScalar                sensitivity_ = RealScalar{0};
-        RealScalar                gap_ = RealScalar{0};
-        bool                      residual_converged_ = false;
-        bool                      residual_below_gap_ = false;
-        std::string               residual_correction_active_name_;
-        std::string               residual_correction_iteration_name_;
-        Eigen::Index              auto_dwell_ = 0;
-        Eigen::Index              auto_jd_outer_iters_since_probe_ = 0;
-        std::vector<Eigen::Index> cheap_to_jd_switch_outer_iters_;
-        std::vector<Eigen::Index> jd_to_cheap_switch_outer_iters_;
+        VectorReal                eigVal_                               = {};
+        MatrixType                eigVecs_                              = {};
+        VectorReal                rNorms_                               = {};
+        StopReason                stopReason_                           = StopReason::none;
+        Eigen::Index              outer_iter_                           = 0;
+        Eigen::Index              num_matvecs_                          = 0;
+        Eigen::Index              num_inner_iters_                      = 0;
+        Eigen::Index              num_matvecs_inner_                    = 0;
+        Eigen::Index              num_matvecs_a_                        = 0;
+        Eigen::Index              num_matvecs_b_                        = 0;
+        Eigen::Index              num_matvecs_a_inner_                  = 0;
+        Eigen::Index              num_matvecs_b_inner_                  = 0;
+        Eigen::Index              num_matvecs_a_total_                  = 0;
+        Eigen::Index              num_matvecs_b_total_                  = 0;
+        Eigen::Index              num_operator_inner_                   = 0;
+        Eigen::Index              num_matvecs_total_                    = 0;
+        Eigen::Index              num_precond_                          = 0;
+        Eigen::Index              num_precond_inner_                    = 0;
+        Eigen::Index              num_precond_total_                    = 0;
+        Eigen::Index              num_preconditioner_updates_           = 0;
+        Eigen::Index              num_preconditioner_updates_inner_     = 0;
+        Eigen::Index              num_preconditioner_updates_total_     = 0;
+        Eigen::Index              num_preconditioner_apply_inner_       = 0;
+        Eigen::Index              num_preconditioner_apply_inner_total_ = 0;
+        Eigen::Index              num_preconditioner_apply_total_       = 0;
+        RealScalar                time_                                 = RealScalar{0};
+        RealScalar                time_solve_inner_                     = RealScalar{0};
+        RealScalar                time_operator_inner_                  = RealScalar{0};
+        RealScalar                time_matvecs_                         = RealScalar{0};
+        RealScalar                time_matvecs_a_                       = RealScalar{0};
+        RealScalar                time_matvecs_b_                       = RealScalar{0};
+        RealScalar                time_matvecs_a_inner_                 = RealScalar{0};
+        RealScalar                time_matvecs_b_inner_                 = RealScalar{0};
+        RealScalar                time_preconditioner_inner_            = RealScalar{0};
+        RealScalar                time_preconditioner_update_           = RealScalar{0};
+        RealScalar                time_preconditioner_update_inner_     = RealScalar{0};
+        RealScalar                time_preconditioner_update_total_     = RealScalar{0};
+        RealScalar                time_preconditioner_apply_inner_      = RealScalar{0};
+        RealScalar                time_preconditioner_apply_total_      = RealScalar{0};
+        RealScalar                time_project_left_inner_              = RealScalar{0};
+        RealScalar                time_project_right_inner_             = RealScalar{0};
+        RealScalar                time_residual_correction_             = RealScalar{0};
+        RealScalar                time_build_                           = RealScalar{0};
+        RealScalar                time_status_update_                   = RealScalar{0};
+        RealScalar                time_orthogonalize_                   = RealScalar{0};
+        RealScalar                time_orthonormalize_                  = RealScalar{0};
+        RealScalar                time_orth_project_                    = RealScalar{0};
+        RealScalar                time_orth_factor_                     = RealScalar{0};
+        RealScalar                time_orth_update_                     = RealScalar{0};
+        RealScalar                time_orth_refresh_                    = RealScalar{0};
+        RealScalar                time_orth_mask_                       = RealScalar{0};
+        RealScalar                time_diagonalize_                     = RealScalar{0};
+        RealScalar                time_extract_ritz_                    = RealScalar{0};
+        RealScalar                time_restart_                         = RealScalar{0};
+        RealScalar                inner_error_last_                     = RealScalar{0};
+        RealScalar                inner_tol_last_                       = RealScalar{0};
+        Eigen::Index              saturation_count_eigval_              = 0;
+        Eigen::Index              saturation_count_rnorm_               = 0;
+        Eigen::Index              saturation_count_max_                 = 0;
+        RealScalar                op_norm_estimate_                     = RealScalar{0};
+        RealScalar                condition_                            = RealScalar{0};
+        RealScalar                sensitivity_                          = RealScalar{0};
+        RealScalar                gap_                                  = RealScalar{0};
+        bool                      residual_converged_                   = false;
+        bool                      residual_below_gap_                   = false;
+        std::string               residual_correction_active_name_      = {};
+        std::string               residual_correction_iteration_name_   = {};
+        Eigen::Index              auto_dwell_                           = 0;
+        Eigen::Index              auto_jd_outer_iters_since_probe_      = 0;
+        std::vector<Eigen::Index> cheap_to_jd_switch_outer_iters_       = {};
+        std::vector<Eigen::Index> jd_to_cheap_switch_outer_iters_       = {};
     };
 
     template<typename Scalar_>

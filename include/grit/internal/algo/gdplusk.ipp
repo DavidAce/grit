@@ -233,6 +233,7 @@ namespace grit::algo {
 
     template<typename Scalar, grit::Form form_>
     void gdplusk<Scalar, form_>::build() {
+        auto t_build = status.time_build.tic_token();
         bool had_residual = S.cols() > 0;
         make_new_Q_block();
         build(Q, AQ, BQ, had_residual ? Q_new : MatrixType{}, had_residual ? AQ_new : MatrixType{}, had_residual ? BQ_new : MatrixType{});
@@ -258,6 +259,7 @@ namespace grit::algo {
         if(Q_new.cols() == 0) return;
 
         auto restart_basis = [&]() {
+            auto         t_restart = status.time_restart.tic_token();
             Eigen::Index cols_ks = 0;
 
             if constexpr(form_ == grit::Form::GENERALIZED) {

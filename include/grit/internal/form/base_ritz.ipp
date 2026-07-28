@@ -93,8 +93,8 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::finalize_bm_ritz_vectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV,
-                                                       MatrixType &S, VectorReal &rNormsAbs) requires(form_ == grit::Form::GENERALIZED)
+    void base<Scalar, form_>::finalize_bm_ritz_vectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &BV, MatrixType &S,
+                                                       VectorReal &rNormsAbs) requires(form_ == grit::Form::GENERALIZED)
     {
         const Eigen::Index ritz_cols = V.cols();
         if(ritz_cols <= 0 || !cfg().use_b_inner_product) return;
@@ -122,7 +122,7 @@ namespace grit::form {
 
         status.optIdx.resize(static_cast<size_t>(V.cols()));
         for(Eigen::Index n = 0; n < V.cols(); ++n) {
-            status.optIdx[static_cast<size_t>(n)] = optIdx[static_cast<size_t>(n)];
+            status.optIdx[static_cast<size_t>(n)]          = optIdx[static_cast<size_t>(n)];
             T_evals(status.optIdx[static_cast<size_t>(n)]) = Y(n);
         }
 

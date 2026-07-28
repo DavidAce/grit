@@ -270,14 +270,14 @@ namespace grit::algo {
             if(log) {
                 log->debug("auto residual correction cheap probe: {} -> {} | eigval {:.16e}->{:.16e} improvement {:.6e} threshold {:.6e} "
                            "relative improvement {:.6e} threshold {:.6e} factor {:.6e} abs rnorm_abs {:.6e} abs rnorm2 {:.6e} scale_floor {:.6e} interval {} "
-                           "decision {} reason {} | mv {} outer {} inner {} inner_iters {} jdops {} time {:.6e}s",
+                           "decision {} reason {} | mv {} outer {} inner {} inner_iters {} op_inner {} time {:.6e}s",
                            method_name(ResidualCorrectionType::JACOBI_DAVIDSON), method_name(ResidualCorrectionType::CHEAP_OLSEN),
                            status.oldVal.size() > 0 ? status.oldVal(0) : RealScalar{0}, status.eigVal.size() > 0 ? status.eigVal(0) : RealScalar{0},
                            improvement, threshold, relative_improvement, relative_threshold, config.auto_cheap_probe_factor, rnorm_abs, rnorm_squared,
                            probe_scale_floor, config.auto_cheap_probe_interval, keep_cheap ? "keep CHEAP_OLSEN" : "return JACOBI_DAVIDSON",
                            keep_cheap_relative ? "relative ritz progress" : (keep_cheap_absolute ? "absolute residual scale" : "insufficient progress"),
                            status.num_matvecs + status.num_matvecs_inner, status.num_matvecs, status.num_matvecs_inner, status.num_inner_iters,
-                           status.num_jdops_inner, outer_iteration_time);
+                           status.num_operator_inner, outer_iteration_time);
             }
             return;
         }
@@ -287,8 +287,7 @@ namespace grit::algo {
             auto_residual_correction.jd_outer_iters_since_probe++;
             if(log) {
                 log->trace("auto residual correction jd outer iteration: outer iterations since cheap Olsen probe {}/{}",
-                           auto_residual_correction.jd_outer_iters_since_probe,
-                           config.auto_cheap_probe_interval);
+                           auto_residual_correction.jd_outer_iters_since_probe, config.auto_cheap_probe_interval);
             }
             return;
         }
@@ -300,7 +299,8 @@ namespace grit::algo {
         auto ritz_rel_change        = get_auto_ritz_value_relative_change();
         bool jd_start_rnorm_enabled = config.auto_jd_start_rnorm_threshold > RealScalar{0};
         bool ritz_progress_low      = config.auto_sat_eigval_threshold <= RealScalar{0} || ritz_rel_change <= config.auto_sat_eigval_threshold;
-        bool jd_start_rnorm_ready   = jd_start_rnorm_enabled && status.rNormsAbs.size() > 0 && rnorm_rel <= config.auto_jd_start_rnorm_threshold && ritz_progress_low;
+        bool jd_start_rnorm_ready =
+            jd_start_rnorm_enabled && status.rNormsAbs.size() > 0 && rnorm_rel <= config.auto_jd_start_rnorm_threshold && ritz_progress_low;
         bool jd_start_ready         = saturation.ready || jd_start_rnorm_ready;
         if(log) {
             log->trace("auto residual correction start check: cheap dwell {}/{} ready {} | eigval sat {} ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} "
@@ -309,9 +309,9 @@ namespace grit::algo {
                        auto_residual_correction.dwell, config.auto_min_dwell_iters, jd_start_ready, saturation.eigval.saturated, saturation.eigval.ratio,
                        saturation.eigval.threshold, saturation.eigval.stddev, saturation.eigval.scale, saturation.eigval.value, saturation.eigval.history_size,
                        saturation.eigval.enough_history, saturation.rnorm_rel.saturated, saturation.rnorm_rel.ratio, saturation.rnorm_rel.threshold,
-                       saturation.rnorm_rel.stddev, saturation.rnorm_rel.scale, saturation.rnorm_rel.value, saturation.rnorm_rel.history_size, saturation.rnorm_rel.enough_history,
-                       jd_start_rnorm_ready, config.auto_jd_start_rnorm_threshold, rnorm_rel, ritz_rel_change, config.auto_sat_eigval_threshold,
-                       ritz_progress_low);
+                       saturation.rnorm_rel.stddev, saturation.rnorm_rel.scale, saturation.rnorm_rel.value, saturation.rnorm_rel.history_size,
+                       saturation.rnorm_rel.enough_history, jd_start_rnorm_ready, config.auto_jd_start_rnorm_threshold, rnorm_rel, ritz_rel_change,
+                       config.auto_sat_eigval_threshold, ritz_progress_low);
         }
         if(auto_residual_correction.dwell < config.auto_min_dwell_iters) return;
 
@@ -326,14 +326,14 @@ namespace grit::algo {
                     "auto residual correction switch: {} -> {} | reason {} | eigval ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} value {:.6e} | "
                     "rnorm_rel ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} value {:.6e} | probe interval {} probe factor {:.6e} | "
                     "jd start rnorm_rel threshold {:.6e} rnorm_rel {:.6e} ritz rel change {:.6e} threshold {:.6e} | "
-                    "mv {} outer {} inner {} inner_iters {} jdops {} time {:.6e}s",
+                    "mv {} outer {} inner {} inner_iters {} op_inner {} time {:.6e}s",
                     method_name(ResidualCorrectionType::CHEAP_OLSEN), method_name(ResidualCorrectionType::JACOBI_DAVIDSON),
                     jd_start_rnorm_ready ? "rnorm_rel threshold and ritz progress" : "saturation", saturation.eigval.ratio, saturation.eigval.threshold,
                     saturation.eigval.stddev, saturation.eigval.scale, saturation.eigval.value, saturation.rnorm_rel.ratio, saturation.rnorm_rel.threshold,
-                    saturation.rnorm_rel.stddev, saturation.rnorm_rel.scale, saturation.rnorm_rel.value, config.auto_cheap_probe_interval, config.auto_cheap_probe_factor,
-                    config.auto_jd_start_rnorm_threshold, rnorm_rel, ritz_rel_change, config.auto_sat_eigval_threshold,
-                    status.num_matvecs + status.num_matvecs_inner, status.num_matvecs, status.num_matvecs_inner, status.num_inner_iters, status.num_jdops_inner,
-                    outer_iteration_time);
+                    saturation.rnorm_rel.stddev, saturation.rnorm_rel.scale, saturation.rnorm_rel.value, config.auto_cheap_probe_interval,
+                    config.auto_cheap_probe_factor, config.auto_jd_start_rnorm_threshold, rnorm_rel, ritz_rel_change, config.auto_sat_eigval_threshold,
+                    status.num_matvecs + status.num_matvecs_inner, status.num_matvecs, status.num_matvecs_inner, status.num_inner_iters,
+                    status.num_operator_inner, outer_iteration_time);
             }
         }
     }
@@ -405,7 +405,8 @@ namespace grit::algo {
                 return MultA_inner(X);
         };
 
-        auto ProjectOpL = [&V](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
+        auto ProjectOpL = [this, &V](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
+            auto                    t_project_left = status.time_project_left_inner.tic_token();
             thread_local MatrixType T;
             T.resize(V.cols(), X.cols());
             Y.resize(X.rows(), X.cols());
@@ -418,7 +419,8 @@ namespace grit::algo {
             return Y;
         };
 
-        auto ProjectOpR = [&V](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
+        auto ProjectOpR = [this, &V](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
+            auto                    t_project_right = status.time_project_right_inner.tic_token();
             thread_local MatrixType T;
             T.resize(V.cols(), X.cols());
             Y.resize(X.rows(), X.cols());
@@ -430,7 +432,6 @@ namespace grit::algo {
             ProjectOpR(X, Y);
             return Y;
         };
-
         MatrixType RHS = -ProjectOpL_tmp(S);
 
         if(D.size() != RHS.size()) D.setZero(RHS.rows(), RHS.cols());
@@ -447,17 +448,24 @@ namespace grit::algo {
                 D.col(i).noalias()   = MultP(s, ev);
                 D.col(i).noalias()   = cheap_Olsen_correction(v, D.col(i));
             } else {
-                auto token_precond = status.time_precond_inner.tic_token();
-                A.preconditioner_update(th);
+                if(A.has_preconditioner_update()) {
+                    A.preconditioner_update(th);
+                    status.time_preconditioner_update_inner += A.t_precond_update->get_last_interval();
+                    status.num_preconditioner_updates_inner++;
+                }
 
                 IterativeLinearSolverConfig<Scalar> cfg;
                 cfg.result               = {};
                 cfg.matdef               = MatDef::IND;
-                cfg.max_inner_iters             = config.inner_max_iters;
+                cfg.max_inner_iters      = config.inner_max_iters;
                 cfg.tolerance            = current_inner_tol;
                 cfg.theta                = th;
                 cfg.preconditioner_apply = [this](const Eigen::Ref<const VectorType> &x, Eigen::Ref<VectorType> y, RealScalar theta) -> void {
                     A.preconditioner_apply(x, y, theta);
+                    if(A.has_preconditioner_apply()) {
+                        status.time_preconditioner_apply_inner += A.t_precond->get_last_interval();
+                        status.num_preconditioner_apply_inner++;
+                    }
                 };
 
                 auto ResidualOp = [this, th](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> HX) -> void {
@@ -478,14 +486,16 @@ namespace grit::algo {
                 d.noalias() = internal::precondition::JacobiDavidsonSolver(JDop, rhs, cfg);
                 d.noalias() = ProjectOpR_tmp(d);
 
-                status.num_inner_iters   += cfg.result.num_inner_iters;
-                status.num_jdops_inner   += cfg.result.matvecs;
-                status.num_precond_inner += cfg.result.precond;
-                status.inner_error_last   = std::max(status.inner_error_last, cfg.result.error);
-                status.inner_tol_last     = std::max(status.inner_tol_last, cfg.tolerance);
+                status.num_inner_iters          += cfg.result.num_inner_iters;
+                status.num_operator_inner       += cfg.result.matvecs;
+                status.num_precond_inner        += cfg.result.precond;
+                status.time_solve_inner          += cfg.result.time;
+                status.time_operator_inner       += cfg.result.time_matvecs;
+                status.time_preconditioner_inner += cfg.result.time_precond;
+                status.inner_error_last          = std::max(status.inner_error_last, cfg.result.error);
+                status.inner_tol_last            = std::max(status.inner_tol_last, cfg.tolerance);
             }
         }
-        status.num_precond += cfg().block_size;
         return D;
     }
 
@@ -499,7 +509,8 @@ namespace grit::algo {
         assert(V.cols() == S.cols());
         assert(BV.size() == V.size());
 
-        auto ProjectOpL = [&V, &BV](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
+        auto ProjectOpL = [this, &V, &BV](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
+            auto                    t_project_left = status.time_project_left_inner.tic_token();
             thread_local MatrixType T;
             T.resize(V.cols(), X.cols());
             Y.resize(X.rows(), X.cols());
@@ -513,7 +524,8 @@ namespace grit::algo {
             return Y;
         };
 
-        auto ProjectOpR = [&V, &BV](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
+        auto ProjectOpR = [this, &V, &BV](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
+            auto                    t_project_right = status.time_project_right_inner.tic_token();
             thread_local MatrixType T;
             T.resize(BV.cols(), X.cols());
             Y.resize(X.rows(), X.cols());
@@ -526,7 +538,6 @@ namespace grit::algo {
             ProjectOpR(X, Y);
             return Y;
         };
-
         MatrixType RHS = -ProjectOpL_tmp(S);
 
         MatrixType D(S.rows(), S.cols());
@@ -542,17 +553,24 @@ namespace grit::algo {
                 D.col(i).noalias()   = MultP(s, ev);
                 D.col(i).noalias()   = cheap_Olsen_correction(v, D.col(i));
             } else {
-                auto token_precond = status.time_precond_inner.tic_token();
-                A.preconditioner_update(th);
+                if(A.has_preconditioner_update()) {
+                    A.preconditioner_update(th);
+                    status.time_preconditioner_update_inner += A.t_precond_update->get_last_interval();
+                    status.num_preconditioner_updates_inner++;
+                }
 
                 IterativeLinearSolverConfig<Scalar> cfg;
                 cfg.result               = {};
                 cfg.matdef               = MatDef::IND;
-                cfg.max_inner_iters             = config.inner_max_iters;
+                cfg.max_inner_iters      = config.inner_max_iters;
                 cfg.tolerance            = current_inner_tol;
                 cfg.theta                = th;
                 cfg.preconditioner_apply = [this](const Eigen::Ref<const VectorType> &x, Eigen::Ref<VectorType> y, RealScalar theta) -> void {
                     A.preconditioner_apply(x, y, theta);
+                    if(A.has_preconditioner_apply()) {
+                        status.time_preconditioner_apply_inner += A.t_precond->get_last_interval();
+                        status.num_preconditioner_apply_inner++;
+                    }
                 };
 
                 auto MatrixOp = [this](const Eigen::Ref<const MatrixType> &X) -> MatrixType { return MultB_inner(X); };
@@ -571,19 +589,22 @@ namespace grit::algo {
                 d.noalias() = internal::precondition::JacobiDavidsonSolver(JDop, rhs, cfg);
                 d.noalias() = ProjectOpR_tmp(d);
 
-                status.num_inner_iters   += cfg.result.num_inner_iters;
-                status.num_jdops_inner   += cfg.result.matvecs;
-                status.num_precond_inner += cfg.result.precond;
-                status.inner_error_last   = std::max(status.inner_error_last, cfg.result.error);
-                status.inner_tol_last     = std::max(status.inner_tol_last, cfg.tolerance);
+                status.num_inner_iters          += cfg.result.num_inner_iters;
+                status.num_operator_inner       += cfg.result.matvecs;
+                status.num_precond_inner        += cfg.result.precond;
+                status.time_solve_inner          += cfg.result.time;
+                status.time_operator_inner       += cfg.result.time_matvecs;
+                status.time_preconditioner_inner += cfg.result.time_precond;
+                status.inner_error_last          = std::max(status.inner_error_last, cfg.result.error);
+                status.inner_tol_last            = std::max(status.inner_tol_last, cfg.tolerance);
             }
         }
-        status.num_precond += cfg().block_size;
         return D;
     }
 
     template<typename Scalar, grit::Form form_>
     typename gdplusk<Scalar, form_>::MatrixType gdplusk<Scalar, form_>::get_sBlock(const MatrixType &S_in) {
+        auto       t_residual_correction = status.time_residual_correction.tic_token();
         MatrixType S = S_in;
         assert(S.allFinite());
         assert(S.cols() > 0);

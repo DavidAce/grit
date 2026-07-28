@@ -35,9 +35,10 @@ TEST_CASE("solver run is reentrant") {
     solver.config.block_size = 1;
     solver.set_initial_guess(V);
     solver.run();
-    auto first_result  = solver.get_result();
-    auto first_outer_iters   = first_result.outer_iter();
-    auto first_matvecs = first_result.num_matvecs_total();
+    auto first_result      = solver.get_result();
+    auto first_outer_iters = first_result.outer_iter();
+    auto first_matvecs     = first_result.num_matvecs_total();
+    auto first_time        = first_result.time();
     REQUIRE(first_result.eigVal().size() == 1);
     REQUIRE(grit::has_flag(first_result.stopReason(), grit::StopReason::converged));
 
@@ -47,6 +48,8 @@ TEST_CASE("solver run is reentrant") {
     REQUIRE(grit::has_flag(result.stopReason(), grit::StopReason::converged));
     REQUIRE(result.outer_iter() > first_outer_iters);
     REQUIRE(result.num_matvecs_total() > first_matvecs);
+    REQUIRE(result.time() > first_time);
+    REQUIRE(result.num_matvecs_a_total() > first_result.num_matvecs_a_total());
 }
 
 TEST_CASE("get_result returns an owning copy") {
@@ -79,6 +82,8 @@ TEST_CASE("result view can be copied explicitly") {
         REQUIRE((result.eigVecs() - view.eigVecs()).norm() == Approx(0.0));
         REQUIRE((result.rNormsAbs() - view.rNormsAbs()).norm() == Approx(0.0));
         REQUIRE(result.stopReason() == view.stopReason());
+        REQUIRE(result.num_matvecs_a_total() == view.num_matvecs_a_total());
+        REQUIRE(result.time_build() == Approx(view.time_build()));
     });
 }
 

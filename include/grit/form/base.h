@@ -158,25 +158,45 @@ namespace grit::form {
             Eigen::Index              num_inner_iters                  = 0;       /*!< Inner correction iterations in the last outer iteration. */
             Eigen::Index              num_inner_iters_prev             = 0;       /*!< Inner correction iterations in the previous outer iteration. */
             Eigen::Index              num_inner_iters_total            = 0;       /*!< Total inner correction iterations. */
-            Eigen::Index              num_matvecs_inner    = 0;                   /*!< Matrix-vector products in the last inner solve. */
-            Eigen::Index              num_matvecs_inner_total = 0;                /*!< Total inner matrix-vector products. */
-            Eigen::Index              num_jdops_inner      = 0;                   /*!< Jacobi-Davidson operator applications in the last inner solve. */
-            Eigen::Index              num_jdops_inner_total = 0;                  /*!< Total inner Jacobi-Davidson operator applications. */
+            Eigen::Index              num_matvecs_inner                    = 0;       /*!< A and B matrix-vector products in the last inner solve. */
+            Eigen::Index              num_matvecs_inner_total              = 0;       /*!< Total inner A and B matrix-vector products. */
+            Eigen::Index              num_matvecs_a                        = 0;       /*!< A matrix-vector products in the last outer iteration. */
+            Eigen::Index              num_matvecs_b                        = 0;       /*!< B matrix-vector products in the last outer iteration. */
+            Eigen::Index              num_matvecs_a_inner                  = 0;       /*!< A matrix-vector products in the last inner solve. */
+            Eigen::Index              num_matvecs_b_inner                  = 0;       /*!< B matrix-vector products in the last inner solve. */
+            Eigen::Index              num_matvecs_a_total                  = 0;       /*!< Total A matrix-vector products. */
+            Eigen::Index              num_matvecs_b_total                  = 0;       /*!< Total B matrix-vector products. */
+            Eigen::Index              num_operator_inner                   = 0; /*!< Projected correction-operator applications in the last inner solve. */
+            Eigen::Index              num_operator_inner_total             = 0; /*!< Total projected correction-operator applications. */
             Eigen::Index              num_matvecs          = 0;                   /*!< Matrix-vector products in the last outer iteration. */
             Eigen::Index              num_matvecs_total    = 0;                   /*!< Total matrix-vector products. */
             Eigen::Index              num_precond          = 0;                   /*!< Preconditioner applications in the last outer iteration. */
-            Eigen::Index              num_precond_inner    = 0;                   /*!< Preconditioner applications in the last inner solve. */
-            Eigen::Index              num_precond_inner_total = 0;                /*!< Total inner preconditioner applications. */
+            Eigen::Index              num_precond_inner                    = 0; /*!< Projected preconditioner applications in the last inner solve. */
+            Eigen::Index              num_precond_inner_total              = 0; /*!< Total projected inner preconditioner applications. */
             Eigen::Index              num_precond_total    = 0;                   /*!< Total preconditioner applications. */
-            tid::ur                   time_elapsed;                               /*!< Total solver timer. */
-            tid::ur                   time_inner_total;                           /*!< Total inner correction timer. */
-            tid::ur                   time_matvecs;                               /*!< Timer for matrix-vector products in the last outer iteration. */
-            tid::ur                   time_matvecs_inner;                         /*!< Timer for matrix-vector products in the last inner solve. */
-            tid::ur                   time_matvecs_total;                         /*!< Timer for all matrix-vector products. */
-            tid::ur                   time_precond;                               /*!< Timer for preconditioner applications in the last outer iteration. */
-            tid::ur                   time_precond_inner;                         /*!< Timer for preconditioner applications in the last inner solve. */
-            tid::ur                   time_precond_total;                         /*!< Timer for all preconditioner applications. */
-            tid::ur                   time_jdops_inner;                           /*!< Timer for Jacobi-Davidson operator applications. */
+            Eigen::Index              num_preconditioner_updates           = 0;                   /*!< Preconditioner updates in the last outer iteration. */
+            Eigen::Index              num_preconditioner_updates_inner     = 0;                   /*!< Preconditioner updates for the last inner correction. */
+            Eigen::Index              num_preconditioner_updates_total     = 0;                   /*!< Total preconditioner updates. */
+            Eigen::Index              num_preconditioner_apply_inner       = 0; /*!< User preconditioner callback applications in the last inner solve. */
+            Eigen::Index              num_preconditioner_apply_inner_total = 0; /*!< Total user preconditioner callback applications in inner solves. */
+            Eigen::Index              num_preconditioner_apply_total       = 0; /*!< Total user preconditioner callback applications. */
+            tid::ur                   time_elapsed;                             /*!< Total solver wall timer. */
+            tid::ur                   time_solve_inner;                         /*!< Complete inner linear-solve wall time. */
+            tid::ur                   time_matvecs;                             /*!< Outer A and B matrix-vector product time. */
+            tid::ur                   time_matvecs_a;                           /*!< Outer A matrix-vector callback time. */
+            tid::ur                   time_matvecs_b;                           /*!< Outer B matrix-vector callback time. */
+            tid::ur                   time_matvecs_a_inner;                     /*!< Inner A matrix-vector callback time. */
+            tid::ur                   time_matvecs_b_inner;                     /*!< Inner B matrix-vector callback time. */
+            tid::ur                   time_precond;                             /*!< Outer preconditioner callback time. */
+            tid::ur                   time_preconditioner_inner;                /*!< Inner projected-preconditioner time, including projectors. */
+            tid::ur                   time_preconditioner_update;               /*!< Outer preconditioner-update callback time. */
+            tid::ur                   time_preconditioner_update_inner;         /*!< Inner preconditioner-update callback time. */
+            tid::ur                   time_preconditioner_apply_inner;          /*!< Inner user preconditioner callback time, excluding projectors. */
+            tid::ur                   time_operator_inner;      /*!< Projected correction-operator time, including projectors and A/B callbacks. */
+            tid::ur                   time_project_left_inner;        /*!< Inner left-projector time. */
+            tid::ur                   time_project_right_inner;       /*!< Inner right-projector time. */
+            tid::ur                   time_residual_correction; /*!< Residual-correction construction time. */
+            tid::ur                   time_build;               /*!< Search-space build time, including correction and orthogonalization. */
             tid::ur                   time_orthogonalize;                         /*!< Timer for orthogonalization. */
             tid::ur                   time_orthonormalize;                        /*!< Timer for orthonormalization. */
             tid::ur                   time_orth_project;                          /*!< Timer for orthogonalization projections. */
@@ -187,6 +207,7 @@ namespace grit::form {
             tid::ur                   time_diagonalize;                           /*!< Timer for projected-problem diagonalization. */
             tid::ur                   time_extract_ritz;                          /*!< Timer for Ritz extraction. */
             tid::ur                   time_restart;                               /*!< Timer for search-space restarts. */
+            tid::ur                   time_status_update;                         /*!< Timer for convergence and status updates. */
             RealScalar                inner_error_last     = RealScalar{0};       /*!< Last inner correction residual. */
             RealScalar                inner_tol_last       = RealScalar{0};       /*!< Last inner correction tolerance. */
             bool                      residual_converged = false;              /*!< Whether selected residuals satisfy the active tolerance. */
@@ -562,6 +583,8 @@ namespace grit::form {
         void printStatus();
         /*! Print a final one-line summary per requested eigenpair. */
         void printFinal();
+        /*! Finish accumulated timer laps for the current outer iteration. */
+        void restart_status_time_laps();
         /*! Call the user callback, if present. */
         virtual void run_user_callback();
 

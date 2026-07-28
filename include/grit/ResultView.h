@@ -51,18 +51,80 @@ namespace grit {
         [[nodiscard]] Eigen::Index num_inner_iters() const;
         /*! Matrix-vector products in the last inner correction solve. */
         [[nodiscard]] Eigen::Index num_matvecs_inner() const;
-        /*! Jacobi-Davidson operator applications in the last inner solve. */
-        [[nodiscard]] Eigen::Index num_jdops_inner() const;
+        /*! A matrix-vector products in the last outer iteration. */
+        [[nodiscard]] Eigen::Index num_matvecs_a() const;
+        /*! B matrix-vector products in the last outer iteration. */
+        [[nodiscard]] Eigen::Index num_matvecs_b() const;
+        /*! A matrix-vector products in the last inner correction solve. */
+        [[nodiscard]] Eigen::Index num_matvecs_a_inner() const;
+        /*! B matrix-vector products in the last inner correction solve. */
+        [[nodiscard]] Eigen::Index num_matvecs_b_inner() const;
+        /*! Total A matrix-vector products. */
+        [[nodiscard]] Eigen::Index num_matvecs_a_total() const;
+        /*! Total B matrix-vector products. */
+        [[nodiscard]] Eigen::Index num_matvecs_b_total() const;
+        /*! Projected correction-operator applications in the last inner solve. */
+        [[nodiscard]] Eigen::Index num_operator_inner() const;
         /*! Total matrix-vector products. */
         [[nodiscard]] Eigen::Index num_matvecs_total() const;
         /*! Preconditioner applications in the last outer iteration. */
         [[nodiscard]] Eigen::Index num_precond() const;
-        /*! Preconditioner applications in the last inner correction solve. */
+        /*! Projected-preconditioner applications in the last inner correction solve, including identity applications. */
         [[nodiscard]] Eigen::Index num_precond_inner() const;
         /*! Total preconditioner applications. */
         [[nodiscard]] Eigen::Index num_precond_total() const;
+        /*! Preconditioner update callbacks in the last outer iteration. */
+        [[nodiscard]] Eigen::Index num_preconditioner_updates() const;
+        /*! Preconditioner update callbacks for the last inner correction. */
+        [[nodiscard]] Eigen::Index num_preconditioner_updates_inner() const;
+        /*! Total preconditioner update callbacks. */
+        [[nodiscard]] Eigen::Index num_preconditioner_updates_total() const;
+        /*! User preconditioner apply callbacks in the last inner solve. */
+        [[nodiscard]] Eigen::Index num_preconditioner_apply_inner() const;
+        /*! Total user preconditioner apply callbacks in inner solves. */
+        [[nodiscard]] Eigen::Index num_preconditioner_apply_inner_total() const;
+        /*! Total user preconditioner apply callbacks. */
+        [[nodiscard]] Eigen::Index num_preconditioner_apply_total() const;
         /*! Total wall time measured by the solver. */
         [[nodiscard]] RealScalar time() const;
+        /*! Complete wall time spent in inner correction solves. */
+        [[nodiscard]] RealScalar time_solve_inner() const;
+        /*! Inclusive projected correction-operator time. */
+        [[nodiscard]] RealScalar time_operator_inner() const;
+        /*! Outer A and B callback time. */
+        [[nodiscard]] RealScalar time_matvecs() const;
+        /*! Inner callback time, computed as A callback time plus B callback time. */
+        [[nodiscard]] RealScalar time_matvecs_inner() const;
+        /*! Outer A callback time. */
+        [[nodiscard]] RealScalar time_matvecs_a() const;
+        /*! Outer B callback time. */
+        [[nodiscard]] RealScalar time_matvecs_b() const;
+        /*! Inner A callback time. */
+        [[nodiscard]] RealScalar time_matvecs_a_inner() const;
+        /*! Inner B callback time. */
+        [[nodiscard]] RealScalar time_matvecs_b_inner() const;
+        /*! Inclusive projected-preconditioner time. */
+        [[nodiscard]] RealScalar time_preconditioner_inner() const;
+        /*! Outer preconditioner update callback time. */
+        [[nodiscard]] RealScalar time_preconditioner_update() const;
+        /*! Inner preconditioner update callback time. */
+        [[nodiscard]] RealScalar time_preconditioner_update_inner() const;
+        /*! Total preconditioner update callback time. */
+        [[nodiscard]] RealScalar time_preconditioner_update_total() const;
+        /*! Inner user preconditioner apply callback time. */
+        [[nodiscard]] RealScalar time_preconditioner_apply_inner() const;
+        /*! Total user preconditioner apply callback time. */
+        [[nodiscard]] RealScalar time_preconditioner_apply_total() const;
+        /*! Inner left-projector time. */
+        [[nodiscard]] RealScalar time_project_left_inner() const;
+        /*! Inner right-projector time. */
+        [[nodiscard]] RealScalar time_project_right_inner() const;
+        /*! Residual-correction construction time. */
+        [[nodiscard]] RealScalar time_residual_correction() const;
+        /*! Search-space build time. */
+        [[nodiscard]] RealScalar time_build() const;
+        /*! Convergence and status-update time. */
+        [[nodiscard]] RealScalar time_status_update() const;
         /*! Time spent orthogonalizing new vectors. */
         [[nodiscard]] RealScalar time_orthogonalize() const;
         /*! Time spent orthonormalizing new vectors. */

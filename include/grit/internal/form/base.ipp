@@ -113,7 +113,7 @@ namespace grit::form {
     typename base<Scalar, form_>::MatrixType base<Scalar, form_>::get_residuals(const Eigen::Ref<const VectorReal> &Y, const Eigen::Ref<const MatrixType> &AV,
                                                                                 const Eigen::Ref<const MatrixType> &BV, VectorReal &rNormsAbs) {
         MatrixType S = AV - BV * Y.asDiagonal();
-        rNormsAbs       = S.colwise().norm().transpose();
+        rNormsAbs    = S.colwise().norm().transpose();
         return S;
     }
 
@@ -192,31 +192,37 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     typename base<Scalar, form_>::MatrixType base<Scalar, form_>::MultA(const Eigen::Ref<const MatrixType> &X) {
-        auto token_matvecs  = status.time_matvecs.tic_token();
-        status.num_matvecs += X.cols();
+        auto t_matvecs_a      = status.time_matvecs_a.tic_token();
+        auto t_matvecs        = status.time_matvecs.tic_token();
+        status.num_matvecs_a += X.cols();
+        status.num_matvecs   += X.cols();
         return A.mult(X);
     }
 
     template<typename Scalar, grit::Form form_>
     typename base<Scalar, form_>::MatrixType base<Scalar, form_>::MultA_inner(const Eigen::Ref<const MatrixType> &X) {
-        auto token_matvecs        = status.time_matvecs_inner.tic_token();
-        status.num_matvecs_inner += X.cols();
+        auto t_matvecs_a            = status.time_matvecs_a_inner.tic_token();
+        status.num_matvecs_a_inner += X.cols();
+        status.num_matvecs_inner   += X.cols();
         return A.mult(X);
     }
 
     template<typename Scalar, grit::Form form_>
     typename base<Scalar, form_>::MatrixType base<Scalar, form_>::MultB(const Eigen::Ref<const MatrixType> &X) requires(form_ == grit::Form::GENERALIZED)
     {
-        auto token_matvecs  = status.time_matvecs.tic_token();
-        status.num_matvecs += X.cols();
+        auto t_matvecs_b      = status.time_matvecs_b.tic_token();
+        auto t_matvecs        = status.time_matvecs.tic_token();
+        status.num_matvecs_b += X.cols();
+        status.num_matvecs   += X.cols();
         return B->get().mult(X);
     }
 
     template<typename Scalar, grit::Form form_>
     typename base<Scalar, form_>::MatrixType base<Scalar, form_>::MultB_inner(const Eigen::Ref<const MatrixType> &X) requires(form_ == grit::Form::GENERALIZED)
     {
-        auto token_matvecs        = status.time_matvecs_inner.tic_token();
-        status.num_matvecs_inner += X.cols();
+        auto t_matvecs_b            = status.time_matvecs_b_inner.tic_token();
+        status.num_matvecs_b_inner += X.cols();
+        status.num_matvecs_inner   += X.cols();
         return B->get().mult(X);
     }
 
@@ -224,14 +230,18 @@ namespace grit::form {
     typename base<Scalar, form_>::MatrixType base<Scalar, form_>::MultP(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const VectorReal> &evals) {
         if(!A.has_preconditioner_apply()) return X;
 
-        auto       token_precond = status.time_precond.tic_token();
         MatrixType Y(X.rows(), X.cols());
         for(Eigen::Index i = 0; i < X.cols(); ++i) {
             RealScalar theta = evals(std::min<Eigen::Index>(i, evals.size() - 1));
-            A.preconditioner_update(theta);
+            if(A.has_preconditioner_update()) {
+                A.preconditioner_update(theta);
+                status.time_preconditioner_update += A.t_precond_update->get_last_interval();
+                status.num_preconditioner_updates++;
+            }
             auto x = X.col(i);
             auto y = Y.col(i);
             A.preconditioner_apply(x, y, theta);
+            status.time_precond += A.t_precond->get_last_interval();
         }
         status.num_precond += X.cols();
         return Y;
@@ -364,8 +374,8 @@ namespace grit::form {
             }
         }
         status.op_norm_estimate = get_op_norm_estimate();
-        Eigen::Index rows     = std::min(cfg().nev, status.rNormsAbs.size());
-        status.rNormsAbsInit = status.rNormsAbs.topRows(rows);
+        Eigen::Index rows       = std::min(cfg().nev, status.rNormsAbs.size());
+        status.rNormsAbsInit    = status.rNormsAbs.topRows(rows);
         assert(V.cols() == cfg().block_size);
         assert_allFinite(V);
         last_log_time.tic();
@@ -373,22 +383,23 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::preamble() {
-        status.num_inner_iters_prev = status.num_inner_iters;
-        status.num_matvecs          = 0;
-        status.num_precond          = 0;
-        status.num_inner_iters      = 0;
-        status.num_matvecs_inner    = 0;
-        status.num_precond_inner    = 0;
-        status.num_jdops_inner      = 0;
+        status.num_inner_iters_prev             = status.num_inner_iters;
+        status.num_matvecs                      = 0;
+        status.num_precond                      = 0;
+        status.num_inner_iters                  = 0;
+        status.num_matvecs_inner                = 0;
+        status.num_matvecs_a                    = 0;
+        status.num_matvecs_b                    = 0;
+        status.num_matvecs_a_inner              = 0;
+        status.num_matvecs_b_inner              = 0;
+        status.num_precond_inner                = 0;
+        status.num_operator_inner               = 0;
+        status.num_preconditioner_updates       = 0;
+        status.num_preconditioner_updates_inner = 0;
+        status.num_preconditioner_apply_inner   = 0;
 
         status.inner_error_last = RealScalar{0};
         status.inner_tol_last   = RealScalar{0};
-
-        status.time_matvecs.reset();
-        status.time_precond.reset();
-        status.time_matvecs_inner.reset();
-        status.time_precond_inner.reset();
-        status.time_jdops_inner.reset();
     }
 
     template<typename Scalar, grit::Form form_>
@@ -450,16 +461,20 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::updateStatus() {
+        auto t_status_update = status.time_status_update.tic_token();
+
         // Accumulate counters from the inner solver
-        status.num_matvecs_total  += status.num_matvecs + status.num_matvecs_inner;
-        status.num_matvecs_inner_total += status.num_matvecs_inner;
-        status.num_precond_total  += status.num_precond + status.num_precond_inner;
-        status.num_precond_inner_total += status.num_precond_inner;
-        status.num_jdops_inner_total += status.num_jdops_inner;
-        status.num_inner_iters_total += status.num_inner_iters;
-        status.time_matvecs_total += status.time_matvecs.get_time() + status.time_matvecs_inner.get_time();
-        status.time_precond_total += status.time_precond.get_time() + status.time_precond_inner.get_time();
-        status.time_inner_total += status.time_matvecs_inner.get_time() + status.time_jdops_inner.get_time() + status.time_precond_inner.get_time();
+        status.num_matvecs_total                    += status.num_matvecs + status.num_matvecs_inner;
+        status.num_matvecs_inner_total              += status.num_matvecs_inner;
+        status.num_matvecs_a_total                  += status.num_matvecs_a + status.num_matvecs_a_inner;
+        status.num_matvecs_b_total                  += status.num_matvecs_b + status.num_matvecs_b_inner;
+        status.num_precond_total                    += status.num_precond + status.num_precond_inner;
+        status.num_precond_inner_total              += status.num_precond_inner;
+        status.num_operator_inner_total             += status.num_operator_inner;
+        status.num_preconditioner_updates_total     += status.num_preconditioner_updates + status.num_preconditioner_updates_inner;
+        status.num_preconditioner_apply_inner_total += status.num_preconditioner_apply_inner;
+        status.num_preconditioner_apply_total       += status.num_precond + status.num_preconditioner_apply_inner;
+        status.num_inner_iters_total                += status.num_inner_iters;
 
         // Eigenvalues are sorted in ascending order.
         status.oldVal  = status.eigVal.topRows(cfg().nev);
@@ -499,13 +514,13 @@ namespace grit::form {
             return msg;
         };
 
-        constexpr auto beta    = RealScalar{0.5f};
-        VectorReal rNormsAbs = status.rNormsAbs.topRows(cfg().nev);
-        VectorReal targets   = rNormAbsTargets();
-        RealScalar relGap    = status.gap * get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
+        constexpr auto beta      = RealScalar{0.5f};
+        VectorReal     rNormsAbs = status.rNormsAbs.topRows(cfg().nev);
+        VectorReal     targets   = rNormAbsTargets();
+        RealScalar     relGap    = status.gap * get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
         if(rNormsAbs.size() != targets.size()) throw std::logic_error("unequal residual norm and target sizes");
         status.residual_converged = (rNormsAbs.array() < targets.array()).all();
-        status.residual_below_gap      = rNormsAbs.maxCoeff() < beta * relGap;
+        status.residual_below_gap = rNormsAbs.maxCoeff() < beta * relGap;
 
         if(status.residual_converged) {
             std::string msg_rnorm_gap = fmt::format(" | gap {:.3e} (rel {:.3e})", status.gap, relGap);
@@ -535,14 +550,14 @@ namespace grit::form {
             status.stopReason |= StopReason::ritz_residual_stalled;
         } else if(status.saturation_count_eigVal >= status.saturation_count_max * 2) {
             status.stopMessage.emplace_back(fmt::format("saturation_count eigVal {} >= saturation_count_max ({}) * 2 | outer_iter {} | mv {} | {:.3e} s",
-                                                        status.saturation_count_eigVal, status.saturation_count_max, status.outer_iter + 1, status.num_matvecs_total,
-                                                        status.time_elapsed.get_time()));
+                                                        status.saturation_count_eigVal, status.saturation_count_max, status.outer_iter + 1,
+                                                        status.num_matvecs_total, status.time_elapsed.get_time()));
             status.stopReason |= StopReason::ritz_value_stalled;
         } else if(status.saturation_count_eigVal > 2 && status.saturation_count_rNorm >= status.saturation_count_max * 2) {
             // Probably eigVal is stuck in some kind of cycle.
             status.stopMessage.emplace_back(fmt::format("saturation_count rNorm {} >= saturation_count_max ({}) * 2 | outer_iter {} | mv {} | {:.3e} s",
-                                                        status.saturation_count_rNorm, status.saturation_count_max, status.outer_iter + 1, status.num_matvecs_total,
-                                                        status.time_elapsed.get_time()));
+                                                        status.saturation_count_rNorm, status.saturation_count_max, status.outer_iter + 1,
+                                                        status.num_matvecs_total, status.time_elapsed.get_time()));
             status.stopReason |= StopReason::ritz_residual_stalled;
         }
     }
@@ -573,10 +588,29 @@ namespace grit::form {
         }
 
         std::string innerMsg;
-        if(status.num_matvecs_inner > 0 || status.num_jdops_inner > 0 || status.num_precond_inner > 0) {
-            innerMsg = fmt::format("[inner: ({}) mv {:5} jd {:5} pc {:5} err {:.2e} tol {:.2e} mv {:.1e}s jd {:.1e}s pc {:.1e}s] ", rCorrMsg,
-                                   status.num_matvecs_inner, status.num_jdops_inner, status.num_precond_inner, status.inner_error_last, status.inner_tol_last,
-                                   status.time_matvecs_inner.get_time(), status.time_jdops_inner.get_time(), status.time_precond_inner.get_time());
+        if(status.num_matvecs_inner > 0 || status.num_operator_inner > 0 || status.num_precond_inner > 0) {
+            const auto time_solve_inner          = status.time_solve_inner.get_time_lap();
+            const auto time_operator_inner       = status.time_operator_inner.get_time_lap();
+            const auto time_preconditioner_inner = status.time_preconditioner_inner.get_time_lap();
+            const auto time_krylov_other         = std::max(0.0, time_solve_inner - time_operator_inner - time_preconditioner_inner);
+            innerMsg                             = fmt::format("[inner: ({}) it {} mv {} A {}/{:.1e}s B {}/{:.1e}s op {}/{:.1e}s pc {}/{:.1e}s "
+                                                                                           "pc_update {}/{:.1e}s pc_apply {}/{:.1e}s project {:.1e}/{:.1e}s err {:.2e} tol {:.2e} wall {:.1e}s other {:.1e}s] ",
+                                                               rCorrMsg, status.num_inner_iters, status.num_matvecs_inner, status.num_matvecs_a_inner,
+                                                               status.time_matvecs_a_inner.get_time_lap(), status.num_matvecs_b_inner, status.time_matvecs_b_inner.get_time_lap(),
+                                                               status.num_operator_inner, time_operator_inner, status.num_precond_inner, time_preconditioner_inner,
+                                                               status.num_preconditioner_updates_inner, status.time_preconditioner_update_inner.get_time_lap(),
+                                                               status.num_preconditioner_apply_inner, status.time_preconditioner_apply_inner.get_time_lap(),
+                                                               status.time_project_left_inner.get_time_lap(), status.time_project_right_inner.get_time_lap(), status.inner_error_last,
+                                                               status.inner_tol_last, time_solve_inner, time_krylov_other);
+        }
+
+        std::string timingMsg;
+        if(status.outer_iter > 0) {
+            timingMsg = fmt::format(" [timing: build {:.1e}s correction {:.1e}s orthogonalize(bm {}) {:.1e}s orthonormalize {:.1e}s "
+                                    "diagonalize {:.1e}s ritz {:.1e}s restart {:.1e}s status {:.1e}s]",
+                                    status.time_build.get_time_lap(), status.time_residual_correction.get_time_lap(), cfg().use_b_inner_product,
+                                    status.time_orthogonalize.get_time_lap(), status.time_orthonormalize.get_time_lap(), status.time_diagonalize.get_time_lap(),
+                                    status.time_extract_ritz.get_time_lap(), status.time_restart.get_time_lap(), status.time_status_update.get_time_lap());
         }
 
         RealScalar orthError = RealScalar{0};
@@ -609,12 +643,12 @@ namespace grit::form {
                  "outer_iter {:3} mv {:3} pc {:3} t {:.1e}s dim {} {}eigVal {}{} "
                  "oErr {:.3e} rNormsAbs {} target {} abstol {:.2e} reltol {:.2e} rescaled {} "
                  "({:9.2e}/mv) sat {}:{}/{} col {:2} block_size {} ritz {} "
-                 "op norm {:.2e} cond {:.2e} sens {:.2e}{}",
+                 "op norm {:.2e} cond {:.2e} sens {:.2e}{}{}",
                  status.outer_iter, status.num_matvecs, status.num_precond, status.time_elapsed.get_time(), N, innerMsg,
                  format_vector(VectorReal(status.eigVal), "{:.16f}"), evMsg, orthError, format_vector(VectorReal(status.rNormsAbs)),
-                 format_vector(rNormAbsTargets, "{:.3e}"), cfg().abstol, cfg().reltol, cfg().use_rescaled_rnorm_tolerance,
-                 get_rNorms_log10_change_per_matvec(), status.saturation_count_eigVal, status.saturation_count_rNorm, status.saturation_count_max, Q.cols(),
-                 cfg().block_size, enum2sv(cfg().ritz), op_norm_estimate, status.condition, status.sensitivity, msg_rnorm_gap);
+                 format_vector(rNormAbsTargets, "{:.3e}"), cfg().abstol, cfg().reltol, cfg().use_rescaled_rnorm_tolerance, get_rNorms_log10_change_per_matvec(),
+                 status.saturation_count_eigVal, status.saturation_count_rNorm, status.saturation_count_max, Q.cols(), cfg().block_size, enum2sv(cfg().ritz),
+                 op_norm_estimate, status.condition, status.sensitivity, msg_rnorm_gap, timingMsg);
     }
 
     template<typename Scalar, grit::Form form_>
@@ -626,18 +660,50 @@ namespace grit::form {
         const Eigen::Index outer_mv = status.num_matvecs_total - inner_mv;
         const Eigen::Index inner_pc = status.num_precond_inner_total;
         const Eigen::Index outer_pc = status.num_precond_total - inner_pc;
-        const RealScalar   inner_t  = status.time_inner_total.get_time();
-        const RealScalar   outer_t  = status.time_elapsed.get_time() - inner_t;
+        const RealScalar   inner_t  = status.time_solve_inner.get_time();
+        const RealScalar   outer_t  = std::max<RealScalar>(RealScalar{0}, status.time_elapsed.get_time() - inner_t);
 
         for(Eigen::Index i = 0; i < nev; ++i) {
             const RealScalar op_norm_estimate = get_op_norm_estimate(std::optional<RealScalar>{status.eigVal(i)});
             log->info("grit finished: {} | idx {}/{} | eigVal {:.16e} | rNormAbs {:.3e} | "
-                      "outer: it {} mv {} pc {} t {:.1e}s | inner: it {} mv {} jd {} pc {} t {:.1e}s | "
+                      "outer: it {} mv {} pc {} t {:.1e}s | inner: it {} mv {} op {} pc {} t {:.1e}s | "
                       "total: mv {} pc {} t {:.1e}s | op norm {:.2e} cond {:.2e} sens {:.2e}",
                       enum2s(status.stopReason), i + 1, nev, status.eigVal(i), status.rNormsAbs(i), status.outer_iter, outer_mv, outer_pc, outer_t,
-                      status.num_inner_iters_total, inner_mv, status.num_jdops_inner_total, inner_pc, inner_t, status.num_matvecs_total,
+                      status.num_inner_iters_total, inner_mv, status.num_operator_inner_total, inner_pc, inner_t, status.num_matvecs_total,
                       status.num_precond_total, status.time_elapsed.get_time(), op_norm_estimate, status.condition, status.sensitivity);
         }
+    }
+
+    template<typename Scalar, grit::Form form_>
+    void base<Scalar, form_>::restart_status_time_laps() {
+        status.time_elapsed.restart_time_lap();
+        status.time_solve_inner.restart_time_lap();
+        status.time_matvecs.restart_time_lap();
+        status.time_matvecs_a.restart_time_lap();
+        status.time_matvecs_b.restart_time_lap();
+        status.time_matvecs_a_inner.restart_time_lap();
+        status.time_matvecs_b_inner.restart_time_lap();
+        status.time_precond.restart_time_lap();
+        status.time_preconditioner_inner.restart_time_lap();
+        status.time_preconditioner_update.restart_time_lap();
+        status.time_preconditioner_update_inner.restart_time_lap();
+        status.time_preconditioner_apply_inner.restart_time_lap();
+        status.time_operator_inner.restart_time_lap();
+        status.time_project_left_inner.restart_time_lap();
+        status.time_project_right_inner.restart_time_lap();
+        status.time_residual_correction.restart_time_lap();
+        status.time_build.restart_time_lap();
+        status.time_orthogonalize.restart_time_lap();
+        status.time_orthonormalize.restart_time_lap();
+        status.time_orth_project.restart_time_lap();
+        status.time_orth_factor.restart_time_lap();
+        status.time_orth_update.restart_time_lap();
+        status.time_orth_refresh.restart_time_lap();
+        status.time_orth_mask.restart_time_lap();
+        status.time_diagonalize.restart_time_lap();
+        status.time_extract_ritz.restart_time_lap();
+        status.time_restart.restart_time_lap();
+        status.time_status_update.restart_time_lap();
     }
 
     template<typename Scalar, grit::Form form_>
@@ -647,6 +713,7 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::do_outer_iteration() {
+        restart_status_time_laps();
         preamble();
         build();
         diagonalizeT();
@@ -661,25 +728,13 @@ namespace grit::form {
     void base<Scalar, form_>::run() {
         status.stopReason = StopReason::none;
         status.stopMessage.clear();
-        status.residual_converged    = false;
-        status.residual_below_gap         = false;
+        status.residual_converged      = false;
+        status.residual_below_gap      = false;
         status.saturation_count_eigVal = 0;
         status.saturation_count_rNorm  = 0;
         status.rNormsAbsHistory.clear();
         status.eigVals_history.clear();
         status.matvecs_history.clear();
-        status.time_orthogonalize.reset();
-        status.time_orthonormalize.reset();
-        status.time_orth_project.reset();
-        status.time_orth_factor.reset();
-        status.time_orth_update.reset();
-        status.time_orth_refresh.reset();
-        status.time_orth_mask.reset();
-        status.time_inner_total.reset();
-        status.time_diagonalize.reset();
-        status.time_extract_ritz.reset();
-        status.time_restart.reset();
-
         auto token_elapsed = status.time_elapsed.tic_token();
         if(status.outer_iter == 0) {
             init();

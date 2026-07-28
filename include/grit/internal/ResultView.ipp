@@ -68,8 +68,38 @@ namespace grit {
     }
 
     template<typename Scalar_>
-    Eigen::Index ResultView<Scalar_>::num_jdops_inner() const {
-        return internal::visit_solver_source(source, [](const auto &src) { return src.status.num_jdops_inner; });
+    Eigen::Index ResultView<Scalar_>::num_matvecs_a() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.status.num_matvecs_a; });
+    }
+
+    template<typename Scalar_>
+    Eigen::Index ResultView<Scalar_>::num_matvecs_b() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.status.num_matvecs_b; });
+    }
+
+    template<typename Scalar_>
+    Eigen::Index ResultView<Scalar_>::num_matvecs_a_inner() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.status.num_matvecs_a_inner; });
+    }
+
+    template<typename Scalar_>
+    Eigen::Index ResultView<Scalar_>::num_matvecs_b_inner() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.status.num_matvecs_b_inner; });
+    }
+
+    template<typename Scalar_>
+    Eigen::Index ResultView<Scalar_>::num_matvecs_a_total() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.status.num_matvecs_a_total; });
+    }
+
+    template<typename Scalar_>
+    Eigen::Index ResultView<Scalar_>::num_matvecs_b_total() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.status.num_matvecs_b_total; });
+    }
+
+    template<typename Scalar_>
+    Eigen::Index ResultView<Scalar_>::num_operator_inner() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.status.num_operator_inner; });
     }
 
     template<typename Scalar_>
@@ -93,8 +123,139 @@ namespace grit {
     }
 
     template<typename Scalar_>
+    Eigen::Index ResultView<Scalar_>::num_preconditioner_updates() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.status.num_preconditioner_updates; });
+    }
+
+    template<typename Scalar_>
+    Eigen::Index ResultView<Scalar_>::num_preconditioner_updates_inner() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.status.num_preconditioner_updates_inner; });
+    }
+
+    template<typename Scalar_>
+    Eigen::Index ResultView<Scalar_>::num_preconditioner_updates_total() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.status.num_preconditioner_updates_total; });
+    }
+
+    template<typename Scalar_>
+    Eigen::Index ResultView<Scalar_>::num_preconditioner_apply_inner() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.status.num_preconditioner_apply_inner; });
+    }
+
+    template<typename Scalar_>
+    Eigen::Index ResultView<Scalar_>::num_preconditioner_apply_inner_total() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.status.num_preconditioner_apply_inner_total; });
+    }
+
+    template<typename Scalar_>
+    Eigen::Index ResultView<Scalar_>::num_preconditioner_apply_total() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.status.num_preconditioner_apply_total; });
+    }
+
+    template<typename Scalar_>
     typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time() const {
         return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_elapsed.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_solve_inner() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_solve_inner.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_operator_inner() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_operator_inner.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_matvecs() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_matvecs.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_matvecs_inner() const {
+        return time_matvecs_a_inner() + time_matvecs_b_inner();
+    }
+
+    template<typename Scalar_>
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_matvecs_a() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_matvecs_a.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_matvecs_b() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_matvecs_b.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_matvecs_a_inner() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_matvecs_a_inner.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_matvecs_b_inner() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_matvecs_b_inner.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_preconditioner_inner() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_preconditioner_inner.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_preconditioner_update() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_preconditioner_update.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_preconditioner_update_inner() const {
+        return internal::visit_solver_source(source,
+                                             [](const auto &src) { return static_cast<RealScalar>(src.status.time_preconditioner_update_inner.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_preconditioner_update_total() const {
+        return internal::visit_solver_source(source, [](const auto &src) {
+            return static_cast<RealScalar>(src.status.time_preconditioner_update.get_time() + src.status.time_preconditioner_update_inner.get_time());
+        });
+    }
+
+    template<typename Scalar_>
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_preconditioner_apply_inner() const {
+        return internal::visit_solver_source(source,
+                                             [](const auto &src) { return static_cast<RealScalar>(src.status.time_preconditioner_apply_inner.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_preconditioner_apply_total() const {
+        return internal::visit_solver_source(source, [](const auto &src) {
+            return static_cast<RealScalar>(src.status.time_precond.get_time() + src.status.time_preconditioner_apply_inner.get_time());
+        });
+    }
+
+    template<typename Scalar_>
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_project_left_inner() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_project_left_inner.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_project_right_inner() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_project_right_inner.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_residual_correction() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_residual_correction.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_build() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_build.get_time()); });
+    }
+
+    template<typename Scalar_>
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::time_status_update() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return static_cast<RealScalar>(src.status.time_status_update.get_time()); });
     }
 
     template<typename Scalar_>
@@ -210,8 +371,9 @@ namespace grit {
 
     template<typename Scalar_>
     std::string_view ResultView<Scalar_>::residual_correction_iteration_name() const {
-        return internal::visit_solver_source(
-            source, [](const auto &src) { return std::remove_cvref_t<decltype(src)>::ResidualCorrectionToString(src.auto_residual_correction.iteration_method); });
+        return internal::visit_solver_source(source, [](const auto &src) {
+            return std::remove_cvref_t<decltype(src)>::ResidualCorrectionToString(src.auto_residual_correction.iteration_method);
+        });
     }
 
     template<typename Scalar_>
