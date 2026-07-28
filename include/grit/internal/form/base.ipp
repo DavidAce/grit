@@ -665,7 +665,7 @@ namespace grit::form {
 
         for(Eigen::Index i = 0; i < nev; ++i) {
             const RealScalar op_norm_estimate = get_op_norm_estimate(std::optional<RealScalar>{status.eigVal(i)});
-            log->info("grit finished: {} | idx {}/{} | eigVal {:.16e} | rNormAbs {:.3e} | "
+            log->info("grit finished: {} | nev {}/{} | eigVal {:.16e} | rNormAbs {:.3e} | "
                       "outer: it {} mv {} pc {} t {:.1e}s | inner: it {} mv {} op {} pc {} t {:.1e}s | "
                       "total: mv {} pc {} t {:.1e}s | op norm {:.2e} cond {:.2e} sens {:.2e}",
                       enum2s(status.stopReason), i + 1, nev, status.eigVal(i), status.rNormsAbs(i), status.outer_iter, outer_mv, outer_pc, outer_t,
