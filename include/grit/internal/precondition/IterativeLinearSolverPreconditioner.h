@@ -64,12 +64,12 @@ namespace grit::internal::precondition {
 
         template<typename Rhs, typename Dest>
         void _solve_impl(const Rhs &b, Dest &x) const {
-            auto t_start = std::chrono::high_resolution_clock::now();
+            auto t_start = std::chrono::steady_clock::now();
 
             if(!config->preconditioner_apply) {
                 x = b;
                 m_iterations++;
-                auto t_end      = std::chrono::high_resolution_clock::now();
+                auto t_end      = std::chrono::steady_clock::now();
                 m_time_elapsed += std::chrono::duration<double>(t_end - t_start).count();
                 return;
             }
@@ -95,7 +95,7 @@ namespace grit::internal::precondition {
             assert(x.allFinite());
 
             m_iterations++;
-            auto t_end      = std::chrono::high_resolution_clock::now();
+            auto t_end      = std::chrono::steady_clock::now();
             m_time_elapsed += std::chrono::duration<double>(t_end - t_start).count();
         }
 

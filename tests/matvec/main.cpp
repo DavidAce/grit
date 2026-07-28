@@ -50,7 +50,32 @@ TEST_CASE("preconditioner callbacks are invoked") {
 
     REQUIRE(calc_count == 1);
     REQUIRE(prec_count == 1);
+    REQUIRE(A.num_pc_update == 1);
+    REQUIRE(A.num_pc == 1);
+    REQUIRE(A.t_precond_update->get_tic_count() == 1);
+    REQUIRE(A.t_precond->get_tic_count() == 1);
     require_close(x, y, 1e-12);
+}
+
+TEST_CASE("timer accumulated laps follow measured intervals") {
+    grit::tid::ur timer;
+
+    timer += 0.25;
+    REQUIRE(timer.get_time() == Approx(0.25));
+    REQUIRE(timer.get_last_interval() == Approx(0.25));
+    REQUIRE(timer.get_tic_count() == 1);
+    REQUIRE(timer.get_time_lap() == Approx(0.25));
+    REQUIRE(timer.restart_time_lap() == Approx(0.25));
+    REQUIRE(timer.get_last_time_lap() == Approx(0.25));
+    REQUIRE(timer.get_time_lap() == Approx(0.0));
+
+    timer += 0.5;
+    REQUIRE(timer.get_time() == Approx(0.75));
+    REQUIRE(timer.get_last_interval() == Approx(0.5));
+    REQUIRE(timer.get_tic_count() == 2);
+    REQUIRE(timer.get_time_lap() == Approx(0.5));
+    REQUIRE(timer.restart_time_lap() == Approx(0.5));
+    REQUIRE(timer.get_last_time_lap() == Approx(0.5));
 }
 
 int main(int argc, char **argv) {

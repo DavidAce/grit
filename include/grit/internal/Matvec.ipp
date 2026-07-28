@@ -72,6 +72,11 @@ namespace grit {
     }
 
     template<typename Scalar_>
+    bool Matvec<Scalar_>::has_preconditioner_update() const {
+        return static_cast<bool>(preconditioner_update_callback);
+    }
+
+    template<typename Scalar_>
     typename Matvec<Scalar_>::MatrixType Matvec<Scalar_>::mult(const Eigen::Ref<const MatrixType> &X) const {
         if(!mult_callback) throw std::runtime_error("Matvec::mult callback is not set");
         auto token_apply  = t_mult->tic_token();
@@ -81,7 +86,10 @@ namespace grit {
 
     template<typename Scalar_>
     void Matvec<Scalar_>::preconditioner_update(RealScalar theta) const {
-        if(preconditioner_update_callback) preconditioner_update_callback(theta);
+        if(!preconditioner_update_callback) return;
+        auto t_preconditioner_update = t_precond_update->tic_token();
+        preconditioner_update_callback(theta);
+        num_pc_update++;
     }
 
     template<typename Scalar_>
@@ -99,6 +107,7 @@ namespace grit {
     void Matvec<Scalar_>::reset() {
         num_mv = 0;
         num_pc = 0;
+        num_pc_update = 0;
     }
 
     template<typename Scalar>

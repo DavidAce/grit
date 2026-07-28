@@ -27,11 +27,13 @@ namespace grit::tid {
 
     class ur {
         private:
-        using clock                     = std::chrono::high_resolution_clock;
+        using clock                     = std::chrono::steady_clock;
         clock::time_point tic_timepoint = clock::now();
         clock::time_point lap_timepoint = clock::now();
         double            measured_time = 0.0;
+        double            measured_time_lap = 0.0;
         double            last_interval = 0.0;
+        double            last_time_lap = 0.0;
         size_t            count         = 0;
         bool              running       = false;
         std::string       label;
@@ -51,12 +53,14 @@ namespace grit::tid {
             running = false;
         }
         void reset() {
-            measured_time = 0.0;
-            last_interval = 0.0;
-            count         = 0;
-            running       = false;
-            tic_timepoint = clock::now();
-            lap_timepoint = tic_timepoint;
+            measured_time     = 0.0;
+            measured_time_lap = 0.0;
+            last_interval     = 0.0;
+            last_time_lap     = 0.0;
+            count             = 0;
+            running           = false;
+            tic_timepoint     = clock::now();
+            lap_timepoint     = tic_timepoint;
         }
         void                      set_label(std::string_view label_) noexcept { label = label_; }
         [[nodiscard]] std::string get_label() const noexcept { return label; }
@@ -66,6 +70,14 @@ namespace grit::tid {
         }
         [[nodiscard]] double get_last_interval() const { return last_interval; }
         [[nodiscard]] size_t get_tic_count() const { return count; }
+        [[nodiscard]] double get_time_lap() const { return get_time() - measured_time_lap; }
+        [[nodiscard]] double get_last_time_lap() const { return last_time_lap; }
+        double               restart_time_lap() {
+            const auto total  = get_time();
+            last_time_lap     = total - measured_time_lap;
+            measured_time_lap = total;
+            return last_time_lap;
+        }
         [[nodiscard]] double get_lap() const { return std::chrono::duration<double>(clock::now() - lap_timepoint).count(); }
         double               restart_lap() {
             auto now      = clock::now();
@@ -74,7 +86,9 @@ namespace grit::tid {
             return lap;
         }
         ur &operator+=(double elapsed_time) noexcept {
+            last_interval  = elapsed_time;
             measured_time += elapsed_time;
+            count++;
             return *this;
         }
         [[nodiscard]] token tic_token(double add_time = 0) noexcept { return token(*this, add_time); }

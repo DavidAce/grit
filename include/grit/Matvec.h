@@ -82,6 +82,8 @@ namespace grit {
         [[nodiscard]] bool has_mult() const;
         /*! Whether a preconditioner apply callback has been set. */
         [[nodiscard]] bool has_preconditioner_apply() const;
+        /*! Whether a preconditioner update callback has been set. */
+        [[nodiscard]] bool has_preconditioner_update() const;
 
         /*!
          * Apply the operator to a block of vectors.
@@ -108,8 +110,10 @@ namespace grit {
 
         mutable long             num_mv    = 0;                                                /*!< Number of matrix-vector callback calls. */
         mutable long             num_pc    = 0;                                                /*!< Number of preconditioner apply calls. */
+        mutable long             num_pc_update    = 0;                                                /*!< Number of preconditioner update calls. */
         std::unique_ptr<tid::ur> t_mult    = std::make_unique<tid::ur>("Time Mult");           /*!< Timer for matrix-vector calls. */
-        std::unique_ptr<tid::ur> t_precond = std::make_unique<tid::ur>("Time Preconditioner"); /*!< Timer for preconditioner calls. */
+        std::unique_ptr<tid::ur> t_precond        = std::make_unique<tid::ur>("Time Preconditioner"); /*!< Timer for preconditioner apply calls. */
+        std::unique_ptr<tid::ur> t_precond_update = std::make_unique<tid::ur>("Time Preconditioner Update"); /*!< Timer for preconditioner update calls. */
 
         private:
         Eigen::Index              size = 0;

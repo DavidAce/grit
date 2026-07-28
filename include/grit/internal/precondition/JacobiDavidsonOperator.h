@@ -70,9 +70,9 @@ namespace grit::internal::precondition {
         }
         template<typename Rhs>
         Eigen::Product<JacobiDavidsonOperator, Rhs, Eigen::AliasFreeProduct> gemm(const Eigen::MatrixBase<Rhs> &x) {
-            auto t_start  = std::chrono::high_resolution_clock::now();
+            auto t_start   = std::chrono::steady_clock::now();
             auto result   = MatrixOp(x);
-            auto t_end    = std::chrono::high_resolution_clock::now();
+            auto t_end     = std::chrono::steady_clock::now();
             m_optimer    += std::chrono::duration<double>(t_end - t_start).count();
             m_opcounter++;
             return result;
@@ -115,11 +115,11 @@ namespace Eigen::internal {
                 y_tmp.resize(rhs.rows(), rhs.cols());
                 z_tmp.resize(rhs.rows(), rhs.cols());
 
-                auto t_start = std::chrono::high_resolution_clock::now();
+                auto t_start = std::chrono::steady_clock::now();
                 ProjectOpR(rhs, x_tmp);
                 ResidualOp(x_tmp, y_tmp);
                 ProjectOpL(y_tmp, z_tmp);
-                auto t_end     = std::chrono::high_resolution_clock::now();
+                auto t_end     = std::chrono::steady_clock::now();
                 mat.m_optimer += std::chrono::duration<double>(t_end - t_start).count();
                 mat.m_opcounter++;
 
@@ -149,7 +149,7 @@ namespace grit::internal::precondition {
 
         typename JacobiDavidsonOperator<Scalar>::VectorType res;
         auto                                                run = [&](auto &solver) {
-            auto t_start = std::chrono::high_resolution_clock::now();
+            auto t_start = std::chrono::steady_clock::now();
 
             solver.setMaxIterations(cfg.max_inner_iters);
             solver.setTolerance(cfg.tolerance);
@@ -160,7 +160,7 @@ namespace grit::internal::precondition {
             } else {
                 res = solver.solve(rhs);
             }
-            auto t_end = std::chrono::high_resolution_clock::now();
+            auto t_end = std::chrono::steady_clock::now();
 
             cfg.result.num_inner_iters += solver.iterations();
             cfg.result.matvecs      += matRepl.num_applications();
