@@ -35,7 +35,8 @@ int main(int argc, char **argv) {
         if(!opts.save_results.empty()) bench_standard::initialize_results_hdf5(opts.save_results, opts.algo);
 
         std::println("matrix: {} ({})", opts.matrix_path, matrix_path.string());
-        std::println("shape: {} x {} | nonzeros: {} | nev: {} | algo: {}", matrix.rows(), matrix.cols(), matrix.nonZeros(), opts.nev, bench_standard::algo_name(opts.algo));
+        std::println("shape: {} x {} | nonzeros: {} | nev: {} | algo: {}", matrix.rows(), matrix.cols(), matrix.nonZeros(), opts.nev,
+                     bench_standard::algo_name(opts.algo));
         bench_standard::print_sweep_config(opts, cases.size());
         bench_standard::print_result_header(opts.algo);
 

@@ -8,18 +8,15 @@ This benchmark reads a Matrix Market pair and runs one of:
 
 for the generalized problem `A x = lambda B x`.
 
-`A` must be symmetric or Hermitian. `B` must be symmetric or Hermitian positive
-definite.
+`A` must be symmetric or Hermitian. `B` must be symmetric or Hermitian positive definite.
 
 ## Matrix Pairs
 
-Benchmark data is intentionally not tracked by git. Store downloaded matrices
-under `bench/data/`.
+Benchmark data is intentionally not tracked by git. Store downloaded matrices under `bench/data/`.
 
-Good starter pairs are structural stiffness/mass problems from the Matrix
-Market Harwell-Boeing collection. For example, `BCSSTK19` is a real symmetric
-stiffness matrix and `BCSSTM19` is the corresponding real symmetric positive
-definite mass matrix.
+Good starter pairs are structural stiffness/mass problems from the Matrix Market Harwell-Boeing collection. For example,
+`BCSSTK19` is a real symmetric stiffness matrix and `BCSSTM19` is the corresponding real symmetric positive definite
+mass matrix.
 
 Use the stiffness matrix as `--matrix-a-path` and the mass matrix as
 `--matrix-b-path`.
@@ -56,8 +53,7 @@ Use `--use-b-inner-product` to use B-metric inner products. It can also be swept
 --use-b-inner-product=[false,true]
 ```
 
-Use `--use-jd-b-only` with `--algo=gdplusk` to benchmark the B-only
-Jacobi-Davidson correction path:
+Use `--use-jd-b-only` with `--algo=gdplusk` to benchmark the B-only Jacobi-Davidson correction path:
 
 ```bash
 ./build/Release/bench/generalized/grit-bench-generalized \
@@ -73,8 +69,7 @@ Jacobi-Davidson correction path:
 
 ## Sweeps
 
-The generalized benchmark follows the standard benchmark CLI style. Common sweep
-axes include:
+The generalized benchmark follows the standard benchmark CLI style. Common sweep axes include:
 
 ```bash
 --ncv=[8,16,32]
@@ -122,6 +117,5 @@ Saved eigvecs are stored under `/grit/generalized/<algo>/eigvecs`.
 
 ## Results
 
-Use `--save-results=<file>` to store final result rows and solver snapshots.
-Use `--print-summary --save-results=<file>` to print a summary without rerunning
-the benchmark.
+Use `--save-results=<file>` to store final result rows and solver snapshots. Use `--print-summary --save-results=<file>`
+to print a summary without rerunning the benchmark.

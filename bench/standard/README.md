@@ -1,7 +1,6 @@
 # Standard Eigenvalue Benchmark
 
-This benchmark reads a local Matrix Market file, builds a sparse matrix-vector
-callback, and runs one of:
+This benchmark reads a local Matrix Market file, builds a sparse matrix-vector callback, and runs one of:
 
 - `grit::standard::gdplusk`
 - `grit::standard::lanczos`
@@ -11,8 +10,8 @@ for the smallest algebraic eigenpair.
 
 ## Example Matrix
 
-The default matrix path points to `finance256` from the SuiteSparse Matrix Collection.
-Benchmark data is intentionally not tracked by git.
+The default matrix path points to `finance256` from the SuiteSparse Matrix Collection. Benchmark data is intentionally
+not tracked by git.
 
 ```bash
 mkdir -p bench/data
@@ -23,9 +22,8 @@ rm bench/data/finance256.tar.gz
 
 ## Additional SuiteSparse Matrices
 
-Several matrices used in PRIMME benchmark papers are available from the
-SuiteSparse Matrix Collection in Matrix Market format. Download them directly
-under `bench/data/` and pass the extracted `.mtx` file with `--matrix-path`.
+Several matrices used in PRIMME benchmark papers are available from the SuiteSparse Matrix Collection in Matrix Market
+format. Download them directly under `bench/data/` and pass the extracted `.mtx` file with `--matrix-path`.
 
 `finan512`: 74752 x 74752, 596992 nonzeros.
 
@@ -121,30 +119,26 @@ The following options are `gdplusk`-only and will be rejected for `lanczos` and
 
 ## AUTO Residual Correction
 
-`--residual-correction=auto` starts with cheap Olsen. Once cheap Olsen has
-dwelled for `--auto-min-dwell-iters` outer iterations and both the eigenvalue and derived
-rescaled-residual histories saturate, AUTO switches to Jacobi-Davidson. AUTO
-also switches to Jacobi-Davidson once the derived rescaled residual norm is below
-`--auto-jd-start-rnorm-threshold`; set that option to `0` to disable this
-rescaled residual trigger.
+`--residual-correction=auto` starts with cheap Olsen. Once cheap Olsen has dwelled for `--auto-min-dwell-iters` outer
+iterations and both the eigenvalue and derived rescaled-residual histories saturate, AUTO switches to Jacobi-Davidson.
+AUTO also switches to Jacobi-Davidson once the derived rescaled residual norm is below
+`--auto-jd-start-rnorm-threshold`; set that option to `0` to disable this rescaled residual trigger.
 
-While Jacobi-Davidson is active, AUTO periodically forces one cheap-Olsen probe.
-If that probe improves the selected Ritz value by more than
-`--auto-cheap-probe-factor * max(abs_rnorm^2, roundoff scale)`, cheap Olsen
-continues. Otherwise AUTO returns to Jacobi-Davidson.
+While Jacobi-Davidson is active, AUTO periodically forces one cheap-Olsen probe. If that probe improves the selected
+Ritz value by more than
+`--auto-cheap-probe-factor * max(abs_rnorm^2, roundoff scale)`, cheap Olsen continues. Otherwise AUTO returns to
+Jacobi-Davidson.
 
 The main AUTO controls are `--auto-sat-eigval-threshold`,
 `--auto-sat-rnorm-threshold`, `--auto-jd-start-rnorm-threshold`,
 `--auto-min-dwell-iters`, `--auto-cheap-probe-interval`, and
 `--auto-cheap-probe-factor`.
 
-`--auto-sat-eigval-threshold` is relative to the average absolute eigenvalue
-magnitude in the recent history window, so `1e-3` means roughly that the recent
-Ritz values agree to about three significant digits.
+`--auto-sat-eigval-threshold` is relative to the average absolute eigenvalue magnitude in the recent history window, so
+`1e-3` means roughly that the recent Ritz values agree to about three significant digits.
 
-`--auto-sat-rnorm-threshold` is applied to derived rescaled residual norms, not
-to the stored absolute residual norms. `--auto-cheap-probe-factor` deliberately
-uses the stored absolute residual norm squared as the improvement scale.
+`--auto-sat-rnorm-threshold` is applied to derived rescaled residual norms, not to the stored absolute residual norms.
+`--auto-cheap-probe-factor` deliberately uses the stored absolute residual norm squared as the improvement scale.
 
 ## Warm Start
 
@@ -171,6 +165,6 @@ Use it as the initial guess in a later run:
   --refined-rayleigh-ritz
 ```
 
-The benchmark now stores saved eigvecs under `/grit/standard/<algo>/eigvecs`.
-When loading an initial guess, it also accepts the legacy dataset path
+The benchmark now stores saved eigvecs under `/grit/standard/<algo>/eigvecs`. When loading an initial guess, it also
+accepts the legacy dataset path
 `/grit/standard/eigvecs`.

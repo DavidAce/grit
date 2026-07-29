@@ -61,76 +61,98 @@ namespace bench_standard {
 
         template<typename Snapshot>
         void fill_common_snapshot(Snapshot &snapshot, const Options &opts, int rep, unsigned int rep_seed, grit::ResultView<Scalar> view) {
-            snapshot.case_id                       = static_cast<int32_t>(opts.case_id);
-            snapshot.rep                           = static_cast<int32_t>(rep);
-            snapshot.seed                          = opts.seed;
-            snapshot.rep_seed                      = rep_seed;
-            snapshot.matrix_path                   = fixed_string<1024>(opts.matrix_path, "matrix_path");
-            snapshot.initial_guess                 = fixed_string<1024>(opts.initial_guess, "initial_guess");
-            snapshot.algo                          = fixed_string<32>(algo_name(opts.algo), "algo");
-            snapshot.nev                           = static_cast<int32_t>(opts.nev);
-            snapshot.ncv                           = static_cast<int32_t>(opts.ncv);
-            snapshot.block_size                    = static_cast<int32_t>(opts.block_size);
-            snapshot.max_iters                     = static_cast<int32_t>(opts.max_iters);
-            snapshot.max_matvecs                   = static_cast<int32_t>(opts.max_matvecs);
-            snapshot.abstol                           = opts.abstol;
-            snapshot.reltol            = opts.reltol;
-            snapshot.sat_eigval_threshold          = opts.sat_eigval_threshold;
-            snapshot.sat_rnorm_threshold           = opts.sat_rnorm_threshold;
-            snapshot.ritz                          = fixed_string<16>(std::string(grit::enum2sv(opts.ritz)), "ritz");
-            snapshot.use_refined_rayleigh_ritz     = static_cast<uint8_t>(opts.use_refined_rayleigh_ritz);
-            snapshot.use_rescaled_rnorm_tolerance  = static_cast<uint8_t>(opts.use_rescaled_rnorm_tolerance);
-            snapshot.stop_reason                   = fixed_string<64>(grit::enum2s(view.stopReason()), "stop_reason");
-            snapshot.eigenvalue                    = view.eigVal().size() > 0 ? view.eigVal()(0) : 0.0;
-            snapshot.rnorm_abs                         = view.rNormsAbs().size() > 0 ? view.rNormsAbs()(0) : 0.0;
-            snapshot.rnorm_rel                        = rnorm_rel(view);
-            snapshot.outer_iterations                    = static_cast<int64_t>(view.outer_iter());
-            snapshot.matvecs                       = static_cast<int64_t>(view.num_matvecs_total());
-            snapshot.outer_matvecs                 = static_cast<int64_t>(view.num_matvecs());
-            snapshot.inner_matvecs                 = static_cast<int64_t>(view.num_matvecs_inner());
-            snapshot.inner_iterations              = static_cast<int64_t>(view.num_inner_iters());
-            snapshot.jdops_inner                   = static_cast<int64_t>(view.num_jdops_inner());
-            snapshot.precond                       = static_cast<int64_t>(view.num_precond());
-            snapshot.precond_inner                 = static_cast<int64_t>(view.num_precond_inner());
-            snapshot.precond_total                 = static_cast<int64_t>(view.num_precond_total());
-            snapshot.saturation_count_eigval       = static_cast<int64_t>(view.saturation_count_eigval());
-            snapshot.saturation_count_rnorm        = static_cast<int64_t>(view.saturation_count_rnorm());
-            snapshot.saturation_count_max          = static_cast<int64_t>(view.saturation_count_max());
-            snapshot.op_norm_estimate              = view.op_norm_estimate();
-            snapshot.condition                     = view.condition();
-            snapshot.sensitivity                   = view.sensitivity();
-            snapshot.gap                           = view.gap();
-            snapshot.residual_converged               = static_cast<uint8_t>(view.residual_converged());
-            snapshot.residual_below_gap               = static_cast<uint8_t>(view.residual_below_gap());
-            snapshot.time                       = view.time();
+            snapshot.case_id                      = static_cast<int32_t>(opts.case_id);
+            snapshot.rep                          = static_cast<int32_t>(rep);
+            snapshot.seed                         = opts.seed;
+            snapshot.rep_seed                     = rep_seed;
+            snapshot.matrix_path                  = fixed_string<1024>(opts.matrix_path, "matrix_path");
+            snapshot.initial_guess                = fixed_string<1024>(opts.initial_guess, "initial_guess");
+            snapshot.algo                         = fixed_string<32>(algo_name(opts.algo), "algo");
+            snapshot.nev                          = static_cast<int32_t>(opts.nev);
+            snapshot.ncv                          = static_cast<int32_t>(opts.ncv);
+            snapshot.block_size                   = static_cast<int32_t>(opts.block_size);
+            snapshot.max_iters                    = static_cast<int32_t>(opts.max_iters);
+            snapshot.max_matvecs                  = static_cast<int32_t>(opts.max_matvecs);
+            snapshot.abstol                       = opts.abstol;
+            snapshot.reltol                       = opts.reltol;
+            snapshot.sat_eigval_threshold         = opts.sat_eigval_threshold;
+            snapshot.sat_rnorm_threshold          = opts.sat_rnorm_threshold;
+            snapshot.ritz                         = fixed_string<16>(std::string(grit::enum2sv(opts.ritz)), "ritz");
+            snapshot.use_refined_rayleigh_ritz    = static_cast<uint8_t>(opts.use_refined_rayleigh_ritz);
+            snapshot.use_rescaled_rnorm_tolerance = static_cast<uint8_t>(opts.use_rescaled_rnorm_tolerance);
+            snapshot.stop_reason                  = fixed_string<64>(grit::enum2s(view.stopReason()), "stop_reason");
+            snapshot.eigenvalue                   = view.eigVal().size() > 0 ? view.eigVal()(0) : 0.0;
+            snapshot.rnorm_abs                    = view.rNormsAbs().size() > 0 ? view.rNormsAbs()(0) : 0.0;
+            snapshot.rnorm_rel                    = rnorm_rel(view);
+            snapshot.outer_iterations             = static_cast<int64_t>(view.outer_iter());
+            snapshot.matvecs                      = static_cast<int64_t>(view.num_matvecs_total());
+            snapshot.outer_matvecs                = static_cast<int64_t>(view.num_matvecs());
+            snapshot.inner_matvecs                = static_cast<int64_t>(view.num_matvecs_inner());
+            snapshot.inner_iterations             = static_cast<int64_t>(view.num_inner_iters());
+            snapshot.operator_inner               = static_cast<int64_t>(view.num_operator_inner());
+            snapshot.precond                      = static_cast<int64_t>(view.num_precond());
+            snapshot.precond_inner                = static_cast<int64_t>(view.num_precond_inner());
+            snapshot.precond_total                = static_cast<int64_t>(view.num_precond_total());
+            snapshot.saturation_count_eigval      = static_cast<int64_t>(view.saturation_count_eigval());
+            snapshot.saturation_count_rnorm       = static_cast<int64_t>(view.saturation_count_rnorm());
+            snapshot.saturation_count_max         = static_cast<int64_t>(view.saturation_count_max());
+            snapshot.op_norm_estimate             = view.op_norm_estimate();
+            snapshot.condition                    = view.condition();
+            snapshot.sensitivity                  = view.sensitivity();
+            snapshot.gap                          = view.gap();
+            snapshot.residual_converged           = static_cast<uint8_t>(view.residual_converged());
+            snapshot.residual_below_gap           = static_cast<uint8_t>(view.residual_below_gap());
+            snapshot.time                         = view.time();
         }
 
         GdpluskSnapshot make_solver_snapshot(const Options &opts, int rep, unsigned int rep_seed, const GdSolver &solver, grit::ResultView<Scalar> view) {
             GdpluskSnapshot snapshot;
             fill_common_snapshot(snapshot, opts, rep, rep_seed, view);
-            snapshot.max_basis_blocks              = static_cast<int32_t>(opts.ncv / opts.block_size);
-            snapshot.inner_max_iters               = static_cast<int32_t>(solver.config.inner_max_iters);
-            snapshot.inner_tol                     = solver.config.inner_tol;
-            snapshot.auto_min_dwell_iters          = static_cast<int32_t>(opts.auto_min_dwell_iters);
-            snapshot.auto_sat_eigval_threshold     = opts.auto_sat_eigval_threshold;
-            snapshot.auto_sat_rnorm_threshold      = opts.auto_sat_rnorm_threshold;
-            snapshot.auto_jd_start_rnorm_threshold = opts.auto_jd_start_rnorm_threshold;
-            snapshot.auto_cheap_probe_interval     = static_cast<int32_t>(opts.auto_cheap_probe_interval);
-            snapshot.auto_cheap_probe_factor       = opts.auto_cheap_probe_factor;
-            snapshot.residual_correction           = fixed_string<32>(residual_correction_name(opts.residual_correction), "residual_correction");
-            snapshot.use_adaptive_inner_tolerance  = static_cast<uint8_t>(opts.use_adaptive_inner_tolerance);
-            snapshot.inner_tol_last                = view.inner_tol_last();
-            snapshot.inner_error_last              = view.inner_error_last();
+            snapshot.max_basis_blocks                 = static_cast<int32_t>(opts.ncv / opts.block_size);
+            snapshot.inner_max_iters                  = static_cast<int32_t>(solver.config.inner_max_iters);
+            snapshot.inner_tol                        = solver.config.inner_tol;
+            snapshot.auto_min_dwell_iters             = static_cast<int32_t>(opts.auto_min_dwell_iters);
+            snapshot.auto_sat_eigval_threshold        = opts.auto_sat_eigval_threshold;
+            snapshot.auto_sat_rnorm_threshold         = opts.auto_sat_rnorm_threshold;
+            snapshot.auto_jd_start_rnorm_threshold    = opts.auto_jd_start_rnorm_threshold;
+            snapshot.auto_cheap_probe_interval        = static_cast<int32_t>(opts.auto_cheap_probe_interval);
+            snapshot.auto_cheap_probe_factor          = opts.auto_cheap_probe_factor;
+            snapshot.residual_correction              = fixed_string<32>(residual_correction_name(opts.residual_correction), "residual_correction");
+            snapshot.use_adaptive_inner_tolerance     = static_cast<uint8_t>(opts.use_adaptive_inner_tolerance);
+            snapshot.inner_tol_last                   = view.inner_tol_last();
+            snapshot.inner_error_last                 = view.inner_error_last();
+            snapshot.matvecs_a_inner                  = static_cast<int64_t>(view.num_matvecs_a_inner());
+            snapshot.matvecs_b_inner                  = static_cast<int64_t>(view.num_matvecs_b_inner());
+            snapshot.matvecs_a_total                  = static_cast<int64_t>(view.num_matvecs_a_total());
+            snapshot.matvecs_b_total                  = static_cast<int64_t>(view.num_matvecs_b_total());
+            snapshot.preconditioner_updates_inner     = static_cast<int64_t>(view.num_preconditioner_updates_inner());
+            snapshot.preconditioner_updates_total     = static_cast<int64_t>(view.num_preconditioner_updates_total());
+            snapshot.preconditioner_apply_inner       = static_cast<int64_t>(view.num_preconditioner_apply_inner());
+            snapshot.preconditioner_apply_total       = static_cast<int64_t>(view.num_preconditioner_apply_total());
+            snapshot.time_solve_inner                 = view.time_solve_inner();
+            snapshot.time_operator_inner              = view.time_operator_inner();
+            snapshot.time_matvecs_a_inner             = view.time_matvecs_a_inner();
+            snapshot.time_matvecs_b_inner             = view.time_matvecs_b_inner();
+            snapshot.time_preconditioner_inner        = view.time_preconditioner_inner();
+            snapshot.time_preconditioner_update_inner = view.time_preconditioner_update_inner();
+            snapshot.time_preconditioner_update_total = view.time_preconditioner_update_total();
+            snapshot.time_preconditioner_apply_inner  = view.time_preconditioner_apply_inner();
+            snapshot.time_preconditioner_apply_total  = view.time_preconditioner_apply_total();
+            snapshot.time_project_left_inner          = view.time_project_left_inner();
+            snapshot.time_project_right_inner         = view.time_project_right_inner();
+            snapshot.time_residual_correction         = view.time_residual_correction();
+            snapshot.time_build                       = view.time_build();
+            snapshot.time_status_update               = view.time_status_update();
             snapshot.first_cheap_to_jd_outer_iter =
                 view.cheap_to_jd_switch_outer_iters().empty() ? int64_t{-1} : static_cast<int64_t>(view.cheap_to_jd_switch_outer_iters().front());
-            snapshot.auto_dwell                 = static_cast<int64_t>(view.auto_dwell());
-            snapshot.auto_jd_outer_iters_since_probe  = static_cast<int64_t>(view.auto_jd_outer_iters_since_probe());
-            snapshot.residual_correction_active = fixed_string<32>(view.residual_correction_active_name(), "residual_correction_active");
+            snapshot.auto_dwell                      = static_cast<int64_t>(view.auto_dwell());
+            snapshot.auto_jd_outer_iters_since_probe = static_cast<int64_t>(view.auto_jd_outer_iters_since_probe());
+            snapshot.residual_correction_active      = fixed_string<32>(view.residual_correction_active_name(), "residual_correction_active");
             snapshot.residual_correction_iteration   = fixed_string<32>(view.residual_correction_iteration_name(), "residual_correction_iteration");
-            snapshot.num_cheap_to_jd_switches   = static_cast<int64_t>(view.cheap_to_jd_switch_outer_iters().size());
-            snapshot.num_jd_to_cheap_switches   = static_cast<int64_t>(view.jd_to_cheap_switch_outer_iters().size());
-            snapshot.cheap_to_jd_switch_outer_iters   = to_i64_vector(view.cheap_to_jd_switch_outer_iters());
-            snapshot.jd_to_cheap_switch_outer_iters   = to_i64_vector(view.jd_to_cheap_switch_outer_iters());
+            snapshot.num_cheap_to_jd_switches        = static_cast<int64_t>(view.cheap_to_jd_switch_outer_iters().size());
+            snapshot.num_jd_to_cheap_switches        = static_cast<int64_t>(view.jd_to_cheap_switch_outer_iters().size());
+            snapshot.cheap_to_jd_switch_outer_iters  = to_i64_vector(view.cheap_to_jd_switch_outer_iters());
+            snapshot.jd_to_cheap_switch_outer_iters  = to_i64_vector(view.jd_to_cheap_switch_outer_iters());
             return snapshot;
         }
 
@@ -141,7 +163,7 @@ namespace bench_standard {
             Snapshot snapshot;
             fill_common_snapshot(snapshot, opts, rep, rep_seed, view);
             if constexpr(std::is_same_v<Solver, LanczosSolver>) {
-                snapshot.max_retain_blocks      = static_cast<int32_t>(opts.maxRetainBlocks);
+                snapshot.max_retain_blocks   = static_cast<int32_t>(opts.maxRetainBlocks);
                 snapshot.time_orthogonalize  = view.time_orthogonalize();
                 snapshot.time_orthonormalize = view.time_orthonormalize();
                 snapshot.time_orth_project   = view.time_orth_project();
@@ -175,13 +197,12 @@ namespace bench_standard {
         };
 
         template<typename Solver>
-        auto solve_once_impl(const SparseMatrix &matrix, Options opts, int rep)
-            -> typename result_for<Solver>::type {
+        auto solve_once_impl(const SparseMatrix &matrix, Options opts, int rep) -> typename result_for<Solver>::type {
             using Result = typename result_for<Solver>::type;
 
             auto Aop = grit::matvec<Scalar>(matrix.rows(), [&](const DenseMatrixRef &X) -> DenseMatrix { return matrix * X; });
 
-            auto guess = initial_guess(opts, matrix.rows(), rep);
+            auto   guess = initial_guess(opts, matrix.rows(), rep);
             Solver solver(Aop);
 
             solver.config.nev                          = opts.nev;
@@ -224,11 +245,11 @@ namespace bench_standard {
             solver.run();
             const auto time_stop = std::chrono::steady_clock::now();
 
-            const auto view = solver.get_result_view();
-            auto final_snapshot = make_solver_snapshot(opts, rep, rep_seed, solver, view);
-            final_snapshot.time   = std::chrono::duration<double>(time_stop - time_start).count();
-            final_snapshot.vmrss_mib = mem_usage_in_mib("VmRSS");
-            final_snapshot.vmhwm_mib = mem_usage_in_mib("VmHWM");
+            const auto view           = solver.get_result_view();
+            auto       final_snapshot = make_solver_snapshot(opts, rep, rep_seed, solver, view);
+            final_snapshot.time       = std::chrono::duration<double>(time_stop - time_start).count();
+            final_snapshot.vmrss_mib  = mem_usage_in_mib("VmRSS");
+            final_snapshot.vmhwm_mib  = mem_usage_in_mib("VmHWM");
             final_snapshot.vmpeak_mib = mem_usage_in_mib("VmPeak");
             if(snapshots.empty())
                 snapshots.push_back(final_snapshot);

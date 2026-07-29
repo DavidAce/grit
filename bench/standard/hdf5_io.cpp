@@ -18,8 +18,8 @@
 
 namespace bench_standard {
     namespace {
-        constexpr std::string_view legacy_group_path       = "/grit/standard";
-        constexpr std::string_view legacy_dataset_path     = "/grit/standard/eigvecs";
+        constexpr std::string_view legacy_group_path        = "/grit/standard";
+        constexpr std::string_view legacy_dataset_path      = "/grit/standard/eigvecs";
         constexpr std::string_view legacy_result_table_path = "/grit/standard/results";
 
         std::string group_path(Algo algo) { return std::format("/grit/standard/{}", algo_name(algo)); }
@@ -31,9 +31,9 @@ namespace bench_standard {
 
         template<typename Row, typename Field>
         std::size_t member_offset(Field Row::*member) {
-            Row          row;
-            const auto  *base  = reinterpret_cast<const std::byte *>(&row);
-            const auto  *field = reinterpret_cast<const std::byte *>(&(row.*member));
+            Row         row;
+            const auto *base  = reinterpret_cast<const std::byte *>(&row);
+            const auto *field = reinterpret_cast<const std::byte *>(&(row.*member));
             return static_cast<std::size_t>(field - base);
         }
 
@@ -75,7 +75,7 @@ namespace bench_standard {
             insert_field(h5type, "outer_matvecs", &Row::outer_matvecs);
             insert_field(h5type, "inner_matvecs", &Row::inner_matvecs);
             insert_field(h5type, "inner_iterations", &Row::inner_iterations);
-            insert_field(h5type, "jdops_inner", &Row::jdops_inner);
+            insert_field(h5type, "operator_inner", &Row::operator_inner);
             insert_field(h5type, "precond", &Row::precond);
             insert_field(h5type, "precond_inner", &Row::precond_inner);
             insert_field(h5type, "precond_total", &Row::precond_total);
@@ -112,6 +112,28 @@ namespace bench_standard {
                 insert_field(h5type, "use_adaptive_inner_tolerance", &Row::use_adaptive_inner_tolerance);
                 insert_field(h5type, "inner_tol_last", &Row::inner_tol_last);
                 insert_field(h5type, "inner_error_last", &Row::inner_error_last);
+                insert_field(h5type, "matvecs_a_inner", &Row::matvecs_a_inner);
+                insert_field(h5type, "matvecs_b_inner", &Row::matvecs_b_inner);
+                insert_field(h5type, "matvecs_a_total", &Row::matvecs_a_total);
+                insert_field(h5type, "matvecs_b_total", &Row::matvecs_b_total);
+                insert_field(h5type, "preconditioner_updates_inner", &Row::preconditioner_updates_inner);
+                insert_field(h5type, "preconditioner_updates_total", &Row::preconditioner_updates_total);
+                insert_field(h5type, "preconditioner_apply_inner", &Row::preconditioner_apply_inner);
+                insert_field(h5type, "preconditioner_apply_total", &Row::preconditioner_apply_total);
+                insert_field(h5type, "time_solve_inner", &Row::time_solve_inner);
+                insert_field(h5type, "time_operator_inner", &Row::time_operator_inner);
+                insert_field(h5type, "time_matvecs_a_inner", &Row::time_matvecs_a_inner);
+                insert_field(h5type, "time_matvecs_b_inner", &Row::time_matvecs_b_inner);
+                insert_field(h5type, "time_preconditioner_inner", &Row::time_preconditioner_inner);
+                insert_field(h5type, "time_preconditioner_update_inner", &Row::time_preconditioner_update_inner);
+                insert_field(h5type, "time_preconditioner_update_total", &Row::time_preconditioner_update_total);
+                insert_field(h5type, "time_preconditioner_apply_inner", &Row::time_preconditioner_apply_inner);
+                insert_field(h5type, "time_preconditioner_apply_total", &Row::time_preconditioner_apply_total);
+                insert_field(h5type, "time_project_left_inner", &Row::time_project_left_inner);
+                insert_field(h5type, "time_project_right_inner", &Row::time_project_right_inner);
+                insert_field(h5type, "time_residual_correction", &Row::time_residual_correction);
+                insert_field(h5type, "time_build", &Row::time_build);
+                insert_field(h5type, "time_status_update", &Row::time_status_update);
                 insert_field(h5type, "first_cheap_to_jd_outer_iter", &Row::first_cheap_to_jd_outer_iter);
                 insert_field(h5type, "residual_correction_active", &Row::residual_correction_active);
                 insert_field(h5type, "residual_correction_iteration", &Row::residual_correction_iteration);
@@ -156,14 +178,14 @@ namespace bench_standard {
             void add(double value) {
                 if(!std::isfinite(value)) return;
                 count++;
-                sum += value;
+                sum    += value;
                 sum_sq += value * value;
             }
 
             [[nodiscard]] double mean() const { return count > 0 ? sum / static_cast<double>(count) : std::numeric_limits<double>::quiet_NaN(); }
             [[nodiscard]] double stddev() const {
                 if(count < 2) return 0.0;
-                auto m = mean();
+                auto m   = mean();
                 auto var = (sum_sq - static_cast<double>(count) * m * m) / static_cast<double>(count - 1);
                 return std::sqrt(std::max(0.0, var));
             }
@@ -172,9 +194,9 @@ namespace bench_standard {
 
         template<typename Row>
         struct SummaryGroup {
-            Row         row;
-            int64_t     count     = 0;
-            int64_t     converged = 0;
+            Row          row;
+            int64_t      count     = 0;
+            int64_t      converged = 0;
             RunningStats eigval;
             RunningStats rnorm_abs;
             RunningStats rnorm_rel;
@@ -225,12 +247,12 @@ namespace bench_standard {
         std::string mean_stderr_text(const RunningStats &stats, std::string_view fmt = "{:.3f}") {
             if(stats.count == 0) return "n/a";
             auto mean = stats.mean();
-            auto se = stats.stderr();
+            auto se   = stats.stderr();
             return std::format("{} ± {}", std::vformat(fmt, std::make_format_args(mean)), std::vformat(fmt, std::make_format_args(se)));
         }
 
         template<typename Result>
-        consteval Algo result_algo();
+        consteval Algo            result_algo();
         template<> consteval Algo result_algo<GdpluskSolveResult>() { return Algo::gdplusk; }
         template<> consteval Algo result_algo<LanczosSolveResult>() { return Algo::lanczos; }
         template<> consteval Algo result_algo<LobpcgSolveResult>() { return Algo::lobpcg; }
@@ -240,10 +262,10 @@ namespace bench_standard {
             if(result.eigvecs.size() == 0) throw std::runtime_error("No eigenvectors are available to save");
             if(path.has_parent_path()) std::filesystem::create_directories(path.parent_path());
 
-            constexpr auto algo = result_algo<Result>();
-            const auto &snapshot = result.final;
-            auto file_access = std::filesystem::exists(path) ? h5pp::FileAccess::READWRITE : h5pp::FileAccess::REPLACE;
-            auto file = h5pp::File(path.string(), file_access);
+            constexpr auto algo        = result_algo<Result>();
+            const auto    &snapshot    = result.final;
+            auto           file_access = std::filesystem::exists(path) ? h5pp::FileAccess::READWRITE : h5pp::FileAccess::REPLACE;
+            auto           file        = h5pp::File(path.string(), file_access);
             file.writeDataset(result.eigvecs, dataset_path(algo));
 
             file.writeAttribute(to_string(snapshot.matrix_path), group_path(algo), "matrix");
@@ -277,11 +299,11 @@ namespace bench_standard {
         template<typename Result>
         void append_result_hdf5_impl(const std::filesystem::path &path, const Result &result) {
             constexpr auto algo = result_algo<Result>();
-            auto file = h5pp::File(path.string(), h5pp::FileAccess::READWRITE);
+            auto           file = h5pp::File(path.string(), h5pp::FileAccess::READWRITE);
             file.appendTableRecords(result.final, result_table_path(algo));
             if(!result.snapshots.empty()) {
-                using Row = std::remove_cvref_t<decltype(result.final)>;
-                auto h5type = make_result_table_type<Row>();
+                using Row        = std::remove_cvref_t<decltype(result.final)>;
+                auto h5type      = make_result_table_type<Row>();
                 auto path_status = snapshot_table_path(algo, result.final);
                 file.createTable(h5type, path_status, snapshot_table_title(algo));
                 file.appendTableRecords(result.snapshots, path_status);
@@ -301,11 +323,11 @@ namespace bench_standard {
             std::println("");
             std::println("summary: {}", path.string());
             if constexpr(std::is_same_v<Row, GdpluskSnapshot>) {
-                std::println("{:<5} {:>8} {:>5} {:>5} {:<17} {:>9} {:>9} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18}",
-                             "case", "algo", "ncv", "blk", "correction", "conv", "reps", "eigval mean", "rnorm_abs mean", "rnorm_rel mean", "outer_iter mean±se",
-                             "matvec mean±se", "time mean±se", "jd switch ±se");
+                std::println("{:<5} {:>8} {:>5} {:>5} {:<17} {:>9} {:>9} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18}", "case", "algo", "ncv", "blk",
+                             "correction", "conv", "reps", "eigval mean", "rnorm_abs mean", "rnorm_rel mean", "outer_iter mean±se", "matvec mean±se",
+                             "time mean±se", "jd switch ±se");
                 for(const auto &[case_id, group] : groups) {
-                    (void)case_id;
+                    (void) case_id;
                     std::println("{:<5} {:>8} {:>5} {:>5} {:<17} {:>4}/{:<4} {:>9} {:>18.10e} {:>18.4e} {:>18.4e} {:>18} {:>18} {:>18} {:>18}",
                                  group.row.case_id, to_string(group.row.algo), group.row.ncv, group.row.block_size, to_string(group.row.residual_correction),
                                  group.converged, group.count, group.count, group.eigval.mean(), group.rnorm_abs.mean(), group.rnorm_rel.mean(),
@@ -313,32 +335,33 @@ namespace bench_standard {
                                  mean_stderr_text(group.time, "{:.4f}"), mean_stderr_text(group.first_jd_switch, "{:.1f}"));
                 }
             } else if constexpr(std::is_same_v<Row, LanczosSnapshot>) {
-                std::println("{:<5} {:>8} {:>5} {:>5} {:>6} {:>9} {:>9} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18}",
-                             "case", "algo", "ncv", "blk", "retain", "conv", "reps", "eigval mean", "rnorm_abs mean", "rnorm_rel mean", "outer_iter mean±se", "matvec mean±se",
-                             "time mean±se", "orth mean±se", "orthn mean±se", "proj mean±se", "factor mean±se", "update mean±se", "refresh mean±se",
-                             "mask mean±se", "diag mean±se", "ritz mean±se", "restart mean±se");
+                std::println("{:<5} {:>8} {:>5} {:>5} {:>6} {:>9} {:>9} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} "
+                             "{:>18} {:>18} {:>18}",
+                             "case", "algo", "ncv", "blk", "retain", "conv", "reps", "eigval mean", "rnorm_abs mean", "rnorm_rel mean", "outer_iter mean±se",
+                             "matvec mean±se", "time mean±se", "orth mean±se", "orthn mean±se", "proj mean±se", "factor mean±se", "update mean±se",
+                             "refresh mean±se", "mask mean±se", "diag mean±se", "ritz mean±se", "restart mean±se");
                 for(const auto &[case_id, group] : groups) {
-                    (void)case_id;
-                    std::println("{:<5} {:>8} {:>5} {:>5} {:>6} {:>4}/{:<4} {:>9} {:>18.10e} {:>18.4e} {:>18.4e} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18}",
-                                 group.row.case_id, to_string(group.row.algo), group.row.ncv, group.row.block_size, group.row.max_retain_blocks, group.converged, group.count,
-                                 group.count, group.eigval.mean(), group.rnorm_abs.mean(), group.rnorm_rel.mean(), mean_stderr_text(group.outer_iterations, "{:.1f}"),
-                                 mean_stderr_text(group.matvecs, "{:.1f}"), mean_stderr_text(group.time, "{:.4f}"),
-                                 mean_stderr_text(group.time_orthogonalize, "{:.4f}"), mean_stderr_text(group.time_orthonormalize, "{:.4f}"),
-                                 mean_stderr_text(group.time_orth_project, "{:.4f}"), mean_stderr_text(group.time_orth_factor, "{:.4f}"),
-                                 mean_stderr_text(group.time_orth_update, "{:.4f}"), mean_stderr_text(group.time_orth_refresh, "{:.4f}"),
-                                 mean_stderr_text(group.time_orth_mask, "{:.4f}"),
+                    (void) case_id;
+                    std::println("{:<5} {:>8} {:>5} {:>5} {:>6} {:>4}/{:<4} {:>9} {:>18.10e} {:>18.4e} {:>18.4e} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} "
+                                 "{:>18} {:>18} {:>18} {:>18} {:>18} {:>18}",
+                                 group.row.case_id, to_string(group.row.algo), group.row.ncv, group.row.block_size, group.row.max_retain_blocks,
+                                 group.converged, group.count, group.count, group.eigval.mean(), group.rnorm_abs.mean(), group.rnorm_rel.mean(),
+                                 mean_stderr_text(group.outer_iterations, "{:.1f}"), mean_stderr_text(group.matvecs, "{:.1f}"),
+                                 mean_stderr_text(group.time, "{:.4f}"), mean_stderr_text(group.time_orthogonalize, "{:.4f}"),
+                                 mean_stderr_text(group.time_orthonormalize, "{:.4f}"), mean_stderr_text(group.time_orth_project, "{:.4f}"),
+                                 mean_stderr_text(group.time_orth_factor, "{:.4f}"), mean_stderr_text(group.time_orth_update, "{:.4f}"),
+                                 mean_stderr_text(group.time_orth_refresh, "{:.4f}"), mean_stderr_text(group.time_orth_mask, "{:.4f}"),
                                  mean_stderr_text(group.time_diagonalize, "{:.4f}"), mean_stderr_text(group.time_extract_ritz, "{:.4f}"),
                                  mean_stderr_text(group.time_restart, "{:.4f}"));
                 }
             } else {
-                std::println("{:<5} {:>8} {:>5} {:>5} {:>9} {:>9} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18}",
-                             "case", "algo", "ncv", "blk", "conv", "reps", "eigval mean", "rnorm_abs mean", "rnorm_rel mean", "outer_iter mean±se", "matvec mean±se",
-                             "time mean±se");
+                std::println("{:<5} {:>8} {:>5} {:>5} {:>9} {:>9} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18}", "case", "algo", "ncv", "blk", "conv", "reps",
+                             "eigval mean", "rnorm_abs mean", "rnorm_rel mean", "outer_iter mean±se", "matvec mean±se", "time mean±se");
                 for(const auto &[case_id, group] : groups) {
-                    (void)case_id;
-                    std::println("{:<5} {:>8} {:>5} {:>5} {:>4}/{:<4} {:>9} {:>18.10e} {:>18.4e} {:>18.4e} {:>18} {:>18} {:>18}",
-                                 group.row.case_id, to_string(group.row.algo), group.row.ncv, group.row.block_size, group.converged, group.count, group.count,
-                                 group.eigval.mean(), group.rnorm_abs.mean(), group.rnorm_rel.mean(), mean_stderr_text(group.outer_iterations, "{:.1f}"),
+                    (void) case_id;
+                    std::println("{:<5} {:>8} {:>5} {:>5} {:>4}/{:<4} {:>9} {:>18.10e} {:>18.4e} {:>18.4e} {:>18} {:>18} {:>18}", group.row.case_id,
+                                 to_string(group.row.algo), group.row.ncv, group.row.block_size, group.converged, group.count, group.count, group.eigval.mean(),
+                                 group.rnorm_abs.mean(), group.rnorm_rel.mean(), mean_stderr_text(group.outer_iterations, "{:.1f}"),
                                  mean_stderr_text(group.matvecs, "{:.1f}"), mean_stderr_text(group.time, "{:.4f}"));
                 }
             }
@@ -346,7 +369,7 @@ namespace bench_standard {
     }
 
     DenseMatrix load_initial_guess_hdf5(const std::filesystem::path &path, Algo algo) {
-        auto file = h5pp::File(path.string(), h5pp::FileAccess::READONLY);
+        auto file         = h5pp::File(path.string(), h5pp::FileAccess::READONLY);
         auto algo_dataset = dataset_path(algo);
         if(file.linkExists(algo_dataset)) return file.readDataset<DenseMatrix>(algo_dataset);
         if(file.linkExists(std::string(legacy_dataset_path))) return file.readDataset<DenseMatrix>(std::string(legacy_dataset_path));
@@ -384,7 +407,7 @@ namespace bench_standard {
     }
 
     void print_results_summary_hdf5(const std::filesystem::path &path, Algo algo) {
-        auto file = h5pp::File(path.string(), h5pp::FileAccess::READONLY);
+        auto file       = h5pp::File(path.string(), h5pp::FileAccess::READONLY);
         auto table_path = result_table_path(algo);
         if(!file.linkExists(table_path)) {
             if(algo == Algo::gdplusk && file.linkExists(std::string(legacy_result_table_path))) {

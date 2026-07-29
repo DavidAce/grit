@@ -78,9 +78,7 @@ namespace bench_standard {
 
         void validate_algo_specific_options(const CliOptions &opts) {
             auto reject = [&](bool explicit_option, std::string_view option_group) {
-                if(explicit_option) {
-                    throw std::runtime_error(std::format("--{} is only supported for --algo=gdplusk", option_group));
-                }
+                if(explicit_option) { throw std::runtime_error(std::format("--{} is only supported for --algo=gdplusk", option_group)); }
             };
 
             if(opts.algo != Algo::gdplusk) {

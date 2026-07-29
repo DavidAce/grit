@@ -5,5 +5,5 @@
 #include "solve_result.h"
 
 namespace bench_standard {
-    SolveResult                  solve_once(const SparseMatrix &matrix, Options opts, int rep);
+    SolveResult solve_once(const SparseMatrix &matrix, Options opts, int rep);
 }
