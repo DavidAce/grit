@@ -12,6 +12,7 @@
 #include <Eigen/Eigenvalues>
 #include <Eigen/SVD>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <functional>
 #include <limits>
 #include <numeric>
@@ -266,7 +267,6 @@ namespace grit::form {
         BaseConfig           default_cfg = {};
         BaseConfig          *cfg_ptr     = &default_cfg;
         Logger::LoggerHandle log;
-        tid::ur              last_log_time = tid::ur();
 
         Eigen::Index qBlocks = 0;
 

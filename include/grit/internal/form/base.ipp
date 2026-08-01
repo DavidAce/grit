@@ -378,7 +378,6 @@ namespace grit::form {
         status.rNormsAbsInit    = status.rNormsAbs.topRows(rows);
         assert(V.cols() == cfg().block_size);
         assert_allFinite(V);
-        last_log_time.tic();
     }
 
     template<typename Scalar, grit::Form form_>
@@ -504,16 +503,6 @@ namespace grit::form {
         else
             status.saturation_count_rNorm = 0;
 
-        auto format_vector = [](const VectorReal &v, std::string_view spec = "{:.3e}") {
-            std::string msg = "[";
-            for(Eigen::Index i = 0; i < v.size(); ++i) {
-                if(i > 0) msg += ", ";
-                msg += fmt::format(fmt::runtime(std::string(spec)), v(i));
-            }
-            msg += "]";
-            return msg;
-        };
-
         constexpr auto beta      = RealScalar{0.5f};
         VectorReal     rNormsAbs = status.rNormsAbs.topRows(cfg().nev);
         VectorReal     targets   = rNormAbsTargets();
@@ -524,8 +513,8 @@ namespace grit::form {
 
         if(status.residual_converged) {
             std::string msg_rnorm_gap = fmt::format(" | gap {:.3e} (rel {:.3e})", status.gap, relGap);
-            status.stopMessage.emplace_back(fmt::format("converged rNormAbs {} < target {}{} | outer_iter {} | mv {} | {:.3e} s",
-                                                        format_vector(VectorReal(status.rNormsAbs.topRows(cfg().nev))), format_vector(targets), msg_rnorm_gap,
+            status.stopMessage.emplace_back(fmt::format("converged rNormAbs {::.3e} < target {::.3e}{} | outer_iter {} | mv {} | {:.3e} s", rNormsAbs, targets,
+                                                        msg_rnorm_gap,
                                                         status.outer_iter + 1, status.num_matvecs_total, status.time_elapsed.get_time()));
             status.stopReason |= StopReason::converged;
         }
@@ -564,17 +553,7 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     void base<Scalar, form_>::printStatus() {
-        if(!log || status.eigVal.size() == 0 || status.rNormsAbs.size() == 0) return;
-
-        auto format_vector = [](const VectorReal &v, std::string_view spec = "{:.8e}") {
-            std::string msg = "[";
-            for(Eigen::Index i = 0; i < v.size(); ++i) {
-                if(i > 0) msg += ", ";
-                msg += fmt::format(fmt::runtime(std::string(spec)), v(i));
-            }
-            msg += "]";
-            return msg;
-        };
+        if(!log || !log->should_log(spdlog::level::info) || status.eigVal.size() == 0 || status.rNormsAbs.size() == 0) return;
 
         std::string msg_rnorm_gap = fmt::format(" | gap {:.3e}", status.gap);
 
@@ -625,30 +604,21 @@ namespace grit::form {
             if(V.cols() > 0 && AV.size() == V.size() && BV.size() == V.size()) {
                 VectorReal VAV = (V.adjoint() * AV).diagonal().real();
                 VectorReal VBV = (V.adjoint() * BV).diagonal().real();
-                evMsg          = fmt::format(" {} / {}", format_vector(VAV, "{:.16f}"), format_vector(VBV, "{:.16f}"));
+                evMsg          = fmt::format(" {::.16f} / {::.16f}", VAV, VBV);
             }
         }
 
-        auto op_norm_estimate              = get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
-        bool log_long_time                 = last_log_time.get_lap() > 10.0;
-        bool log_every_ten_outer_iters     = status.outer_iter > 0 && status.outer_iter % 10 == 0;
-        spdlog::level::level_enum loglevel = spdlog::level::trace;
-        if(log_every_ten_outer_iters || log_long_time) loglevel = spdlog::level::debug;
-        if(!log->should_log(loglevel)) return;
-        [[maybe_unused]] auto lap = last_log_time.restart_lap();
-
+        const auto op_norm_estimate = get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
         const auto rNormAbsTargets = this->rNormAbsTargets();
 
-        log->log(loglevel,
-                 "outer_iter {:3} mv {:3} pc {:3} t {:.1e}s dim {} {}eigVal {}{} "
-                 "oErr {:.3e} rNormsAbs {} target {} abstol {:.2e} reltol {:.2e} rescaled {} "
-                 "({:9.2e}/mv) sat {}:{}/{} col {:2} block_size {} ritz {} "
-                 "op norm {:.2e} cond {:.2e} sens {:.2e}{}{}",
-                 status.outer_iter, status.num_matvecs, status.num_precond, status.time_elapsed.get_time(), N, innerMsg,
-                 format_vector(VectorReal(status.eigVal), "{:.16f}"), evMsg, orthError, format_vector(VectorReal(status.rNormsAbs)),
-                 format_vector(rNormAbsTargets, "{:.3e}"), cfg().abstol, cfg().reltol, cfg().use_rescaled_rnorm_tolerance, get_rNorms_log10_change_per_matvec(),
-                 status.saturation_count_eigVal, status.saturation_count_rNorm, status.saturation_count_max, Q.cols(), cfg().block_size, enum2sv(cfg().ritz),
-                 op_norm_estimate, status.condition, status.sensitivity, msg_rnorm_gap, timingMsg);
+        log->info("outer_iter {:3} mv {:3} pc {:3} t {:.1e}s dim {} {}eigVal {::.16f}{} "
+                  "oErr {:.3e} rNormsAbs {::.8e} target {::.3e} abstol {:.2e} reltol {:.2e} rescaled {} "
+                  "({:9.2e}/mv) sat {}:{}/{} col {:2} block_size {} ritz {} "
+                  "op norm {:.2e} cond {:.2e} sens {:.2e}{}{}",
+                  status.outer_iter, status.num_matvecs, status.num_precond, status.time_elapsed.get_time(), N, innerMsg, status.eigVal, evMsg, orthError,
+                  status.rNormsAbs, rNormAbsTargets, cfg().abstol, cfg().reltol, cfg().use_rescaled_rnorm_tolerance, get_rNorms_log10_change_per_matvec(),
+                  status.saturation_count_eigVal, status.saturation_count_rNorm, status.saturation_count_max, Q.cols(), cfg().block_size, enum2sv(cfg().ritz),
+                  op_norm_estimate, status.condition, status.sensitivity, msg_rnorm_gap, timingMsg);
     }
 
     template<typename Scalar, grit::Form form_>
