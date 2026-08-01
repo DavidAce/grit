@@ -80,16 +80,10 @@ namespace grit::algo {
             throw std::runtime_error("gdplusk config error: inner_tol must be in the interval (0, 1]");
         }
         if(config.inner_max_iters < 1) throw std::runtime_error("gdplusk config error: inner_max_iters must be at least 1");
-        if(config.auto_min_dwell_iters < 0) throw std::runtime_error("gdplusk config error: auto_min_dwell_iters must be nonnegative");
-        if(config.auto_sat_eigval_threshold < RealScalar{0}) {
-            throw std::runtime_error("gdplusk config error: auto_sat_eigval_threshold must be nonnegative");
-        }
-        if(config.auto_sat_rnorm_threshold < RealScalar{0}) { throw std::runtime_error("gdplusk config error: auto_sat_rnorm_threshold must be nonnegative"); }
-        if(config.auto_jd_start_rnorm_threshold < RealScalar{0}) {
-            throw std::runtime_error("gdplusk config error: auto_jd_start_rnorm_threshold must be nonnegative");
+        if(!std::isfinite(config.auto_ritz_tolerance) || config.auto_ritz_tolerance <= RealScalar{0}) {
+            throw std::runtime_error("gdplusk config error: auto_ritz_tolerance must be finite and positive");
         }
         if(config.auto_cheap_probe_interval < 1) { throw std::runtime_error("gdplusk config error: auto_cheap_probe_interval must be at least 1"); }
-        if(config.auto_cheap_probe_factor < RealScalar{0}) { throw std::runtime_error("gdplusk config error: auto_cheap_probe_factor must be nonnegative"); }
         if(this->has_initial_guess()) {
             if(this->initial_guess().rows() != this->N) throw std::runtime_error("gdplusk config error: initial guess row count must match the operator size");
             if(this->initial_guess().cols() < 1) throw std::runtime_error("gdplusk config error: initial guess must have at least one column");

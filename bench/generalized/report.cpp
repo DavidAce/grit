@@ -77,11 +77,8 @@ namespace bench_generalized {
                          opts.residual_correction, list_text(opts.inner_tol), list_text(opts.inner_max_iters), bool_list_text(opts.use_refined_rayleigh_ritz),
                          bool_list_text(opts.use_jd_b_only), bool_list_text(opts.use_adaptive_inner_tolerance));
             if(opts.residual_correction.find("auto") != std::string::npos || opts.residual_correction.find("AUTO") != std::string::npos) {
-                std::println("  auto correction: cheap min dwell outer iterations {} | eigval saturation {:.3e} | rnorm_rel saturation {:.3e} | jd start "
-                             "rnorm_rel {:.3e} | cheap "
-                             "probe interval {} | cheap probe factor {:.3e}",
-                             opts.auto_min_dwell_iters, opts.auto_sat_eigval_threshold, opts.auto_sat_rnorm_threshold, opts.auto_jd_start_rnorm_threshold,
-                             opts.auto_cheap_probe_interval, opts.auto_cheap_probe_factor);
+                std::println("  auto correction: Ritz tolerance {:.3e} | cheap probe interval {}", opts.auto_ritz_tolerance,
+                             opts.auto_cheap_probe_interval);
             }
         } else if(opts.algo == Algo::lanczos) {
             std::println("  sweep axes: max retain blocks {} | refined {}", list_text(opts.max_retain_blocks), bool_list_text(opts.use_refined_rayleigh_ritz));

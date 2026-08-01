@@ -24,8 +24,6 @@ namespace grit::algo {
         using OrthMeta               = typename Base::OrthMeta;               /*!< Orthogonalization diagnostics. */
         using BaseConfig             = typename Base::BaseConfig;             /*!< Shared solver configuration. */
         using ResidualCorrectionType = typename Base::ResidualCorrectionType; /*!< Residual correction selector. */
-        using AutoSaturationInfo     = typename Base::AutoSaturationInfo;     /*!< AUTO saturation diagnostic. */
-        using AutoSaturationStatus   = typename Base::AutoSaturationStatus;   /*!< AUTO saturation status. */
 
         using Base::A;
         using Base::AQ;
@@ -88,12 +86,8 @@ namespace grit::algo {
             Eigen::Index                maxPrevBlocks                    = 1;     /*!< Number of previous active Ritz blocks kept between outer iterations. */
             RealScalar                  inner_tol                        = RealScalar{0.1f};   /*!< Initial tolerance for inner correction solves. */
             Eigen::Index                inner_max_iters                  = 1000;               /*!< Maximum inner iterations in each inner correction solve. */
-            Eigen::Index                auto_min_dwell_iters             = 10;                 /*!< Minimum cheap Olsen outer iterations before AUTO may switch. */
-            RealScalar                  auto_sat_eigval_threshold        = RealScalar{1e-3f};  /*!< AUTO eigenvalue saturation threshold. */
-            RealScalar                  auto_sat_rnorm_threshold         = RealScalar{1e-2f};  /*!< AUTO rescaled residual saturation threshold. */
-            RealScalar                  auto_jd_start_rnorm_threshold    = RealScalar{1e-5f};  /*!< AUTO residual threshold for allowing Jacobi-Davidson. */
+            RealScalar                  auto_ritz_tolerance              = RealScalar{1e-3f};  /*!< AUTO tolerance for residual-relative Ritz localization and probe progress. */
             Eigen::Index                auto_cheap_probe_interval        = 5;                  /*!< Jacobi-Davidson outer iterations between cheap Olsen probes. */
-            RealScalar                  auto_cheap_probe_factor          = RealScalar{1.0f};   /*!< Scale factor for judging cheap Olsen probe progress. */
             std::function<void(const gdplusk<Scalar, form_> &)> user_callback;                 /*!< Callback called after each outer iteration. */
             Eigen::Index                                        max_extra_ritz_history    = 1; /*!< Extra Ritz history retained for progress checks. */
             Eigen::Index                                        max_ritz_residual_history = 1; /*!< Ritz residual history retained for progress checks. */
@@ -150,26 +144,6 @@ namespace grit::algo {
         void adjust_residual_correction_type();
         /*! Update AUTO residual correction counters after an outer iteration. */
         void update_auto_residual_correction_state();
-        /*!
-         * Scalar residual used by AUTO decisions.
-         * @param rnorms Current selected residual norms.
-         * @return Scalar residual measure.
-         */
-        [[nodiscard]] RealScalar get_auto_rnorm_scalar(const VectorReal &rnorms) const;
-        /*! Absolute Ritz-value improvement from a cheap Olsen probe. */
-        [[nodiscard]] RealScalar get_auto_probe_eigval_improvement() const;
-        /*! Relative Ritz-value improvement from a cheap Olsen probe. */
-        [[nodiscard]] RealScalar get_auto_probe_eigval_relative_improvement() const;
-        /*! Relative Ritz-value change used by AUTO. */
-        [[nodiscard]] RealScalar get_auto_ritz_value_relative_change() const;
-        /*! Current AUTO eigenvalue saturation diagnostic. */
-        [[nodiscard]] AutoSaturationInfo get_auto_eigval_saturation_info();
-        /*! Current AUTO residual saturation diagnostic. */
-        [[nodiscard]] AutoSaturationInfo get_auto_rnorm_saturation_info();
-        /*! Combined AUTO saturation status. */
-        [[nodiscard]] AutoSaturationStatus get_auto_saturation_status();
-        /*! Whether AUTO may start Jacobi-Davidson from the current residuals. */
-        [[nodiscard]] bool auto_jd_start_ready();
         /*!
          * Compute the cheap Olsen correction block.
          * @param V Current Ritz vectors.

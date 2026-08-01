@@ -92,249 +92,95 @@ namespace grit::algo {
     }
 
     template<typename Scalar, grit::Form form_>
-    typename gdplusk<Scalar, form_>::RealScalar gdplusk<Scalar, form_>::get_auto_rnorm_scalar(const VectorReal &rnorms) const {
-        if(rnorms.size() == 0) return RealScalar{0};
-        auto rows = std::min<Eigen::Index>(cfg().nev, rnorms.size());
-        return rnorms.topRows(rows).maxCoeff();
-    }
-
-    template<typename Scalar, grit::Form form_>
-    typename gdplusk<Scalar, form_>::RealScalar gdplusk<Scalar, form_>::get_auto_probe_eigval_improvement() const {
-        if(status.oldVal.size() == 0 || status.eigVal.size() == 0) return RealScalar{0};
-        auto before = status.oldVal(0);
-        auto after  = status.eigVal(0);
-        switch(cfg().ritz) {
-            case Ritz::LR: return after - before;
-            case Ritz::SM: return std::abs(before) - std::abs(after);
-            case Ritz::LM: return std::abs(after) - std::abs(before);
-            case Ritz::NONE: [[fallthrough]];
-            case Ritz::SR: return before - after;
-        }
-        return RealScalar{0};
-    }
-
-    template<typename Scalar, grit::Form form_>
-    typename gdplusk<Scalar, form_>::RealScalar gdplusk<Scalar, form_>::get_auto_probe_eigval_relative_improvement() const {
-        if(status.oldVal.size() == 0 || status.eigVal.size() == 0) return RealScalar{0};
-        auto before      = status.oldVal(0);
-        auto after       = status.eigVal(0);
-        auto improvement = std::max(RealScalar{0}, get_auto_probe_eigval_improvement());
-        auto scale       = std::max({std::abs(before), std::abs(after), RealScalar{1}});
-        return improvement / scale;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    typename gdplusk<Scalar, form_>::RealScalar gdplusk<Scalar, form_>::get_auto_ritz_value_relative_change() const {
-        auto rows = std::min({cfg().nev, status.oldVal.size(), status.eigVal.size()});
-        if(rows <= 0) return std::numeric_limits<RealScalar>::infinity();
-
-        RealScalar rel_change = RealScalar{0};
-        for(Eigen::Index i = 0; i < rows; ++i) {
-            auto scale = std::max({std::abs(status.oldVal(i)), std::abs(status.eigVal(i)), RealScalar{1}});
-            rel_change = std::max(rel_change, std::abs(status.eigVal(i) - status.oldVal(i)) / scale);
-        }
-        return rel_change;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    typename gdplusk<Scalar, form_>::AutoSaturationInfo gdplusk<Scalar, form_>::get_auto_rnorm_saturation_info() {
-        AutoSaturationInfo info;
-        info.enabled      = config.auto_sat_rnorm_threshold > RealScalar{0};
-        info.threshold    = config.auto_sat_rnorm_threshold;
-        info.history_size = static_cast<Eigen::Index>(status.rNormsAbsHistory.size());
-        if(!info.enabled) return info;
-
-        const auto min_history_size = std::min<size_t>(status.max_history_size, size_t{2});
-        info.enough_history         = status.outer_iter >= static_cast<Eigen::Index>(min_history_size) && status.rNormsAbsHistory.size() >= min_history_size;
-        if(!info.enough_history || status.rNormsAbs.size() == 0) return info;
-
-        auto rows = std::min<Eigen::Index>(cfg().nev, status.rNormsAbs.size());
-        if(rows <= 0) return info;
-        VectorReal             scales = rNormScales().topRows(rows);
-        std::deque<VectorReal> relative_history;
-        for(const auto &history : status.rNormsAbsHistory) {
-            if(history.size() < rows) throw std::runtime_error("rNormsAbsHistory has unequal size vectors");
-            relative_history.emplace_back(history.topRows(rows).cwiseQuotient(scales));
-        }
-        VectorReal stds  = get_standard_deviations(relative_history, false);
-        VectorReal vals  = status.rNormsAbs.topRows(rows).cwiseQuotient(scales);
-        VectorReal scale = vals.cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
-        VectorReal ratio = stds.topRows(rows).cwiseQuotient(scale);
-
-        info.value     = vals.maxCoeff();
-        info.stddev    = stds.topRows(rows).maxCoeff();
-        info.scale     = scale.maxCoeff();
-        info.ratio     = ratio.maxCoeff();
-        info.saturated = (ratio.array() < info.threshold).all();
-        return info;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    typename gdplusk<Scalar, form_>::AutoSaturationInfo gdplusk<Scalar, form_>::get_auto_eigval_saturation_info() {
-        AutoSaturationInfo info;
-        info.enabled      = config.auto_sat_eigval_threshold > RealScalar{0};
-        info.threshold    = config.auto_sat_eigval_threshold;
-        info.history_size = static_cast<Eigen::Index>(status.eigVals_history.size());
-        if(!info.enabled) return info;
-
-        const auto min_history_size = std::min<size_t>(status.max_history_size, size_t{2});
-        info.enough_history         = status.outer_iter >= static_cast<Eigen::Index>(min_history_size) && status.eigVals_history.size() >= min_history_size;
-        if(!info.enough_history || status.eigVal.size() == 0) return info;
-
-        VectorReal stds = get_standard_deviations(status.eigVals_history, false);
-        auto       rows = std::min({cfg().nev, status.eigVal.size(), stds.size()});
-        if(rows <= 0) return info;
-        VectorReal vals  = status.eigVal.topRows(rows).cwiseAbs();
-        VectorReal scale = VectorReal::Zero(rows);
-        for(const auto &history : status.eigVals_history) {
-            if(history.size() < rows) throw std::runtime_error("eigVals_history has unequal size vectors");
-            scale.array() += history.topRows(rows).array().abs();
-        }
-        scale            /= static_cast<RealScalar>(status.eigVals_history.size());
-        scale             = scale.cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
-        VectorReal ratio  = stds.topRows(rows).cwiseQuotient(scale);
-
-        info.value     = vals.maxCoeff();
-        info.stddev    = stds.topRows(rows).maxCoeff();
-        info.scale     = scale.maxCoeff();
-        info.ratio     = ratio.maxCoeff();
-        info.saturated = (ratio.array() < info.threshold).all();
-        return info;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    typename gdplusk<Scalar, form_>::AutoSaturationStatus gdplusk<Scalar, form_>::get_auto_saturation_status() {
-        AutoSaturationStatus status_auto;
-        status_auto.eigval = get_auto_eigval_saturation_info();
-        status_auto.rnorm_rel  = get_auto_rnorm_saturation_info();
-        status_auto.ready  = status_auto.eigval.saturated && status_auto.rnorm_rel.saturated;
-        return status_auto;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    bool gdplusk<Scalar, form_>::auto_jd_start_ready() {
-        auto saturation        = get_auto_saturation_status();
-        auto ritz_rel_change   = get_auto_ritz_value_relative_change();
-        bool ritz_progress_low = config.auto_sat_eigval_threshold <= RealScalar{0} || ritz_rel_change <= config.auto_sat_eigval_threshold;
-        bool dwell_ready       = auto_residual_correction.dwell >= config.auto_min_dwell_iters;
-        bool rNormRel_ready = config.auto_jd_start_rnorm_threshold > RealScalar{0} && status.rNormsAbs.size() > 0 &&
-                              get_auto_rnorm_scalar(rNormsRel(status.rNormsAbs)) <= config.auto_jd_start_rnorm_threshold;
-        return saturation.ready || (dwell_ready && rNormRel_ready && ritz_progress_low);
-    }
-
-    template<typename Scalar, grit::Form form_>
     void gdplusk<Scalar, form_>::update_auto_residual_correction_state() {
         if(config.residual_correction_type != ResidualCorrectionType::AUTO) return;
 
-        auto method_name = [](ResidualCorrectionType method) -> std::string_view {
-            switch(method) {
-                case ResidualCorrectionType::CHEAP_OLSEN: return "CHEAP_OLSEN";
-                case ResidualCorrectionType::JACOBI_DAVIDSON: return "JACOBI_DAVIDSON";
-                case ResidualCorrectionType::NONE: return "NONE";
-                case ResidualCorrectionType::FULL_OLSEN: return "FULL_OLSEN";
-                case ResidualCorrectionType::AUTO: return "AUTO";
-            }
-            return "NONE";
-        };
+        auto targets = this->rNormAbsTargets();
+        auto rows    = std::min({cfg().nev, status.eigVal.size(), status.rNormsAbs.size(), targets.size(), V.cols()});
+        if constexpr(form_ == grit::Form::GENERALIZED) rows = std::min(rows, BV.cols());
+        if(rows <= 0) return;
+
+        VectorReal b_norms = VectorReal::Zero(rows);
+        for(Eigen::Index i = 0; i < rows; ++i) {
+            if constexpr(form_ == grit::Form::GENERALIZED)
+                b_norms(i) = BV.col(i).norm();
+            else
+                b_norms(i) = V.col(i).norm();
+        }
 
         auto outer_iteration_time = std::max(0.0, status.time_elapsed.get_time() - auto_residual_correction.outer_iteration_time_start);
 
         if(auto_residual_correction.active == ResidualCorrectionType::JACOBI_DAVIDSON &&
            auto_residual_correction.iteration_method == ResidualCorrectionType::CHEAP_OLSEN) {
-            auto rnorm_abs = get_auto_rnorm_scalar(status.rNormsAbs);
-            // Cheap probes are accepted only when they move the Ritz value by more than
-            // the variance scale implied by the stored absolute residual norm.
-            auto rnorm_squared        = rnorm_abs * rnorm_abs;
-            auto op_norm_estimate     = get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
-            auto probe_scale_floor    = eps * op_norm_estimate;
-            auto probe_scale          = std::max(rnorm_squared, probe_scale_floor);
-            auto improvement          = get_auto_probe_eigval_improvement();
-            auto relative_improvement = get_auto_probe_eigval_relative_improvement();
-            auto threshold            = config.auto_cheap_probe_factor * probe_scale;
-            auto relative_threshold   = config.auto_sat_eigval_threshold > RealScalar{0} ? config.auto_cheap_probe_factor * config.auto_sat_eigval_threshold
-                                                                                         : std::numeric_limits<RealScalar>::infinity();
-            bool keep_cheap_absolute  = improvement > threshold;
-            bool keep_cheap_relative  = relative_improvement > relative_threshold;
-            bool keep_cheap           = keep_cheap_absolute || keep_cheap_relative;
-
-            if(keep_cheap) {
-                auto_residual_correction.active               = ResidualCorrectionType::CHEAP_OLSEN;
-                auto_residual_correction.dwell                = 0;
-                auto_residual_correction.jd_outer_iters_since_probe = 0;
-                auto_residual_correction.jd_to_cheap_switch_outer_iters.push_back(status.outer_iter);
-            } else {
-                auto_residual_correction.active               = ResidualCorrectionType::JACOBI_DAVIDSON;
-                auto_residual_correction.jd_outer_iters_since_probe = 0;
+            rows = std::min(rows, status.oldVal.size());
+            VectorReal gain = VectorReal::Zero(rows);
+            switch(cfg().ritz) {
+                case Ritz::LR: gain = status.eigVal.topRows(rows) - status.oldVal.topRows(rows); break;
+                case Ritz::SM: gain = status.oldVal.topRows(rows).cwiseAbs() - status.eigVal.topRows(rows).cwiseAbs(); break;
+                case Ritz::LM: gain = status.eigVal.topRows(rows).cwiseAbs() - status.oldVal.topRows(rows).cwiseAbs(); break;
+                case Ritz::NONE: [[fallthrough]];
+                case Ritz::SR: gain = status.oldVal.topRows(rows) - status.eigVal.topRows(rows); break;
+            }
+            VectorReal residual_scales = status.rNormsAbs.topRows(rows).cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
+            VectorReal normalized_gain = gain.cwiseMax(RealScalar{0}).cwiseProduct(b_norms.topRows(rows)).cwiseQuotient(residual_scales);
+            bool       keep_cheap      = false;
+            for(Eigen::Index i = 0; i < rows; ++i) {
+                if(status.rNormsAbs(i) > targets(i) && normalized_gain(i) > config.auto_ritz_tolerance) keep_cheap = true;
             }
 
+            auto_residual_correction.jd_outer_iters_since_probe = 0;
+            auto_residual_correction.cheap_iters                = keep_cheap ? 1 : 0;
+            auto_residual_correction.active =
+                keep_cheap ? ResidualCorrectionType::CHEAP_OLSEN : ResidualCorrectionType::JACOBI_DAVIDSON;
+            if(keep_cheap) auto_residual_correction.jd_to_cheap_switch_outer_iters.push_back(status.outer_iter);
+
             if(log) {
-                log->debug("auto residual correction cheap probe: {} -> {} | eigval {:.16e}->{:.16e} improvement {:.6e} threshold {:.6e} "
-                           "relative improvement {:.6e} threshold {:.6e} factor {:.6e} abs rnorm_abs {:.6e} abs rnorm2 {:.6e} scale_floor {:.6e} interval {} "
-                           "decision {} reason {} | mv {} outer {} inner {} inner_iters {} op_inner {} time {:.6e}s",
-                           method_name(ResidualCorrectionType::JACOBI_DAVIDSON), method_name(ResidualCorrectionType::CHEAP_OLSEN),
-                           status.oldVal.size() > 0 ? status.oldVal(0) : RealScalar{0}, status.eigVal.size() > 0 ? status.eigVal(0) : RealScalar{0},
-                           improvement, threshold, relative_improvement, relative_threshold, config.auto_cheap_probe_factor, rnorm_abs, rnorm_squared,
-                           probe_scale_floor, config.auto_cheap_probe_interval, keep_cheap ? "keep CHEAP_OLSEN" : "return JACOBI_DAVIDSON",
-                           keep_cheap_relative ? "relative ritz progress" : (keep_cheap_absolute ? "absolute residual scale" : "insufficient progress"),
-                           status.num_matvecs + status.num_matvecs_inner, status.num_matvecs, status.num_matvecs_inner, status.num_inner_iters,
-                           status.num_operator_inner, outer_iteration_time);
+                log->debug("auto residual correction cheap probe: {} | normalized objective gain [{}] tolerance {:.6e} | outer_iter {} mv_total {} time_iter {:.6e}s",
+                           keep_cheap ? "keep CHEAP_OLSEN" : "return JACOBI_DAVIDSON",
+                           fmt::join(normalized_gain.data(), normalized_gain.data() + normalized_gain.size(), ", "), config.auto_ritz_tolerance,
+                           status.outer_iter, status.num_matvecs_total, outer_iteration_time);
             }
             return;
         }
 
         if(auto_residual_correction.iteration_method == ResidualCorrectionType::JACOBI_DAVIDSON) {
-            auto_residual_correction.active = ResidualCorrectionType::JACOBI_DAVIDSON;
+            auto_residual_correction.active      = ResidualCorrectionType::JACOBI_DAVIDSON;
+            auto_residual_correction.cheap_iters = 0;
             auto_residual_correction.jd_outer_iters_since_probe++;
-            if(log) {
-                log->trace("auto residual correction jd outer iteration: outer iterations since cheap Olsen probe {}/{}",
-                           auto_residual_correction.jd_outer_iters_since_probe, config.auto_cheap_probe_interval);
-            }
             return;
         }
 
         auto_residual_correction.active = ResidualCorrectionType::CHEAP_OLSEN;
-        auto_residual_correction.dwell++;
-        auto saturation             = get_auto_saturation_status();
-        auto rnorm_rel                 = get_auto_rnorm_scalar(rNormsRel(status.rNormsAbs));
-        auto ritz_rel_change        = get_auto_ritz_value_relative_change();
-        bool jd_start_rnorm_enabled = config.auto_jd_start_rnorm_threshold > RealScalar{0};
-        bool ritz_progress_low      = config.auto_sat_eigval_threshold <= RealScalar{0} || ritz_rel_change <= config.auto_sat_eigval_threshold;
-        bool jd_start_rnorm_ready =
-            jd_start_rnorm_enabled && status.rNormsAbs.size() > 0 && rnorm_rel <= config.auto_jd_start_rnorm_threshold && ritz_progress_low;
-        bool jd_start_ready         = saturation.ready || jd_start_rnorm_ready;
-        if(log) {
-            log->trace("auto residual correction start check: cheap dwell {}/{} ready {} | eigval sat {} ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} "
-                       "value {:.6e} hist {} enough {} | rnorm_rel sat {} ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} value {:.6e} hist {} "
-                       "enough {} | jd start rnorm_rel ready {} threshold {:.6e} value {:.6e} | ritz rel change {:.6e} threshold {:.6e} low {}",
-                       auto_residual_correction.dwell, config.auto_min_dwell_iters, jd_start_ready, saturation.eigval.saturated, saturation.eigval.ratio,
-                       saturation.eigval.threshold, saturation.eigval.stddev, saturation.eigval.scale, saturation.eigval.value, saturation.eigval.history_size,
-                       saturation.eigval.enough_history, saturation.rnorm_rel.saturated, saturation.rnorm_rel.ratio, saturation.rnorm_rel.threshold,
-                       saturation.rnorm_rel.stddev, saturation.rnorm_rel.scale, saturation.rnorm_rel.value, saturation.rnorm_rel.history_size,
-                       saturation.rnorm_rel.enough_history, jd_start_rnorm_ready, config.auto_jd_start_rnorm_threshold, rnorm_rel, ritz_rel_change,
-                       config.auto_sat_eigval_threshold, ritz_progress_low);
+        auto_residual_correction.cheap_iters++;
+        if(status.residual_converged || auto_residual_correction.cheap_iters < static_cast<Eigen::Index>(status.max_history_size) ||
+           status.eigVals_history.size() < status.max_history_size)
+            return;
+
+        VectorReal residual_scales = status.rNormsAbs.topRows(rows).cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
+        VectorReal normalized_std =
+            get_standard_deviations(status.eigVals_history, false).topRows(rows).cwiseProduct(b_norms).cwiseQuotient(residual_scales);
+        bool all_unconverged_localized = true;
+        for(Eigen::Index i = 0; i < rows; ++i) {
+            if(status.rNormsAbs(i) > targets(i) && normalized_std(i) > config.auto_ritz_tolerance) all_unconverged_localized = false;
         }
-        if(auto_residual_correction.dwell < config.auto_min_dwell_iters) return;
 
-        if(jd_start_ready) {
-            auto_residual_correction.active               = ResidualCorrectionType::JACOBI_DAVIDSON;
-            auto_residual_correction.dwell                = 0;
-            auto_residual_correction.jd_outer_iters_since_probe = 0;
-            auto_residual_correction.cheap_to_jd_switch_outer_iters.push_back(status.outer_iter);
+        if(log) {
+            log->trace("auto residual correction Ritz localization: normalized std [{}] tolerance {:.6e} localized {} | cheap_iters {} outer_iter {} mv_total {}",
+                       fmt::join(normalized_std.data(), normalized_std.data() + normalized_std.size(), ", "), config.auto_ritz_tolerance,
+                       all_unconverged_localized, auto_residual_correction.cheap_iters, status.outer_iter, status.num_matvecs_total);
+        }
+        if(!all_unconverged_localized) return;
 
-            if(log) {
-                log->debug(
-                    "auto residual correction switch: {} -> {} | reason {} | eigval ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} value {:.6e} | "
-                    "rnorm_rel ratio {:.6e} threshold {:.6e} std {:.6e} scale {:.6e} value {:.6e} | probe interval {} probe factor {:.6e} | "
-                    "jd start rnorm_rel threshold {:.6e} rnorm_rel {:.6e} ritz rel change {:.6e} threshold {:.6e} | "
-                    "mv {} outer {} inner {} inner_iters {} op_inner {} time {:.6e}s",
-                    method_name(ResidualCorrectionType::CHEAP_OLSEN), method_name(ResidualCorrectionType::JACOBI_DAVIDSON),
-                    jd_start_rnorm_ready ? "rnorm_rel threshold and ritz progress" : "saturation", saturation.eigval.ratio, saturation.eigval.threshold,
-                    saturation.eigval.stddev, saturation.eigval.scale, saturation.eigval.value, saturation.rnorm_rel.ratio, saturation.rnorm_rel.threshold,
-                    saturation.rnorm_rel.stddev, saturation.rnorm_rel.scale, saturation.rnorm_rel.value, config.auto_cheap_probe_interval,
-                    config.auto_cheap_probe_factor, config.auto_jd_start_rnorm_threshold, rnorm_rel, ritz_rel_change, config.auto_sat_eigval_threshold,
-                    status.num_matvecs + status.num_matvecs_inner, status.num_matvecs, status.num_matvecs_inner, status.num_inner_iters,
-                    status.num_operator_inner, outer_iteration_time);
-            }
+        auto_residual_correction.active = ResidualCorrectionType::JACOBI_DAVIDSON;
+        auto_residual_correction.cheap_iters = 0;
+        auto_residual_correction.jd_outer_iters_since_probe = 0;
+        auto_residual_correction.cheap_to_jd_switch_outer_iters.push_back(status.outer_iter);
+        if(log) {
+            log->debug("auto residual correction switch: {} -> {} | reason Ritz localized | normalized std [{}] tolerance {:.6e} | outer_iter {} mv_total {} time_iter {:.6e}s",
+                       ResidualCorrectionToString(ResidualCorrectionType::CHEAP_OLSEN),
+                       ResidualCorrectionToString(ResidualCorrectionType::JACOBI_DAVIDSON),
+                       fmt::join(normalized_std.data(), normalized_std.data() + normalized_std.size(), ", "), config.auto_ritz_tolerance,
+                       status.outer_iter, status.num_matvecs_total, outer_iteration_time);
         }
     }
 

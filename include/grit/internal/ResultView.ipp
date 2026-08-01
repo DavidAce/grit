@@ -377,8 +377,8 @@ namespace grit {
     }
 
     template<typename Scalar_>
-    Eigen::Index ResultView<Scalar_>::auto_dwell() const {
-        return internal::visit_solver_source(source, [](const auto &src) { return src.auto_residual_correction.dwell; });
+    Eigen::Index ResultView<Scalar_>::auto_cheap_iters() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.auto_residual_correction.cheap_iters; });
     }
 
     template<typename Scalar_>

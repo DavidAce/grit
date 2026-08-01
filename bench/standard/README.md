@@ -119,26 +119,23 @@ The following options are `gdplusk`-only and will be rejected for `lanczos` and
 
 ## AUTO Residual Correction
 
-`--residual-correction=auto` starts with cheap Olsen. Once cheap Olsen has dwelled for `--auto-min-dwell-iters` outer
-iterations and both the eigenvalue and derived rescaled-residual histories saturate, AUTO switches to Jacobi-Davidson.
-AUTO also switches to Jacobi-Davidson once the derived rescaled residual norm is below
-`--auto-jd-start-rnorm-threshold`; set that option to `0` to disable this rescaled residual trigger.
+`--residual-correction=auto` starts with cheap Olsen and switches to Jacobi-Davidson when every unconverged Ritz value is
+localized over the solver's five-entry history. For Ritz pair `i`, AUTO compares
 
-While Jacobi-Davidson is active, AUTO periodically forces one cheap-Olsen probe. If that probe improves the selected
-Ritz value by more than
-`--auto-cheap-probe-factor * max(abs_rnorm^2, roundoff scale)`, cheap Olsen continues. Otherwise AUTO returns to
-Jacobi-Davidson.
+```text
+stddev(lambda_i) * norm(B * v_i) / norm(r_i)
+```
 
-The main AUTO controls are `--auto-sat-eigval-threshold`,
-`--auto-sat-rnorm-threshold`, `--auto-jd-start-rnorm-threshold`,
-`--auto-min-dwell-iters`, `--auto-cheap-probe-interval`, and
-`--auto-cheap-probe-factor`.
+with `--auto-ritz-tolerance`, using `B * v_i = v_i` for standard problems. The numerator is the residual perturbation
+caused by varying only the Ritz value, while the denominator is the current residual uncertainty. This ratio is unchanged
+by equivalent scaling of a standard or generalized problem. Residual oscillation therefore does not prevent JD activation
+once the Ritz values have stabilized relative to the residual.
 
-`--auto-sat-eigval-threshold` is relative to the average absolute eigenvalue magnitude in the recent history window, so
-`1e-3` means roughly that the recent Ritz values agree to about three significant digits.
+While JD is active, AUTO performs one cheap-Olsen probe every `--auto-cheap-probe-interval` JD outer iterations. The probe
+keeps cheap Olsen when at least one unconverged Ritz value improves the requested SR, LR, SM, or LM objective by more than
+`--auto-ritz-tolerance` under the same normalization; otherwise AUTO immediately resumes JD.
 
-`--auto-sat-rnorm-threshold` is applied to derived rescaled residual norms, not to the stored absolute residual norms.
-`--auto-cheap-probe-factor` deliberately uses the stored absolute residual norm squared as the improvement scale.
+These are the only AUTO controls. Their defaults are `1e-3` and `5`, respectively.
 
 ## Warm Start
 

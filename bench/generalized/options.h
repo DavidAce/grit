@@ -26,12 +26,8 @@ namespace bench_generalized {
         double      sat_eigval_threshold      = 0.0;   /*!< Eigenvalue saturation threshold for stopping; zero disables this stop. */
         double      sat_rnorm_threshold       = 0.0;   /*!< Rescaled residual saturation threshold for stopping; zero disables this stop. */
         double      inner_tol                 = 0.1;   /*!< Target residual reduction for the inner correction solver. */
-        int         auto_min_dwell_iters      = 10;   /*!< Minimum consecutive cheap-Olsen AUTO outer iterations before Jacobi-Davidson activation may occur. */
-        double      auto_sat_eigval_threshold = 1e-3; /*!< Eigenvalue saturation threshold for AUTO JD activation. */
-        double      auto_sat_rnorm_threshold  = 1e-2; /*!< Rescaled residual saturation threshold for AUTO JD activation. */
-        double      auto_jd_start_rnorm_threshold = 1e-5; /*!< rescaled residual norm below which AUTO may activate JD; zero disables it. */
-        int         auto_cheap_probe_interval     = 5;    /*!< Jacobi-Davidson outer iterations before AUTO forces a cheap-Olsen probe. */
-        double auto_cheap_probe_factor = 1.0; /*!< Cheap probe must improve the Ritz value by this factor times max(absolute rnorm_abs^2, roundoff scale). */
+        double      auto_ritz_tolerance        = 1e-3; /*!< Residual-relative Ritz localization and cheap-probe progress tolerance. */
+        int         auto_cheap_probe_interval  = 5;    /*!< Jacobi-Davidson outer iterations before AUTO performs a cheap-Olsen probe. */
         unsigned int              seed = 0;
         grit::Ritz                ritz = grit::Ritz::SR;
         spdlog::level::level_enum log_level                    = spdlog::level::warn;

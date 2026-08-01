@@ -1,6 +1,7 @@
 #include "cli.h"
 #include "text.h"
 #include <algorithm>
+#include <cmath>
 #include <format>
 #include <map>
 #include <sstream>
@@ -86,12 +87,8 @@ namespace bench_generalized {
                 reject(opts.explicit_inner_max_iters, "inner-max-iters");
                 reject(opts.explicit_inner_tol, "inner-tol");
                 reject(opts.explicit_use_adaptive_inner_tolerance, "use-adaptive-inner-tolerance");
-                reject(opts.explicit_auto_min_dwell_iters, "auto-min-dwell-iters");
-                reject(opts.explicit_auto_sat_eigval_threshold, "auto-sat-eigval-threshold");
-                reject(opts.explicit_auto_sat_rnorm_threshold, "auto-sat-rnorm-threshold");
-                reject(opts.explicit_auto_jd_start_rnorm_threshold, "auto-jd-start-rnorm-threshold");
+                reject(opts.explicit_auto_ritz_tolerance, "auto-ritz-tolerance");
                 reject(opts.explicit_auto_cheap_probe_interval, "auto-cheap-probe-interval");
-                reject(opts.explicit_auto_cheap_probe_factor, "auto-cheap-probe-factor");
                 reject(opts.explicit_use_jd_b_only, "use-jd-b-only");
             }
 
@@ -158,13 +155,8 @@ namespace bench_generalized {
         app.add_option("--sat-rnorm-threshold", opts.sat_rnorm_threshold,
                        "Stop if rescaled residual history standard deviation is below this fraction of the current rescaled residual; 0 disables it");
         auto *inner_tol_opt = app.add_option("--inner-tol", opts.inner_tol, "Jacobi-Davidson inner tolerance, or a comma list")->delimiter(',');
-        auto *auto_min_dwell_iters_opt = app.add_option("--auto-min-dwell-iters", opts.auto_min_dwell_iters, "Minimum consecutive cheap-Olsen AUTO outer iterations before Jacobi-Davidson activation may be scheduled")->check(CLI::NonNegativeNumber);
-        auto *auto_sat_eigval_threshold_opt = app.add_option("--auto-sat-eigval-threshold", opts.auto_sat_eigval_threshold, "AUTO eigenvalue-history relative standard deviation tolerance");
-        auto *auto_sat_rnorm_threshold_opt = app.add_option("--auto-sat-rnorm-threshold", opts.auto_sat_rnorm_threshold, "AUTO rescaled-residual saturation tolerance");
-        auto *auto_jd_start_rnorm_threshold_opt = app.add_option("--auto-jd-start-rnorm-threshold", opts.auto_jd_start_rnorm_threshold, "rescaled residual norm below which AUTO may activate JD; 0 disables it");
-        auto *auto_cheap_probe_interval_opt = app.add_option("--auto-cheap-probe-interval", opts.auto_cheap_probe_interval, "Jacobi-Davidson outer iterations before AUTO forces a cheap-Olsen probe")->check(CLI::PositiveNumber);
-        auto *auto_cheap_probe_factor_opt = app.add_option("--auto-cheap-probe-factor", opts.auto_cheap_probe_factor,
-                       "Cheap probe must improve the Ritz value by this factor times max(absolute rnorm_abs^2, roundoff scale)");
+        auto *auto_ritz_tolerance_opt = app.add_option("--auto-ritz-tolerance", opts.auto_ritz_tolerance, "Residual-relative Ritz localization and cheap-probe progress tolerance")->check(CLI::PositiveNumber);
+        auto *auto_cheap_probe_interval_opt = app.add_option("--auto-cheap-probe-interval", opts.auto_cheap_probe_interval, "Jacobi-Davidson outer iterations between AUTO cheap-Olsen probes")->check(CLI::PositiveNumber);
         app.add_option("--seed", opts.seed, "Random seed for deterministic initial guess");
         app.add_option("--ritz", opts.ritz, "Ritz target [SR, LR, SM, LM], or a comma list")->type_name("ENUM");
         app.add_option("--log-level", opts.log_level, "Solver log level [trace, debug, info, warn, err, critical, off]")->transform(CLI::CheckedTransformer(log_level_map, CLI::ignore_case))->type_name("ENUM");
@@ -176,18 +168,13 @@ namespace bench_generalized {
         auto *adaptive_inner_tolerance_opt = app.add_option("--use-adaptive-inner-tolerance", opts.use_adaptive_inner_tolerance, "Enable adaptive inner tolerance, or use [true,false]")->delimiter(',');
         /* clang-format off */
 
-        app.callback([&opts, inner_max_iters_opt, max_retain_blocks_opt, inner_tol_opt, auto_min_dwell_iters_opt, auto_sat_eigval_threshold_opt, auto_sat_rnorm_threshold_opt,
-                      auto_jd_start_rnorm_threshold_opt, auto_cheap_probe_interval_opt, auto_cheap_probe_factor_opt, residual_correction_opt,
+        app.callback([&opts, inner_max_iters_opt, max_retain_blocks_opt, inner_tol_opt, auto_ritz_tolerance_opt, auto_cheap_probe_interval_opt, residual_correction_opt,
                       use_jd_b_only_opt, adaptive_inner_tolerance_opt]() {
             opts.explicit_inner_max_iters               = inner_max_iters_opt->count() > 0;
             opts.explicit_max_retain_blocks             = max_retain_blocks_opt->count() > 0;
             opts.explicit_inner_tol                     = inner_tol_opt->count() > 0;
-            opts.explicit_auto_min_dwell_iters          = auto_min_dwell_iters_opt->count() > 0;
-            opts.explicit_auto_sat_eigval_threshold     = auto_sat_eigval_threshold_opt->count() > 0;
-            opts.explicit_auto_sat_rnorm_threshold      = auto_sat_rnorm_threshold_opt->count() > 0;
-            opts.explicit_auto_jd_start_rnorm_threshold = auto_jd_start_rnorm_threshold_opt->count() > 0;
+            opts.explicit_auto_ritz_tolerance           = auto_ritz_tolerance_opt->count() > 0;
             opts.explicit_auto_cheap_probe_interval     = auto_cheap_probe_interval_opt->count() > 0;
-            opts.explicit_auto_cheap_probe_factor       = auto_cheap_probe_factor_opt->count() > 0;
             opts.explicit_residual_correction           = residual_correction_opt->count() > 0;
             opts.explicit_use_jd_b_only                 = use_jd_b_only_opt->count() > 0;
             opts.explicit_use_adaptive_inner_tolerance  = adaptive_inner_tolerance_opt->count() > 0;
@@ -208,11 +195,8 @@ namespace bench_generalized {
         if(opts.reltol < 0.0) throw std::runtime_error("--reltol must be non-negative");
         if(opts.sat_eigval_threshold < 0.0) throw std::runtime_error("--sat-eigval-threshold must be non-negative");
         if(opts.sat_rnorm_threshold < 0.0) throw std::runtime_error("--sat-rnorm-threshold must be non-negative");
-        if(opts.auto_sat_eigval_threshold < 0.0) throw std::runtime_error("--auto-sat-eigval-threshold must be non-negative");
-        if(opts.auto_sat_rnorm_threshold < 0.0) throw std::runtime_error("--auto-sat-rnorm-threshold must be non-negative");
-        if(opts.auto_jd_start_rnorm_threshold < 0.0) throw std::runtime_error("--auto-jd-start-rnorm-threshold must be non-negative");
+        if(!std::isfinite(opts.auto_ritz_tolerance) || opts.auto_ritz_tolerance <= 0.0) throw std::runtime_error("--auto-ritz-tolerance must be finite and positive");
         if(opts.auto_cheap_probe_interval <= 0) throw std::runtime_error("--auto-cheap-probe-interval must be positive");
-        if(opts.auto_cheap_probe_factor < 0.0) throw std::runtime_error("--auto-cheap-probe-factor must be non-negative");
         validate_algo_specific_options(opts);
     }
 
@@ -265,12 +249,8 @@ namespace bench_generalized {
                                             opts.sat_eigval_threshold         = cli.sat_eigval_threshold;
                                             opts.sat_rnorm_threshold          = cli.sat_rnorm_threshold;
                                             opts.inner_tol                    = inner_tol;
-                                            opts.auto_min_dwell_iters         = cli.auto_min_dwell_iters;
-                                            opts.auto_sat_eigval_threshold    = cli.auto_sat_eigval_threshold;
-                                            opts.auto_sat_rnorm_threshold     = cli.auto_sat_rnorm_threshold;
-                                            opts.auto_jd_start_rnorm_threshold = cli.auto_jd_start_rnorm_threshold;
+                                            opts.auto_ritz_tolerance          = cli.auto_ritz_tolerance;
                                             opts.auto_cheap_probe_interval    = cli.auto_cheap_probe_interval;
-                                            opts.auto_cheap_probe_factor      = cli.auto_cheap_probe_factor;
                                             opts.seed                         = cli.seed;
                                             opts.ritz                         = ritz;
                                             opts.log_level                    = cli.log_level;

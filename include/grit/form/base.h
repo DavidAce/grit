@@ -229,33 +229,13 @@ namespace grit::form {
 
         /*! State used by AUTO residual correction. */
         struct AutoResidualCorrectionState {
-            ResidualCorrectionType    active               = ResidualCorrectionType::CHEAP_OLSEN; /*!< Correction currently preferred by AUTO. */
-            ResidualCorrectionType    iteration_method          = ResidualCorrectionType::CHEAP_OLSEN; /*!< Correction used in the current outer iteration. */
-            Eigen::Index              dwell                = 0;                                   /*!< Cheap Olsen dwell count. */
+            ResidualCorrectionType    active                    = ResidualCorrectionType::CHEAP_OLSEN; /*!< Correction currently preferred by AUTO. */
+            ResidualCorrectionType    iteration_method           = ResidualCorrectionType::CHEAP_OLSEN; /*!< Correction used in the current outer iteration. */
+            Eigen::Index              cheap_iters                = 0;                                   /*!< Consecutive cheap Olsen outer iterations. */
             Eigen::Index              jd_outer_iters_since_probe = 0;                                   /*!< Jacobi-Davidson outer iterations since the last cheap Olsen probe. */
-            double                    outer_iteration_time_start      = 0.0;                                 /*!< Wall-time marker for the current outer iteration. */
+            double                    outer_iteration_time_start  = 0.0;                                 /*!< Wall-time marker for the current outer iteration. */
             std::vector<Eigen::Index> cheap_to_jd_switch_outer_iters; /*!< Outer iterations switching from cheap Olsen to Jacobi-Davidson. */
             std::vector<Eigen::Index> jd_to_cheap_switch_outer_iters; /*!< Outer iterations switching from Jacobi-Davidson to cheap Olsen. */
-        };
-
-        /*! Saturation diagnostic used by AUTO. */
-        struct AutoSaturationInfo {
-            bool         enabled        = false;                                       /*!< Whether this saturation check is enabled. */
-            bool         enough_history = false;                                       /*!< Whether enough history is available. */
-            bool         saturated      = false;                                       /*!< Whether the quantity is saturated. */
-            Eigen::Index history_size   = 0;                                           /*!< Number of history points used. */
-            RealScalar   value          = RealScalar{0};                               /*!< Current value. */
-            RealScalar   stddev         = std::numeric_limits<RealScalar>::infinity(); /*!< Standard deviation over history. */
-            RealScalar   scale          = RealScalar{1};                               /*!< Scale used to make the ratio dimensionless. */
-            RealScalar   ratio          = std::numeric_limits<RealScalar>::infinity(); /*!< Saturation ratio. */
-            RealScalar   threshold      = RealScalar{0};                               /*!< Saturation threshold. */
-        };
-
-        /*! Combined AUTO saturation diagnostics. */
-        struct AutoSaturationStatus {
-            AutoSaturationInfo eigval;        /*!< Eigenvalue saturation diagnostic. */
-            AutoSaturationInfo rnorm_rel;         /*!< Residual saturation diagnostic. */
-            bool               ready = false; /*!< Whether AUTO may use these diagnostics. */
         };
 
         /*! Convert a residual correction selector to text. */

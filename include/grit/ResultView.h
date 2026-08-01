@@ -171,8 +171,8 @@ namespace grit {
         [[nodiscard]] std::string_view residual_correction_active_name() const;
         /*! Residual correction method used in the last outer iteration. */
         [[nodiscard]] std::string_view residual_correction_iteration_name() const;
-        /*! AUTO dwell outer iterations spent in cheap Olsen mode. */
-        [[nodiscard]] Eigen::Index auto_dwell() const;
+        /*! Consecutive AUTO outer iterations spent in cheap Olsen mode. */
+        [[nodiscard]] Eigen::Index auto_cheap_iters() const;
         /*! AUTO Jacobi-Davidson outer iterations since the last cheap Olsen probe. */
         [[nodiscard]] Eigen::Index auto_jd_outer_iters_since_probe() const;
         /*! Iterations where AUTO switched from cheap Olsen to Jacobi-Davidson. */

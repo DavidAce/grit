@@ -31,12 +31,8 @@ namespace bench_generalized {
         double                sat_eigval_threshold          = 0.0;
         double                sat_rnorm_threshold           = 0.0;
         double                inner_tol                     = 0.0;
-        int32_t               auto_min_dwell_iters          = 0;
-        double                auto_sat_eigval_threshold     = 0.0;
-        double                auto_sat_rnorm_threshold      = 0.0;
-        double                auto_jd_start_rnorm_threshold = 0.0;
-        int32_t               auto_cheap_probe_interval     = 0;
-        double                auto_cheap_probe_factor       = 0.0;
+        double                auto_ritz_tolerance       = 0.0;
+        int32_t               auto_cheap_probe_interval = 0;
         h5pp::fstr_t<16>      ritz;
         h5pp::fstr_t<32>      residual_correction;
         uint8_t               use_refined_rayleigh_ritz    = 0;
@@ -84,7 +80,7 @@ namespace bench_generalized {
         int64_t               first_cheap_to_jd_outer_iter     = -1;
         h5pp::fstr_t<32>      residual_correction_active;
         h5pp::fstr_t<32>      residual_correction_iteration;
-        int64_t               auto_dwell                      = 0;
+        int64_t               auto_cheap_iters                = 0;
         int64_t               auto_jd_outer_iters_since_probe = 0;
         int64_t               saturation_count_eigval         = 0;
         int64_t               saturation_count_rnorm          = 0;

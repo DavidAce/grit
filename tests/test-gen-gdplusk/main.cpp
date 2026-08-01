@@ -675,6 +675,41 @@ TEST_CASE("generalized gdplusk with B as A squared targets A smallest magnitude 
     REQUIRE(std::abs(1.0 / view.eigVal()(0) - exact_A.eigenvalues()(0)) < 1e-10);
 }
 
+TEST_CASE("generalized auto Ritz localization compares the Bv perturbation with the residual") {
+    using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorReal = grit::form::base<double>::VectorReal;
+    using Correction = grit::ResidualCorrectionType;
+
+    Matrix A_matrix = 2.0 * Matrix::Identity(4, 4);
+    Matrix B_matrix = 10.0 * Matrix::Identity(4, 4);
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+    auto   B        = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
+
+    grit::generalized::gdplusk<double> solver(A, B);
+    solver.config.nev                      = 1;
+    solver.config.ncv                      = 4;
+    solver.config.block_size               = 1;
+    solver.config.abstol                   = 1e-6;
+    solver.config.residual_correction_type = Correction::AUTO;
+    solver.V                               = Matrix::Identity(4, 1);
+    solver.BV                              = B_matrix * solver.V;
+    solver.status.eigVal                   = VectorReal::Constant(1, 0.2);
+    solver.status.rNormsAbs                = VectorReal::Ones(1);
+    solver.status.eigVals_history          = {VectorReal::Constant(1, 0.198), VectorReal::Constant(1, 0.199), VectorReal::Constant(1, 0.2),
+                                             VectorReal::Constant(1, 0.201), VectorReal::Constant(1, 0.202)};
+    solver.auto_residual_correction.cheap_iters = 4;
+
+    SECTION("motion above the residual-scaled tolerance remains cheap") { solver.config.auto_ritz_tolerance = 15e-3; }
+    SECTION("motion below the residual-scaled tolerance starts JD") { solver.config.auto_ritz_tolerance = 16e-3; }
+
+    solver.update_auto_residual_correction_state();
+
+    if(solver.config.auto_ritz_tolerance == 15e-3)
+        REQUIRE(solver.auto_residual_correction.active == Correction::CHEAP_OLSEN);
+    else
+        REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
+}
+
 int main(int argc, char **argv) {
     test_log_fd = ::dup(STDERR_FILENO);
     Catch::Session session;

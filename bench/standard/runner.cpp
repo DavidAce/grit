@@ -111,12 +111,8 @@ namespace bench_standard {
             snapshot.max_basis_blocks                 = static_cast<int32_t>(opts.ncv / opts.block_size);
             snapshot.inner_max_iters                  = static_cast<int32_t>(solver.config.inner_max_iters);
             snapshot.inner_tol                        = solver.config.inner_tol;
-            snapshot.auto_min_dwell_iters             = static_cast<int32_t>(opts.auto_min_dwell_iters);
-            snapshot.auto_sat_eigval_threshold        = opts.auto_sat_eigval_threshold;
-            snapshot.auto_sat_rnorm_threshold         = opts.auto_sat_rnorm_threshold;
-            snapshot.auto_jd_start_rnorm_threshold    = opts.auto_jd_start_rnorm_threshold;
+            snapshot.auto_ritz_tolerance              = opts.auto_ritz_tolerance;
             snapshot.auto_cheap_probe_interval        = static_cast<int32_t>(opts.auto_cheap_probe_interval);
-            snapshot.auto_cheap_probe_factor          = opts.auto_cheap_probe_factor;
             snapshot.residual_correction              = fixed_string<32>(residual_correction_name(opts.residual_correction), "residual_correction");
             snapshot.use_adaptive_inner_tolerance     = static_cast<uint8_t>(opts.use_adaptive_inner_tolerance);
             snapshot.inner_tol_last                   = view.inner_tol_last();
@@ -145,7 +141,7 @@ namespace bench_standard {
             snapshot.time_status_update               = view.time_status_update();
             snapshot.first_cheap_to_jd_outer_iter =
                 view.cheap_to_jd_switch_outer_iters().empty() ? int64_t{-1} : static_cast<int64_t>(view.cheap_to_jd_switch_outer_iters().front());
-            snapshot.auto_dwell                      = static_cast<int64_t>(view.auto_dwell());
+            snapshot.auto_cheap_iters                = static_cast<int64_t>(view.auto_cheap_iters());
             snapshot.auto_jd_outer_iters_since_probe = static_cast<int64_t>(view.auto_jd_outer_iters_since_probe());
             snapshot.residual_correction_active      = fixed_string<32>(view.residual_correction_active_name(), "residual_correction_active");
             snapshot.residual_correction_iteration   = fixed_string<32>(view.residual_correction_iteration_name(), "residual_correction_iteration");
@@ -224,12 +220,8 @@ namespace bench_standard {
                 solver.config.use_adaptive_inner_tolerance  = opts.use_adaptive_inner_tolerance;
                 solver.config.inner_max_iters               = opts.inner_max_iters;
                 solver.config.inner_tol                     = opts.inner_tol;
-                solver.config.auto_min_dwell_iters          = opts.auto_min_dwell_iters;
-                solver.config.auto_sat_eigval_threshold     = opts.auto_sat_eigval_threshold;
-                solver.config.auto_sat_rnorm_threshold      = opts.auto_sat_rnorm_threshold;
-                solver.config.auto_jd_start_rnorm_threshold = opts.auto_jd_start_rnorm_threshold;
+                solver.config.auto_ritz_tolerance           = opts.auto_ritz_tolerance;
                 solver.config.auto_cheap_probe_interval     = opts.auto_cheap_probe_interval;
-                solver.config.auto_cheap_probe_factor       = opts.auto_cheap_probe_factor;
             } else if constexpr(std::is_same_v<Solver, LanczosSolver>) {
                 solver.config.maxRetainBlocks = opts.maxRetainBlocks;
             }
