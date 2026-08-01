@@ -87,14 +87,14 @@ namespace grit::algo {
             RealScalar                  inner_tol                        = RealScalar{0.1f};   /*!< Initial tolerance for inner correction solves. */
             Eigen::Index                inner_max_iters                  = 1000;               /*!< Maximum inner iterations in each inner correction solve. */
             RealScalar                  auto_ritz_tolerance              = RealScalar{1e-3f};  /*!< AUTO tolerance for residual-relative Ritz localization and probe progress. */
-            Eigen::Index                auto_cheap_probe_interval        = 5;                  /*!< Jacobi-Davidson outer iterations between cheap Olsen probes. */
+            Eigen::Index                auto_probe_interval               = 5;                  /*!< Active-method outer iterations between AUTO probes. */
+            Eigen::Index                auto_probe_length                 = 3;                  /*!< Outer iterations using the method tested by each AUTO probe. */
             std::function<void(const gdplusk<Scalar, form_> &)> user_callback;                 /*!< Callback called after each outer iteration. */
             Eigen::Index                                        max_extra_ritz_history    = 1; /*!< Extra Ritz history retained for progress checks. */
             Eigen::Index                                        max_ritz_residual_history = 1; /*!< Ritz residual history retained for progress checks. */
         };
 
         Config config; /*!< User-facing GD+K configuration. */
-
         /*!
          * Construct a standard GD+K solver.
          * @param A Matrix-free operator A.

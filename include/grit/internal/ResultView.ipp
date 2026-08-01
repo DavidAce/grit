@@ -377,8 +377,8 @@ namespace grit {
     }
 
     template<typename Scalar_>
-    Eigen::Index ResultView<Scalar_>::auto_cheap_iters() const {
-        return internal::visit_solver_source(source, [](const auto &src) { return src.auto_residual_correction.cheap_iters; });
+    Eigen::Index ResultView<Scalar_>::auto_cheap_olsen_iters() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.auto_residual_correction.cheap_olsen_iters; });
     }
 
     template<typename Scalar_>
@@ -387,14 +387,14 @@ namespace grit {
     }
 
     template<typename Scalar_>
-    const std::vector<Eigen::Index> &ResultView<Scalar_>::cheap_to_jd_switch_outer_iters() const {
+    const std::vector<Eigen::Index> &ResultView<Scalar_>::cheap_olsen_to_jd_switch_outer_iters() const {
         return internal::visit_solver_source(
-            source, [](const auto &src) -> const std::vector<Eigen::Index> & { return src.auto_residual_correction.cheap_to_jd_switch_outer_iters; });
+            source, [](const auto &src) -> const std::vector<Eigen::Index> & { return src.auto_residual_correction.cheap_olsen_to_jd_switch_outer_iters; });
     }
 
     template<typename Scalar_>
-    const std::vector<Eigen::Index> &ResultView<Scalar_>::jd_to_cheap_switch_outer_iters() const {
+    const std::vector<Eigen::Index> &ResultView<Scalar_>::jd_to_cheap_olsen_switch_outer_iters() const {
         return internal::visit_solver_source(
-            source, [](const auto &src) -> const std::vector<Eigen::Index> & { return src.auto_residual_correction.jd_to_cheap_switch_outer_iters; });
+            source, [](const auto &src) -> const std::vector<Eigen::Index> & { return src.auto_residual_correction.jd_to_cheap_olsen_switch_outer_iters; });
     }
 }

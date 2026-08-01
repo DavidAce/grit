@@ -131,15 +131,17 @@ caused by varying only the Ritz value, while the denominator is the current resi
 by equivalent scaling of a standard or generalized problem. Residual oscillation therefore does not prevent JD activation
 once the Ritz values have stabilized relative to the residual.
 
-While JD is active, AUTO performs one cheap-Olsen probe every `--auto-cheap-probe-interval` JD outer iterations. The probe
-keeps cheap Olsen when at least one unconverged Ritz value improves the requested SR, LR, SM, or LM objective by more than
-`--auto-ritz-tolerance` under the same normalization; otherwise AUTO immediately resumes JD.
+While JD is active, AUTO performs a probe of `--auto-probe-length` consecutive cheap Olsen outer iterations every
+`--auto-probe-interval` JD outer iterations. AUTO compares the selected Ritz values before and after the complete
+probe. It continues with cheap Olsen when at least one unconverged Ritz value improves the requested SR, LR, SM, or LM
+objective by more than `--auto-ritz-tolerance` under the same normalization; otherwise AUTO resumes JD.
 
-These are the only AUTO controls. Their defaults are `1e-3` and `5`, respectively.
+The AUTO controls and defaults are `--auto-ritz-tolerance=1e-3`, `--auto-probe-interval=5`, and
+`--auto-probe-length=3`.
 
 ## Warm Start
 
-Save a partial cheap-Olsen solution:
+Save a partial cheap Olsen solution:
 
 ```bash
 ./build/Release/bench/standard/grit-bench-standard \

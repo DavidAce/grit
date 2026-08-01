@@ -25,8 +25,9 @@ namespace bench_standard {
         double      sat_eigval_threshold      = 0.0;   /*!< Eigenvalue saturation threshold for stopping; zero disables this stop. */
         double      sat_rnorm_threshold       = 0.0;   /*!< Rescaled residual saturation threshold for stopping; zero disables this stop. */
         double      inner_tol                 = 0.1;   /*!< Target residual reduction for the inner correction solver. */
-        double      auto_ritz_tolerance        = 1e-3; /*!< Residual-relative Ritz localization and cheap-probe progress tolerance. */
-        int         auto_cheap_probe_interval  = 5;    /*!< Jacobi-Davidson outer iterations before AUTO performs a cheap-Olsen probe. */
+        double      auto_ritz_tolerance        = 1e-3; /*!< Residual-relative Ritz localization and cheap Olsen probe progress tolerance. */
+        int         auto_probe_interval = 5; /*!< Active-method outer iterations between AUTO probes. */
+        int         auto_probe_length   = 3; /*!< Outer iterations using the method tested by each AUTO probe. */
         unsigned int              seed = 0;
         grit::Ritz                ritz = grit::Ritz::SR;
         spdlog::level::level_enum log_level                    = spdlog::level::warn;

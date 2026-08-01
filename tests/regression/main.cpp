@@ -127,7 +127,7 @@ namespace {
         solver.config.use_refined_rayleigh_ritz     = true;
         solver.config.use_adaptive_inner_tolerance  = false;
         solver.config.auto_ritz_tolerance           = 1e-3;
-        solver.config.auto_cheap_probe_interval     = 3;
+        solver.config.auto_probe_interval = 3;
         constexpr unsigned int initial_guess_seed   = 0;
         solver.set_initial_guess(seeded_initial_guess(matrix.rows(), solver.config.block_size, initial_guess_seed));
         solver.run();

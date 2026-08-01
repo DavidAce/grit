@@ -83,7 +83,8 @@ namespace grit::algo {
         if(!std::isfinite(config.auto_ritz_tolerance) || config.auto_ritz_tolerance <= RealScalar{0}) {
             throw std::runtime_error("gdplusk config error: auto_ritz_tolerance must be finite and positive");
         }
-        if(config.auto_cheap_probe_interval < 1) { throw std::runtime_error("gdplusk config error: auto_cheap_probe_interval must be at least 1"); }
+        if(config.auto_probe_interval < 1) { throw std::runtime_error("gdplusk config error: auto_probe_interval must be at least 1"); }
+        if(config.auto_probe_length < 1) { throw std::runtime_error("gdplusk config error: auto_probe_length must be at least 1"); }
         if(this->has_initial_guess()) {
             if(this->initial_guess().rows() != this->N) throw std::runtime_error("gdplusk config error: initial guess row count must match the operator size");
             if(this->initial_guess().cols() < 1) throw std::runtime_error("gdplusk config error: initial guess must have at least one column");

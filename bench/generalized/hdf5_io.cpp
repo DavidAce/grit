@@ -105,7 +105,8 @@ namespace bench_generalized {
                 insert_field(h5type, "inner_max_iters", &Row::inner_max_iters);
                 insert_field(h5type, "inner_tol", &Row::inner_tol);
                 insert_field(h5type, "auto_ritz_tolerance", &Row::auto_ritz_tolerance);
-                insert_field(h5type, "auto_cheap_probe_interval", &Row::auto_cheap_probe_interval);
+                insert_field(h5type, "auto_probe_interval", &Row::auto_probe_interval);
+                insert_field(h5type, "auto_probe_length", &Row::auto_probe_length);
                 insert_field(h5type, "residual_correction", &Row::residual_correction);
                 insert_field(h5type, "use_jd_b_only", &Row::use_jd_b_only);
                 insert_field(h5type, "use_adaptive_inner_tolerance", &Row::use_adaptive_inner_tolerance);
@@ -133,15 +134,15 @@ namespace bench_generalized {
                 insert_field(h5type, "time_residual_correction", &Row::time_residual_correction);
                 insert_field(h5type, "time_build", &Row::time_build);
                 insert_field(h5type, "time_status_update", &Row::time_status_update);
-                insert_field(h5type, "first_cheap_to_jd_outer_iter", &Row::first_cheap_to_jd_outer_iter);
+                insert_field(h5type, "first_cheap_olsen_to_jd_outer_iter", &Row::first_cheap_olsen_to_jd_outer_iter);
                 insert_field(h5type, "residual_correction_active", &Row::residual_correction_active);
                 insert_field(h5type, "residual_correction_iteration", &Row::residual_correction_iteration);
-                insert_field(h5type, "auto_cheap_iters", &Row::auto_cheap_iters);
+                insert_field(h5type, "auto_cheap_olsen_iters", &Row::auto_cheap_olsen_iters);
                 insert_field(h5type, "auto_jd_outer_iters_since_probe", &Row::auto_jd_outer_iters_since_probe);
-                insert_field(h5type, "num_cheap_to_jd_switches", &Row::num_cheap_to_jd_switches);
-                insert_field(h5type, "num_jd_to_cheap_switches", &Row::num_jd_to_cheap_switches);
-                insert_field(h5type, "cheap_to_jd_switch_outer_iters", &Row::cheap_to_jd_switch_outer_iters);
-                insert_field(h5type, "jd_to_cheap_switch_outer_iters", &Row::jd_to_cheap_switch_outer_iters);
+                insert_field(h5type, "num_cheap_olsen_to_jd_switches", &Row::num_cheap_olsen_to_jd_switches);
+                insert_field(h5type, "num_jd_to_cheap_olsen_switches", &Row::num_jd_to_cheap_olsen_switches);
+                insert_field(h5type, "cheap_olsen_to_jd_switch_outer_iters", &Row::cheap_olsen_to_jd_switch_outer_iters);
+                insert_field(h5type, "jd_to_cheap_olsen_switch_outer_iters", &Row::jd_to_cheap_olsen_switch_outer_iters);
             } else if constexpr(std::is_same_v<Row, LanczosSnapshot>) {
                 insert_field(h5type, "max_retain_blocks", &Row::max_retain_blocks);
                 insert_field(h5type, "time_orthogonalize", &Row::time_orthogonalize);
@@ -227,7 +228,7 @@ namespace bench_generalized {
                 time.add(value.time);
                 vmhwm_mib.add(value.vmhwm_mib);
                 if constexpr(std::is_same_v<Row, GdpluskSnapshot>) {
-                    if(value.first_cheap_to_jd_outer_iter >= 0) first_jd_switch.add(static_cast<double>(value.first_cheap_to_jd_outer_iter));
+                    if(value.first_cheap_olsen_to_jd_outer_iter >= 0) first_jd_switch.add(static_cast<double>(value.first_cheap_olsen_to_jd_outer_iter));
                 } else if constexpr(std::is_same_v<Row, LanczosSnapshot>) {
                     time_orthogonalize.add(value.time_orthogonalize);
                     time_orthonormalize.add(value.time_orthonormalize);
@@ -285,7 +286,8 @@ namespace bench_generalized {
                 file.writeAttribute(static_cast<bool>(snapshot.use_jd_b_only), group_path(algo), "use_jd_b_only");
                 file.writeAttribute(static_cast<bool>(snapshot.use_adaptive_inner_tolerance), group_path(algo), "use_adaptive_inner_tolerance");
                 file.writeAttribute(snapshot.auto_ritz_tolerance, group_path(algo), "auto_ritz_tolerance");
-                file.writeAttribute(snapshot.auto_cheap_probe_interval, group_path(algo), "auto_cheap_probe_interval");
+                file.writeAttribute(snapshot.auto_probe_interval, group_path(algo), "auto_probe_interval");
+                file.writeAttribute(snapshot.auto_probe_length, group_path(algo), "auto_probe_length");
             }
             file.writeAttribute(snapshot.eigenvalue, group_path(algo), "eigenvalue");
             file.writeAttribute(snapshot.rnorm_abs, group_path(algo), "rnorm_abs");

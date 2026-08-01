@@ -112,7 +112,8 @@ namespace bench_standard {
             snapshot.inner_max_iters                  = static_cast<int32_t>(solver.config.inner_max_iters);
             snapshot.inner_tol                        = solver.config.inner_tol;
             snapshot.auto_ritz_tolerance              = opts.auto_ritz_tolerance;
-            snapshot.auto_cheap_probe_interval        = static_cast<int32_t>(opts.auto_cheap_probe_interval);
+            snapshot.auto_probe_interval = static_cast<int32_t>(opts.auto_probe_interval);
+            snapshot.auto_probe_length   = static_cast<int32_t>(opts.auto_probe_length);
             snapshot.residual_correction              = fixed_string<32>(residual_correction_name(opts.residual_correction), "residual_correction");
             snapshot.use_adaptive_inner_tolerance     = static_cast<uint8_t>(opts.use_adaptive_inner_tolerance);
             snapshot.inner_tol_last                   = view.inner_tol_last();
@@ -139,16 +140,16 @@ namespace bench_standard {
             snapshot.time_residual_correction         = view.time_residual_correction();
             snapshot.time_build                       = view.time_build();
             snapshot.time_status_update               = view.time_status_update();
-            snapshot.first_cheap_to_jd_outer_iter =
-                view.cheap_to_jd_switch_outer_iters().empty() ? int64_t{-1} : static_cast<int64_t>(view.cheap_to_jd_switch_outer_iters().front());
-            snapshot.auto_cheap_iters                = static_cast<int64_t>(view.auto_cheap_iters());
+            snapshot.first_cheap_olsen_to_jd_outer_iter =
+                view.cheap_olsen_to_jd_switch_outer_iters().empty() ? int64_t{-1} : static_cast<int64_t>(view.cheap_olsen_to_jd_switch_outer_iters().front());
+            snapshot.auto_cheap_olsen_iters          = static_cast<int64_t>(view.auto_cheap_olsen_iters());
             snapshot.auto_jd_outer_iters_since_probe = static_cast<int64_t>(view.auto_jd_outer_iters_since_probe());
             snapshot.residual_correction_active      = fixed_string<32>(view.residual_correction_active_name(), "residual_correction_active");
             snapshot.residual_correction_iteration   = fixed_string<32>(view.residual_correction_iteration_name(), "residual_correction_iteration");
-            snapshot.num_cheap_to_jd_switches        = static_cast<int64_t>(view.cheap_to_jd_switch_outer_iters().size());
-            snapshot.num_jd_to_cheap_switches        = static_cast<int64_t>(view.jd_to_cheap_switch_outer_iters().size());
-            snapshot.cheap_to_jd_switch_outer_iters  = to_i64_vector(view.cheap_to_jd_switch_outer_iters());
-            snapshot.jd_to_cheap_switch_outer_iters  = to_i64_vector(view.jd_to_cheap_switch_outer_iters());
+            snapshot.num_cheap_olsen_to_jd_switches       = static_cast<int64_t>(view.cheap_olsen_to_jd_switch_outer_iters().size());
+            snapshot.num_jd_to_cheap_olsen_switches       = static_cast<int64_t>(view.jd_to_cheap_olsen_switch_outer_iters().size());
+            snapshot.cheap_olsen_to_jd_switch_outer_iters = to_i64_vector(view.cheap_olsen_to_jd_switch_outer_iters());
+            snapshot.jd_to_cheap_olsen_switch_outer_iters = to_i64_vector(view.jd_to_cheap_olsen_switch_outer_iters());
             return snapshot;
         }
 
@@ -221,7 +222,8 @@ namespace bench_standard {
                 solver.config.inner_max_iters               = opts.inner_max_iters;
                 solver.config.inner_tol                     = opts.inner_tol;
                 solver.config.auto_ritz_tolerance           = opts.auto_ritz_tolerance;
-                solver.config.auto_cheap_probe_interval     = opts.auto_cheap_probe_interval;
+                solver.config.auto_probe_interval = opts.auto_probe_interval;
+                solver.config.auto_probe_length   = opts.auto_probe_length;
             } else if constexpr(std::is_same_v<Solver, LanczosSolver>) {
                 solver.config.maxRetainBlocks = opts.maxRetainBlocks;
             }

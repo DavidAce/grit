@@ -77,8 +77,8 @@ namespace bench_generalized {
                          opts.residual_correction, list_text(opts.inner_tol), list_text(opts.inner_max_iters), bool_list_text(opts.use_refined_rayleigh_ritz),
                          bool_list_text(opts.use_jd_b_only), bool_list_text(opts.use_adaptive_inner_tolerance));
             if(opts.residual_correction.find("auto") != std::string::npos || opts.residual_correction.find("AUTO") != std::string::npos) {
-                std::println("  auto correction: Ritz tolerance {:.3e} | cheap probe interval {}", opts.auto_ritz_tolerance,
-                             opts.auto_cheap_probe_interval);
+                std::println("  auto correction: Ritz tolerance {:.3e} | probe interval {} | probe length {}", opts.auto_ritz_tolerance,
+                             opts.auto_probe_interval, opts.auto_probe_length);
             }
         } else if(opts.algo == Algo::lanczos) {
             std::println("  sweep axes: max retain blocks {} | refined {}", list_text(opts.max_retain_blocks), bool_list_text(opts.use_refined_rayleigh_ritz));
@@ -121,7 +121,7 @@ namespace bench_generalized {
                 using ResultType     = std::remove_cvref_t<decltype(typed_result)>;
                 if constexpr(std::is_same_v<ResultType, GdpluskSolveResult>) {
                     const auto jd_switch =
-                        snapshot.first_cheap_to_jd_outer_iter < 0 ? std::string{"n/a"} : std::format("{}", snapshot.first_cheap_to_jd_outer_iter);
+                        snapshot.first_cheap_olsen_to_jd_outer_iter < 0 ? std::string{"n/a"} : std::format("{}", snapshot.first_cheap_olsen_to_jd_outer_iter);
                     std::println("{:<5} {:<5} {:>5} {:>5} {:<4} {:<4} {:<17} {:<7} {:<6} {:<8} {:>10.2e} {:>10.2e} {:>7} {:<24} {:>18.10e} {:>12.4e} {:>12.4e} "
                                  "{:>8} {:>8} "
                                  "{:>8} {:>8} {:>8} {:>9} {:>12.6f} {:>12} {:>12} {:>12}",

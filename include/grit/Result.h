@@ -87,10 +87,10 @@ namespace grit {
             residual_below_gap_                   = view.residual_below_gap();
             residual_correction_active_name_      = view.residual_correction_active_name();
             residual_correction_iteration_name_   = view.residual_correction_iteration_name();
-            auto_cheap_iters_                     = view.auto_cheap_iters();
+            auto_cheap_olsen_iters_                = view.auto_cheap_olsen_iters();
             auto_jd_outer_iters_since_probe_      = view.auto_jd_outer_iters_since_probe();
-            cheap_to_jd_switch_outer_iters_       = view.cheap_to_jd_switch_outer_iters();
-            jd_to_cheap_switch_outer_iters_       = view.jd_to_cheap_switch_outer_iters();
+            cheap_olsen_to_jd_switch_outer_iters_  = view.cheap_olsen_to_jd_switch_outer_iters();
+            jd_to_cheap_olsen_switch_outer_iters_  = view.jd_to_cheap_olsen_switch_outer_iters();
         }
 
         /*! Selected Ritz values. */
@@ -236,13 +236,13 @@ namespace grit {
         /*! Residual correction method used in the last outer iteration. */
         [[nodiscard]] std::string_view residual_correction_iteration_name() const { return residual_correction_iteration_name_; }
         /*! Consecutive AUTO outer iterations spent in cheap Olsen mode. */
-        [[nodiscard]] Eigen::Index auto_cheap_iters() const { return auto_cheap_iters_; }
+        [[nodiscard]] Eigen::Index auto_cheap_olsen_iters() const { return auto_cheap_olsen_iters_; }
         /*! AUTO Jacobi-Davidson outer iterations since the last cheap Olsen probe. */
         [[nodiscard]] Eigen::Index auto_jd_outer_iters_since_probe() const { return auto_jd_outer_iters_since_probe_; }
         /*! Iterations where AUTO switched from cheap Olsen to Jacobi-Davidson. */
-        [[nodiscard]] const std::vector<Eigen::Index> &cheap_to_jd_switch_outer_iters() const { return cheap_to_jd_switch_outer_iters_; }
+        [[nodiscard]] const std::vector<Eigen::Index> &cheap_olsen_to_jd_switch_outer_iters() const { return cheap_olsen_to_jd_switch_outer_iters_; }
         /*! Iterations where AUTO switched from Jacobi-Davidson to cheap Olsen. */
-        [[nodiscard]] const std::vector<Eigen::Index> &jd_to_cheap_switch_outer_iters() const { return jd_to_cheap_switch_outer_iters_; }
+        [[nodiscard]] const std::vector<Eigen::Index> &jd_to_cheap_olsen_switch_outer_iters() const { return jd_to_cheap_olsen_switch_outer_iters_; }
 
         private:
         VectorReal                eigVal_                               = {};
@@ -312,10 +312,10 @@ namespace grit {
         bool                      residual_below_gap_                   = false;
         std::string               residual_correction_active_name_      = {};
         std::string               residual_correction_iteration_name_   = {};
-        Eigen::Index              auto_cheap_iters_                     = 0;
+        Eigen::Index              auto_cheap_olsen_iters_                = 0;
         Eigen::Index              auto_jd_outer_iters_since_probe_      = 0;
-        std::vector<Eigen::Index> cheap_to_jd_switch_outer_iters_       = {};
-        std::vector<Eigen::Index> jd_to_cheap_switch_outer_iters_       = {};
+        std::vector<Eigen::Index> cheap_olsen_to_jd_switch_outer_iters_  = {};
+        std::vector<Eigen::Index> jd_to_cheap_olsen_switch_outer_iters_  = {};
     };
 
     template<typename Scalar_>

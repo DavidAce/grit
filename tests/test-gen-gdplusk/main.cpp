@@ -697,9 +697,9 @@ TEST_CASE("generalized auto Ritz localization compares the Bv perturbation with 
     solver.status.rNormsAbs                = VectorReal::Ones(1);
     solver.status.eigVals_history          = {VectorReal::Constant(1, 0.198), VectorReal::Constant(1, 0.199), VectorReal::Constant(1, 0.2),
                                              VectorReal::Constant(1, 0.201), VectorReal::Constant(1, 0.202)};
-    solver.auto_residual_correction.cheap_iters = 4;
+    solver.auto_residual_correction.cheap_olsen_iters = 4;
 
-    SECTION("motion above the residual-scaled tolerance remains cheap") { solver.config.auto_ritz_tolerance = 15e-3; }
+    SECTION("motion above the residual-scaled tolerance remains in cheap Olsen mode") { solver.config.auto_ritz_tolerance = 15e-3; }
     SECTION("motion below the residual-scaled tolerance starts JD") { solver.config.auto_ritz_tolerance = 16e-3; }
 
     solver.update_auto_residual_correction_state();

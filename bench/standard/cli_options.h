@@ -26,8 +26,9 @@ namespace bench_standard {
         double               sat_eigval_threshold = 0.0;     /*!< Eigenvalue saturation threshold for stopping; zero disables this stop. */
         double               sat_rnorm_threshold  = 0.0;     /*!< Rescaled residual saturation threshold for stopping; zero disables this stop. */
         std::vector<double>  inner_tol            = {0.1};   /*!< Inner correction tolerance, optionally as a sweep list. */
-        double auto_ritz_tolerance       = 1e-3; /*!< Residual-relative Ritz localization and cheap-probe progress tolerance. */
-        int    auto_cheap_probe_interval = 5;    /*!< Jacobi-Davidson outer iterations before AUTO performs a cheap-Olsen probe. */
+        double                    auto_ritz_tolerance              = 1e-3; /*!< Residual-relative Ritz localization and cheap Olsen probe progress tolerance. */
+        int                       auto_probe_interval  = 5;    /*!< Active-method outer iterations between AUTO probes. */
+        int                       auto_probe_length    = 3;    /*!< Outer iterations using the method tested by each AUTO probe. */
         unsigned int              seed = 0;
         std::string               ritz = "SR";
         spdlog::level::level_enum log_level                    = spdlog::level::warn;
@@ -40,8 +41,9 @@ namespace bench_standard {
         bool explicit_max_retain_blocks             = false;
         bool explicit_inner_tol                     = false;
         bool explicit_residual_correction           = false;
-        bool explicit_auto_ritz_tolerance       = false;
-        bool explicit_auto_cheap_probe_interval = false;
+        bool explicit_auto_ritz_tolerance              = false;
+        bool explicit_auto_probe_interval  = false;
+        bool explicit_auto_probe_length    = false;
         bool explicit_use_adaptive_inner_tolerance  = false;
     };
 }

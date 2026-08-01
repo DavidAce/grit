@@ -31,7 +31,7 @@ namespace grit::algo {
         residual_correction_type_internal = config.residual_correction_type;
         if(residual_correction_type_internal == ResidualCorrectionType::AUTO) {
             if(auto_residual_correction.active == ResidualCorrectionType::JACOBI_DAVIDSON &&
-               auto_residual_correction.jd_outer_iters_since_probe >= config.auto_cheap_probe_interval) {
+               auto_residual_correction.jd_outer_iters_since_probe >= config.auto_probe_interval) {
                 auto_residual_correction.iteration_method = ResidualCorrectionType::CHEAP_OLSEN;
             } else {
                 auto_residual_correction.iteration_method = auto_residual_correction.active;
@@ -112,47 +112,61 @@ namespace grit::algo {
 
         if(auto_residual_correction.active == ResidualCorrectionType::JACOBI_DAVIDSON &&
            auto_residual_correction.iteration_method == ResidualCorrectionType::CHEAP_OLSEN) {
-            rows = std::min(rows, status.oldVal.size());
+            if(auto_residual_correction.cheap_olsen_iters == 0) {
+                rows = std::min(rows, status.oldVal.size());
+                auto_residual_correction.probe_start_eigvals = status.oldVal.topRows(rows);
+            }
+            auto_residual_correction.cheap_olsen_iters++;
+            if(auto_residual_correction.cheap_olsen_iters < config.auto_probe_length) {
+                if(log) {
+                    log->trace("auto residual correction cheap Olsen probe: iteration {}/{} | outer_iter {} mv_total {}",
+                               auto_residual_correction.cheap_olsen_iters, config.auto_probe_length, status.outer_iter, status.num_matvecs_total);
+                }
+                return;
+            }
+
+            rows = std::min(rows, auto_residual_correction.probe_start_eigvals.size());
             VectorReal gain = VectorReal::Zero(rows);
             switch(cfg().ritz) {
-                case Ritz::LR: gain = status.eigVal.topRows(rows) - status.oldVal.topRows(rows); break;
-                case Ritz::SM: gain = status.oldVal.topRows(rows).cwiseAbs() - status.eigVal.topRows(rows).cwiseAbs(); break;
-                case Ritz::LM: gain = status.eigVal.topRows(rows).cwiseAbs() - status.oldVal.topRows(rows).cwiseAbs(); break;
+                case Ritz::LR: gain = status.eigVal.topRows(rows) - auto_residual_correction.probe_start_eigvals.topRows(rows); break;
+                case Ritz::SM: gain = auto_residual_correction.probe_start_eigvals.topRows(rows).cwiseAbs() - status.eigVal.topRows(rows).cwiseAbs(); break;
+                case Ritz::LM: gain = status.eigVal.topRows(rows).cwiseAbs() - auto_residual_correction.probe_start_eigvals.topRows(rows).cwiseAbs(); break;
                 case Ritz::NONE: [[fallthrough]];
-                case Ritz::SR: gain = status.oldVal.topRows(rows) - status.eigVal.topRows(rows); break;
+                case Ritz::SR: gain = auto_residual_correction.probe_start_eigvals.topRows(rows) - status.eigVal.topRows(rows); break;
             }
             VectorReal residual_scales = status.rNormsAbs.topRows(rows).cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
             VectorReal normalized_gain = gain.cwiseMax(RealScalar{0}).cwiseProduct(b_norms.topRows(rows)).cwiseQuotient(residual_scales);
-            bool       keep_cheap      = false;
+            bool       keep_cheap_olsen = false;
             for(Eigen::Index i = 0; i < rows; ++i) {
-                if(status.rNormsAbs(i) > targets(i) && normalized_gain(i) > config.auto_ritz_tolerance) keep_cheap = true;
+                if(status.rNormsAbs(i) > targets(i) && normalized_gain(i) > config.auto_ritz_tolerance) keep_cheap_olsen = true;
             }
 
             auto_residual_correction.jd_outer_iters_since_probe = 0;
-            auto_residual_correction.cheap_iters                = keep_cheap ? 1 : 0;
+            auto_residual_correction.cheap_olsen_iters          = keep_cheap_olsen ? config.auto_probe_length : 0;
             auto_residual_correction.active =
-                keep_cheap ? ResidualCorrectionType::CHEAP_OLSEN : ResidualCorrectionType::JACOBI_DAVIDSON;
-            if(keep_cheap) auto_residual_correction.jd_to_cheap_switch_outer_iters.push_back(status.outer_iter);
+                keep_cheap_olsen ? ResidualCorrectionType::CHEAP_OLSEN : ResidualCorrectionType::JACOBI_DAVIDSON;
+            auto_residual_correction.probe_start_eigvals.resize(0);
+            if(keep_cheap_olsen) auto_residual_correction.jd_to_cheap_olsen_switch_outer_iters.push_back(status.outer_iter);
 
             if(log) {
-                log->debug("auto residual correction cheap probe: {} | normalized objective gain [{}] tolerance {:.6e} | outer_iter {} mv_total {} time_iter {:.6e}s",
-                           keep_cheap ? "keep CHEAP_OLSEN" : "return JACOBI_DAVIDSON",
-                           fmt::join(normalized_gain.data(), normalized_gain.data() + normalized_gain.size(), ", "), config.auto_ritz_tolerance,
+                log->debug("auto residual correction cheap Olsen probe: {} after {} iterations | normalized objective gain [{}] tolerance {:.6e} | outer_iter {} mv_total {} time_iter {:.6e}s",
+                           keep_cheap_olsen ? "keep CHEAP_OLSEN" : "return JACOBI_DAVIDSON",
+                           config.auto_probe_length, fmt::join(normalized_gain.data(), normalized_gain.data() + normalized_gain.size(), ", "), config.auto_ritz_tolerance,
                            status.outer_iter, status.num_matvecs_total, outer_iteration_time);
             }
             return;
         }
 
         if(auto_residual_correction.iteration_method == ResidualCorrectionType::JACOBI_DAVIDSON) {
-            auto_residual_correction.active      = ResidualCorrectionType::JACOBI_DAVIDSON;
-            auto_residual_correction.cheap_iters = 0;
+            auto_residual_correction.active            = ResidualCorrectionType::JACOBI_DAVIDSON;
+            auto_residual_correction.cheap_olsen_iters = 0;
             auto_residual_correction.jd_outer_iters_since_probe++;
             return;
         }
 
         auto_residual_correction.active = ResidualCorrectionType::CHEAP_OLSEN;
-        auto_residual_correction.cheap_iters++;
-        if(status.residual_converged || auto_residual_correction.cheap_iters < static_cast<Eigen::Index>(status.max_history_size) ||
+        auto_residual_correction.cheap_olsen_iters++;
+        if(status.residual_converged || auto_residual_correction.cheap_olsen_iters < static_cast<Eigen::Index>(status.max_history_size) ||
            status.eigVals_history.size() < status.max_history_size)
             return;
 
@@ -165,16 +179,16 @@ namespace grit::algo {
         }
 
         if(log) {
-            log->trace("auto residual correction Ritz localization: normalized std [{}] tolerance {:.6e} localized {} | cheap_iters {} outer_iter {} mv_total {}",
+            log->trace("auto residual correction Ritz localization: normalized std [{}] tolerance {:.6e} localized {} | cheap_olsen_iters {} outer_iter {} mv_total {}",
                        fmt::join(normalized_std.data(), normalized_std.data() + normalized_std.size(), ", "), config.auto_ritz_tolerance,
-                       all_unconverged_localized, auto_residual_correction.cheap_iters, status.outer_iter, status.num_matvecs_total);
+                       all_unconverged_localized, auto_residual_correction.cheap_olsen_iters, status.outer_iter, status.num_matvecs_total);
         }
         if(!all_unconverged_localized) return;
 
-        auto_residual_correction.active = ResidualCorrectionType::JACOBI_DAVIDSON;
-        auto_residual_correction.cheap_iters = 0;
+        auto_residual_correction.active                     = ResidualCorrectionType::JACOBI_DAVIDSON;
+        auto_residual_correction.cheap_olsen_iters          = 0;
         auto_residual_correction.jd_outer_iters_since_probe = 0;
-        auto_residual_correction.cheap_to_jd_switch_outer_iters.push_back(status.outer_iter);
+        auto_residual_correction.cheap_olsen_to_jd_switch_outer_iters.push_back(status.outer_iter);
         if(log) {
             log->debug("auto residual correction switch: {} -> {} | reason Ritz localized | normalized std [{}] tolerance {:.6e} | outer_iter {} mv_total {} time_iter {:.6e}s",
                        ResidualCorrectionToString(ResidualCorrectionType::CHEAP_OLSEN),

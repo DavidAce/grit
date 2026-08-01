@@ -322,12 +322,13 @@ TEST_CASE("standard auto residual correction starts with cheap Olsen and schedul
     solver.config.ncv                      = 4;
     solver.config.block_size               = 1;
     solver.config.residual_correction_type = Correction::AUTO;
+    REQUIRE(solver.config.auto_probe_length == 3);
 
     solver.adjust_residual_correction_type();
     REQUIRE(solver.residual_correction_type_internal == Correction::CHEAP_OLSEN);
 
     solver.auto_residual_correction.active                    = Correction::JACOBI_DAVIDSON;
-    solver.auto_residual_correction.jd_outer_iters_since_probe = solver.config.auto_cheap_probe_interval;
+    solver.auto_residual_correction.jd_outer_iters_since_probe = solver.config.auto_probe_interval;
     solver.adjust_residual_correction_type();
     REQUIRE(solver.auto_residual_correction.iteration_method == Correction::CHEAP_OLSEN);
 }
@@ -353,14 +354,14 @@ TEST_CASE("standard auto residual correction switches on Ritz localization despi
                                              VectorReal::Constant(1, 1e-3), VectorReal::Constant(1, 1e-1)};
     solver.status.eigVals_history          = {VectorReal::Constant(1, -2e-6), VectorReal::Constant(1, -1e-6), VectorReal::Constant(1, 0.0),
                                              VectorReal::Constant(1, 1e-6), VectorReal::Constant(1, 2e-6)};
-    solver.auto_residual_correction.cheap_iters = 3;
+    solver.auto_residual_correction.cheap_olsen_iters = 3;
 
     solver.update_auto_residual_correction_state();
     REQUIRE(solver.auto_residual_correction.active == Correction::CHEAP_OLSEN);
 
     solver.update_auto_residual_correction_state();
     REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
-    REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_outer_iters.size() == 1);
+    REQUIRE(solver.auto_residual_correction.cheap_olsen_to_jd_switch_outer_iters.size() == 1);
 }
 
 TEST_CASE("standard auto residual correction keeps cheap Olsen while a Ritz value is moving") {
@@ -384,12 +385,12 @@ TEST_CASE("standard auto residual correction keeps cheap Olsen while a Ritz valu
                                              VectorReal::Constant(1, 1e-3), VectorReal::Constant(1, 1e-1)};
     solver.status.eigVals_history          = {VectorReal::Constant(1, 1.0), VectorReal::Constant(1, 2.0), VectorReal::Constant(1, 3.0),
                                              VectorReal::Constant(1, 4.0), VectorReal::Constant(1, 5.0)};
-    solver.auto_residual_correction.cheap_iters = 4;
+    solver.auto_residual_correction.cheap_olsen_iters = 4;
 
     solver.update_auto_residual_correction_state();
 
     REQUIRE(solver.auto_residual_correction.active == Correction::CHEAP_OLSEN);
-    REQUIRE(solver.auto_residual_correction.cheap_to_jd_switch_outer_iters.empty());
+    REQUIRE(solver.auto_residual_correction.cheap_olsen_to_jd_switch_outer_iters.empty());
 }
 
 TEST_CASE("standard auto residual correction evaluates every unconverged Ritz slot independently") {
@@ -412,7 +413,7 @@ TEST_CASE("standard auto residual correction evaluates every unconverged Ritz sl
     solver.status.eigVals_history          = {(VectorReal(2) << 1.0, 2.0).finished(), (VectorReal(2) << 1.0, 3.0).finished(),
                                              (VectorReal(2) << 1.0, 4.0).finished(), (VectorReal(2) << 1.0, 5.0).finished(),
                                              (VectorReal(2) << 1.0, 6.0).finished()};
-    solver.auto_residual_correction.cheap_iters = 4;
+    solver.auto_residual_correction.cheap_olsen_iters = 4;
 
     solver.update_auto_residual_correction_state();
     REQUIRE(solver.auto_residual_correction.active == Correction::CHEAP_OLSEN);
@@ -444,7 +445,7 @@ TEST_CASE("standard auto residual correction ignores converged Ritz slots in loc
     solver.status.eigVals_history          = {(VectorReal(2) << 1.0, 2.0).finished(), (VectorReal(2) << 2.0, 2.0).finished(),
                                              (VectorReal(2) << 3.0, 2.0).finished(), (VectorReal(2) << 4.0, 2.0).finished(),
                                              (VectorReal(2) << 5.0, 2.0).finished()};
-    solver.auto_residual_correction.cheap_iters = 4;
+    solver.auto_residual_correction.cheap_olsen_iters = 4;
 
     solver.update_auto_residual_correction_state();
 
@@ -498,12 +499,23 @@ TEST_CASE("standard auto residual correction probe follows the requested Ritz ob
 
     solver.update_auto_residual_correction_state();
 
+    REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
+    REQUIRE(solver.auto_residual_correction.cheap_olsen_iters == 1);
+    solver.status.oldVal = solver.status.eigVal;
+
+    solver.update_auto_residual_correction_state();
+
+    REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
+    REQUIRE(solver.auto_residual_correction.cheap_olsen_iters == 2);
+
+    solver.update_auto_residual_correction_state();
+
     REQUIRE(solver.auto_residual_correction.active == Correction::CHEAP_OLSEN);
-    REQUIRE(solver.auto_residual_correction.cheap_iters == 1);
-    REQUIRE(solver.auto_residual_correction.jd_to_cheap_switch_outer_iters.size() == 1);
+    REQUIRE(solver.auto_residual_correction.cheap_olsen_iters == 3);
+    REQUIRE(solver.auto_residual_correction.jd_to_cheap_olsen_switch_outer_iters.size() == 1);
 }
 
-TEST_CASE("standard auto residual correction rejects an unproductive one-step probe") {
+TEST_CASE("standard auto residual correction rejects an unproductive multi-iteration cheap Olsen probe") {
     using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorReal = grit::form::base<double>::VectorReal;
     using Correction = grit::ResidualCorrectionType;
@@ -528,8 +540,19 @@ TEST_CASE("standard auto residual correction rejects an unproductive one-step pr
     solver.update_auto_residual_correction_state();
 
     REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
-    REQUIRE(solver.auto_residual_correction.cheap_iters == 0);
-    REQUIRE(solver.auto_residual_correction.jd_to_cheap_switch_outer_iters.empty());
+    REQUIRE(solver.auto_residual_correction.cheap_olsen_iters == 1);
+    solver.status.oldVal = solver.status.eigVal;
+
+    solver.update_auto_residual_correction_state();
+
+    REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
+    REQUIRE(solver.auto_residual_correction.cheap_olsen_iters == 2);
+
+    solver.update_auto_residual_correction_state();
+
+    REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
+    REQUIRE(solver.auto_residual_correction.cheap_olsen_iters == 0);
+    REQUIRE(solver.auto_residual_correction.jd_to_cheap_olsen_switch_outer_iters.empty());
 }
 
 TEST_CASE("standard gdplusk validates the AUTO Ritz tolerance") {
@@ -543,6 +566,21 @@ TEST_CASE("standard gdplusk validates the AUTO Ritz tolerance") {
     solver.config.ncv                 = 4;
     solver.config.block_size          = 1;
     solver.config.auto_ritz_tolerance = 0;
+
+    REQUIRE_THROWS_AS(solver.run(), std::runtime_error);
+}
+
+TEST_CASE("standard gdplusk validates the AUTO probe length") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = Matrix::Identity(4, 4);
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev                           = 1;
+    solver.config.ncv                           = 4;
+    solver.config.block_size                    = 1;
+    solver.config.auto_probe_length             = 0;
 
     REQUIRE_THROWS_AS(solver.run(), std::runtime_error);
 }
