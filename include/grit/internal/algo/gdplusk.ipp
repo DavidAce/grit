@@ -80,8 +80,8 @@ namespace grit::algo {
             throw std::runtime_error("gdplusk config error: inner_tol must be in the interval (0, 1]");
         }
         if(config.inner_max_iters < 1) throw std::runtime_error("gdplusk config error: inner_max_iters must be at least 1");
-        if(!std::isfinite(config.auto_ritz_tolerance) || config.auto_ritz_tolerance <= RealScalar{0}) {
-            throw std::runtime_error("gdplusk config error: auto_ritz_tolerance must be finite and positive");
+        if(!std::isfinite(config.ritz_stabilization_tolerance) || config.ritz_stabilization_tolerance <= RealScalar{0}) {
+            throw std::runtime_error("gdplusk config error: ritz_stabilization_tolerance must be finite and positive");
         }
         if(config.auto_probe_interval < 1) { throw std::runtime_error("gdplusk config error: auto_probe_interval must be at least 1"); }
         if(config.auto_probe_length < 1) { throw std::runtime_error("gdplusk config error: auto_probe_length must be at least 1"); }
@@ -113,7 +113,6 @@ namespace grit::algo {
     template<typename Scalar, grit::Form form_>
     void gdplusk<Scalar, form_>::updateStatus() {
         Base::updateStatus();
-        update_auto_residual_correction_state();
     }
 
     template<typename Scalar, grit::Form form_>
@@ -156,11 +155,12 @@ namespace grit::algo {
         }
 
         Eigen::Index rows = std::min(this->cfg().nev, status.rNormsAbs.size());
-        if(status.rNormsAbsInit.size() != rows) status.rNormsAbsInit = status.rNormsAbs.topRows(rows);
+        if(status.rnorm_abs_reference.size() != rows) status.rnorm_abs_reference = VectorReal::Zero(rows);
     }
 
     template<typename Scalar, grit::Form form_>
     void gdplusk<Scalar, form_>::run_user_callback() {
+        if(status.outer_iter > 0) update_auto_residual_correction_state();
         if(config.user_callback) config.user_callback(*this);
     }
 

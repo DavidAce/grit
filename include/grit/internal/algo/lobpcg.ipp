@@ -60,6 +60,9 @@ namespace grit::algo {
         if(config.max_matvecs == 0) throw std::runtime_error("lobpcg config error: max_matvecs must be positive or negative for unlimited");
         if(config.abstol <= RealScalar{0}) throw std::runtime_error("lobpcg config error: abstol must be positive");
         if(config.reltol < RealScalar{0}) throw std::runtime_error("lobpcg config error: reltol must be nonnegative");
+        if(!std::isfinite(config.ritz_stabilization_tolerance) || config.ritz_stabilization_tolerance <= RealScalar{0}) {
+            throw std::runtime_error("lobpcg config error: ritz_stabilization_tolerance must be finite and positive");
+        }
         if(config.sat_eigval_threshold < RealScalar{0}) throw std::runtime_error("lobpcg config error: sat_eigval_threshold must be nonnegative");
         if(config.sat_rnorm_threshold < RealScalar{0}) throw std::runtime_error("lobpcg config error: sat_rnorm_threshold must be nonnegative");
         if(this->has_initial_guess()) {

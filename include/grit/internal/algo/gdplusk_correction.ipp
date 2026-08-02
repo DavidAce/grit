@@ -108,14 +108,25 @@ namespace grit::algo {
                 b_norms(i) = V.col(i).norm();
         }
 
+        const bool stabilization_ready = status.eigVals_history.size() >= 3;
+        VectorReal stabilization = VectorReal::Constant(rows, std::numeric_limits<RealScalar>::infinity());
+        bool       all_unconverged_stabilized = false;
+        if(stabilization_ready) {
+            VectorReal residual_scales =
+                status.rNormsAbs.topRows(rows).cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
+            stabilization =
+                get_standard_deviations(status.eigVals_history, false).topRows(rows).cwiseProduct(b_norms).cwiseQuotient(residual_scales);
+            all_unconverged_stabilized = true;
+            for(Eigen::Index i = 0; i < rows; ++i) {
+                if(status.rNormsAbs(i) > targets(i) && stabilization(i) > config.ritz_stabilization_tolerance)
+                    all_unconverged_stabilized = false;
+            }
+        }
+
         auto outer_iteration_time = std::max(0.0, status.time_elapsed.get_time() - auto_residual_correction.outer_iteration_time_start);
 
         if(auto_residual_correction.active == ResidualCorrectionType::JACOBI_DAVIDSON &&
            auto_residual_correction.iteration_method == ResidualCorrectionType::CHEAP_OLSEN) {
-            if(auto_residual_correction.cheap_olsen_iters == 0) {
-                rows = std::min(rows, status.oldVal.size());
-                auto_residual_correction.probe_start_eigvals = status.oldVal.topRows(rows);
-            }
             auto_residual_correction.cheap_olsen_iters++;
             if(auto_residual_correction.cheap_olsen_iters < config.auto_probe_length) {
                 if(log) {
@@ -125,34 +136,18 @@ namespace grit::algo {
                 return;
             }
 
-            rows = std::min(rows, auto_residual_correction.probe_start_eigvals.size());
-            VectorReal gain = VectorReal::Zero(rows);
-            switch(cfg().ritz) {
-                case Ritz::LR: gain = status.eigVal.topRows(rows) - auto_residual_correction.probe_start_eigvals.topRows(rows); break;
-                case Ritz::SM: gain = auto_residual_correction.probe_start_eigvals.topRows(rows).cwiseAbs() - status.eigVal.topRows(rows).cwiseAbs(); break;
-                case Ritz::LM: gain = status.eigVal.topRows(rows).cwiseAbs() - auto_residual_correction.probe_start_eigvals.topRows(rows).cwiseAbs(); break;
-                case Ritz::NONE: [[fallthrough]];
-                case Ritz::SR: gain = auto_residual_correction.probe_start_eigvals.topRows(rows) - status.eigVal.topRows(rows); break;
-            }
-            VectorReal residual_scales = status.rNormsAbs.topRows(rows).cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
-            VectorReal normalized_gain = gain.cwiseMax(RealScalar{0}).cwiseProduct(b_norms.topRows(rows)).cwiseQuotient(residual_scales);
-            bool       keep_cheap_olsen = false;
-            for(Eigen::Index i = 0; i < rows; ++i) {
-                if(status.rNormsAbs(i) > targets(i) && normalized_gain(i) > config.auto_ritz_tolerance) keep_cheap_olsen = true;
-            }
-
+            bool keep_cheap_olsen = !all_unconverged_stabilized;
             auto_residual_correction.jd_outer_iters_since_probe = 0;
             auto_residual_correction.cheap_olsen_iters          = keep_cheap_olsen ? config.auto_probe_length : 0;
             auto_residual_correction.active =
                 keep_cheap_olsen ? ResidualCorrectionType::CHEAP_OLSEN : ResidualCorrectionType::JACOBI_DAVIDSON;
-            auto_residual_correction.probe_start_eigvals.resize(0);
             if(keep_cheap_olsen) auto_residual_correction.jd_to_cheap_olsen_switch_outer_iters.push_back(status.outer_iter);
 
             if(log) {
-                log->debug("auto residual correction cheap Olsen probe: {} after {} iterations | normalized objective gain [{}] tolerance {:.6e} | outer_iter {} mv_total {} time_iter {:.6e}s",
-                           keep_cheap_olsen ? "keep CHEAP_OLSEN" : "return JACOBI_DAVIDSON",
-                           config.auto_probe_length, fmt::join(normalized_gain.data(), normalized_gain.data() + normalized_gain.size(), ", "), config.auto_ritz_tolerance,
-                           status.outer_iter, status.num_matvecs_total, outer_iteration_time);
+                log->debug("auto residual correction cheap Olsen probe: {} after {} iterations | Ritz stability {::.3e} = std(ritz, last {} iters)*|{}|/|r| | tol {:.3e} | outer_iter {} mv_total {} time_iter {:.3e}s",
+                           keep_cheap_olsen ? "keep CHEAP_OLSEN" : "return JACOBI_DAVIDSON", config.auto_probe_length,
+                           stabilization, status.eigVals_history.size(), form_ == grit::Form::GENERALIZED ? "Bv" : "v",
+                           config.ritz_stabilization_tolerance, status.outer_iter, status.num_matvecs_total, outer_iteration_time);
             }
             return;
         }
@@ -166,35 +161,26 @@ namespace grit::algo {
 
         auto_residual_correction.active = ResidualCorrectionType::CHEAP_OLSEN;
         auto_residual_correction.cheap_olsen_iters++;
-        if(status.residual_converged || auto_residual_correction.cheap_olsen_iters < static_cast<Eigen::Index>(status.max_history_size) ||
-           status.eigVals_history.size() < status.max_history_size)
-            return;
-
-        VectorReal residual_scales = status.rNormsAbs.topRows(rows).cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
-        VectorReal normalized_std =
-            get_standard_deviations(status.eigVals_history, false).topRows(rows).cwiseProduct(b_norms).cwiseQuotient(residual_scales);
-        bool all_unconverged_localized = true;
-        for(Eigen::Index i = 0; i < rows; ++i) {
-            if(status.rNormsAbs(i) > targets(i) && normalized_std(i) > config.auto_ritz_tolerance) all_unconverged_localized = false;
-        }
+        if(status.residual_converged || !stabilization_ready) return;
 
         if(log) {
-            log->trace("auto residual correction Ritz localization: normalized std [{}] tolerance {:.6e} localized {} | cheap_olsen_iters {} outer_iter {} mv_total {}",
-                       fmt::join(normalized_std.data(), normalized_std.data() + normalized_std.size(), ", "), config.auto_ritz_tolerance,
-                       all_unconverged_localized, auto_residual_correction.cheap_olsen_iters, status.outer_iter, status.num_matvecs_total);
+            log->trace("auto residual correction Ritz stability {::.3e} = std(ritz, last {} iters)*|{}|/|r| | tol {:.3e} stabilized {} | cheap_olsen_iters {} outer_iter {} mv_total {}",
+                       stabilization, status.eigVals_history.size(), form_ == grit::Form::GENERALIZED ? "Bv" : "v",
+                       config.ritz_stabilization_tolerance, all_unconverged_stabilized, auto_residual_correction.cheap_olsen_iters,
+                       status.outer_iter, status.num_matvecs_total);
         }
-        if(!all_unconverged_localized) return;
+        if(!all_unconverged_stabilized) return;
 
         auto_residual_correction.active                     = ResidualCorrectionType::JACOBI_DAVIDSON;
         auto_residual_correction.cheap_olsen_iters          = 0;
         auto_residual_correction.jd_outer_iters_since_probe = 0;
         auto_residual_correction.cheap_olsen_to_jd_switch_outer_iters.push_back(status.outer_iter);
         if(log) {
-            log->debug("auto residual correction switch: {} -> {} | reason Ritz localized | normalized std [{}] tolerance {:.6e} | outer_iter {} mv_total {} time_iter {:.6e}s",
+            log->debug("auto residual correction switch: {} -> {} | Ritz stability {::.3e} = std(ritz, last {} iters)*|{}|/|r| | tol {:.3e} | outer_iter {} mv_total {} time_iter {:.3e}s",
                        ResidualCorrectionToString(ResidualCorrectionType::CHEAP_OLSEN),
-                       ResidualCorrectionToString(ResidualCorrectionType::JACOBI_DAVIDSON),
-                       fmt::join(normalized_std.data(), normalized_std.data() + normalized_std.size(), ", "), config.auto_ritz_tolerance,
-                       status.outer_iter, status.num_matvecs_total, outer_iteration_time);
+                       ResidualCorrectionToString(ResidualCorrectionType::JACOBI_DAVIDSON), stabilization, status.eigVals_history.size(),
+                       form_ == grit::Form::GENERALIZED ? "Bv" : "v",
+                       config.ritz_stabilization_tolerance, status.outer_iter, status.num_matvecs_total, outer_iteration_time);
         }
     }
 

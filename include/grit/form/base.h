@@ -74,13 +74,14 @@ namespace grit::form {
             bool                      use_rayleigh_quotients_instead_of_evals = false; /*!< Report full Rayleigh quotients instead of projected Ritz values. */
             bool                      use_rescaled_rnorm_tolerance            = false; /*!< Rescale abstol by the current operator norm estimate. */
             Ritz                      ritz                                    = Ritz::SR; /*!< Which Ritz values to target. */
-            RealScalar                abstol                  = eps * 10000;         /*!< Absolute residual tolerance floor. */
-            RealScalar                reltol                  = 0;                   /*!< Improvement factor relative to the initial residual; zero disables it. */
-            Eigen::Index              max_iters            = 100l;                /*!< Maximum outer iterations; negative means unlimited. */
-            Eigen::Index              max_matvecs          = -1l;                 /*!< Maximum total matrix-vector products; negative means unlimited. */
-            RealScalar                sat_eigval_threshold = RealScalar{0};       /*!< Eigenvalue saturation threshold for stopping; zero disables it. */
-            RealScalar                sat_rnorm_threshold  = RealScalar{0};       /*!< Residual saturation threshold for stopping; zero disables it. */
-            spdlog::level::level_enum log_level            = spdlog::level::warn; /*!< Solver log level. */
+            RealScalar                abstol                       = eps * 10000;         /*!< Absolute residual tolerance floor. */
+            RealScalar                reltol                       = 0;                   /*!< Residual reduction from the stabilized Ritz reference; zero disables it. */
+            RealScalar                ritz_stabilization_tolerance = RealScalar{1e-3f}; /*!< Residual-relative Ritz stabilization tolerance. */
+            Eigen::Index              max_iters                    = 100l;                /*!< Maximum outer iterations; negative means unlimited. */
+            Eigen::Index              max_matvecs                  = -1l;                 /*!< Maximum total matrix-vector products; negative means unlimited. */
+            RealScalar                sat_eigval_threshold         = RealScalar{0};       /*!< Eigenvalue saturation threshold for stopping; zero disables it. */
+            RealScalar                sat_rnorm_threshold          = RealScalar{0};       /*!< Residual saturation threshold for stopping; zero disables it. */
+            spdlog::level::level_enum log_level                    = spdlog::level::warn; /*!< Solver log level. */
         };
 
         /*! Orthogonalization diagnostics for l2 and B-metric blocks. */
@@ -214,7 +215,7 @@ namespace grit::form {
             bool                      residual_converged = false;              /*!< Whether selected residuals satisfy the active tolerance. */
             bool                      residual_below_gap = false;              /*!< Whether selected residuals are below the Ritz gap criterion. */
             VectorReal                rNormsAbs;                               /*!< Current selected absolute residual norms. */
-            VectorReal                rNormsAbsInit;                           /*!< Initial selected absolute residual norms. */
+            VectorReal                rnorm_abs_reference;                     /*!< Residual norms recorded when the selected Ritz values stabilize. */
             std::deque<VectorReal>    rNormsAbsHistory;                        /*!< Recent absolute residual-norm history. */
             std::deque<VectorReal>    eigVals_history;                            /*!< Recent Ritz-value history. */
             std::deque<Eigen::Index>  matvecs_history;                            /*!< Recent matrix-vector count history. */
@@ -233,7 +234,6 @@ namespace grit::form {
             ResidualCorrectionType    iteration_method                  = ResidualCorrectionType::CHEAP_OLSEN; /*!< Correction used in the current outer iteration. */
             Eigen::Index              cheap_olsen_iters                 = 0;                                   /*!< Consecutive cheap Olsen outer iterations. */
             Eigen::Index              jd_outer_iters_since_probe        = 0;                                   /*!< Jacobi-Davidson outer iterations since the last cheap Olsen probe. */
-            VectorReal                probe_start_eigvals;                                                    /*!< Selected Ritz values before the current cheap Olsen probe. */
             double                    outer_iteration_time_start         = 0.0;                                 /*!< Wall-time marker for the current outer iteration. */
             std::vector<Eigen::Index> cheap_olsen_to_jd_switch_outer_iters; /*!< Outer iterations switching from cheap Olsen to Jacobi-Davidson. */
             std::vector<Eigen::Index> jd_to_cheap_olsen_switch_outer_iters; /*!< Outer iterations switching from Jacobi-Davidson to cheap Olsen. */
@@ -343,7 +343,7 @@ namespace grit::form {
         /*!
          * Absolute residual target for the nth selected eigenpair.
          * @param n Selected eigenpair index.
-         * @return Computed convergence target max(reltol * initial rNormAbs, abstol * scale).
+         * @return Computed convergence target max(reltol * stabilized reference, abstol * scale).
          */
         RealScalar rNormAbsTarget(Eigen::Index n) const;
         /*! Absolute residual targets for all selected eigenpairs. */

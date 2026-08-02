@@ -61,6 +61,7 @@ namespace bench_standard {
             insert_field(h5type, "max_matvecs", &Row::max_matvecs);
             insert_field(h5type, "abstol", &Row::abstol);
             insert_field(h5type, "reltol", &Row::reltol);
+            insert_field(h5type, "ritz_stabilization_tolerance", &Row::ritz_stabilization_tolerance);
             insert_field(h5type, "sat_eigval_threshold", &Row::sat_eigval_threshold);
             insert_field(h5type, "sat_rnorm_threshold", &Row::sat_rnorm_threshold);
             insert_field(h5type, "ritz", &Row::ritz);
@@ -102,7 +103,6 @@ namespace bench_standard {
                 insert_field(h5type, "max_basis_blocks", &Row::max_basis_blocks);
                 insert_field(h5type, "inner_max_iters", &Row::inner_max_iters);
                 insert_field(h5type, "inner_tol", &Row::inner_tol);
-                insert_field(h5type, "auto_ritz_tolerance", &Row::auto_ritz_tolerance);
                 insert_field(h5type, "auto_probe_interval", &Row::auto_probe_interval);
                 insert_field(h5type, "auto_probe_length", &Row::auto_probe_length);
                 insert_field(h5type, "residual_correction", &Row::residual_correction);
@@ -273,13 +273,13 @@ namespace bench_standard {
             file.writeAttribute(to_string(snapshot.ritz), group_path(algo), "ritz");
             file.writeAttribute(static_cast<bool>(snapshot.use_refined_rayleigh_ritz), group_path(algo), "use_refined_rayleigh_ritz");
             file.writeAttribute(snapshot.abstol, group_path(algo), "abstol");
+            file.writeAttribute(snapshot.ritz_stabilization_tolerance, group_path(algo), "ritz_stabilization_tolerance");
             file.writeAttribute(snapshot.sat_eigval_threshold, group_path(algo), "sat_eigval_threshold");
             file.writeAttribute(snapshot.sat_rnorm_threshold, group_path(algo), "sat_rnorm_threshold");
             if constexpr(std::is_same_v<Result, GdpluskSolveResult>) {
                 file.writeAttribute(snapshot.max_basis_blocks, group_path(algo), "max_basis_blocks");
                 file.writeAttribute(to_string(snapshot.residual_correction), group_path(algo), "residual_correction");
                 file.writeAttribute(static_cast<bool>(snapshot.use_adaptive_inner_tolerance), group_path(algo), "use_adaptive_inner_tolerance");
-                file.writeAttribute(snapshot.auto_ritz_tolerance, group_path(algo), "auto_ritz_tolerance");
                 file.writeAttribute(snapshot.auto_probe_interval, group_path(algo), "auto_probe_interval");
                 file.writeAttribute(snapshot.auto_probe_length, group_path(algo), "auto_probe_length");
             }

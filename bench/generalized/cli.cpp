@@ -87,7 +87,6 @@ namespace bench_generalized {
                 reject(opts.explicit_inner_max_iters, "inner-max-iters");
                 reject(opts.explicit_inner_tol, "inner-tol");
                 reject(opts.explicit_use_adaptive_inner_tolerance, "use-adaptive-inner-tolerance");
-                reject(opts.explicit_auto_ritz_tolerance, "auto-ritz-tolerance");
                 reject(opts.explicit_auto_probe_interval, "auto-probe-interval");
                 reject(opts.explicit_auto_probe_length, "auto-probe-length");
                 reject(opts.explicit_use_jd_b_only, "use-jd-b-only");
@@ -151,14 +150,17 @@ namespace bench_generalized {
         auto *max_retain_blocks_opt = app.add_option("--max-retain-blocks", opts.max_retain_blocks, "Lanczos retained restart blocks, or a comma list")->delimiter(',');
         app.add_option("--reps", opts.reps, "Number of benchmark repetitions")->check(CLI::PositiveNumber);
         app.add_option("--abstol", opts.abstol, "Absolute residual-norm convergence tolerance, or rescaled residual tolerance with --use-rescaled-rnorm-tolerance")->delimiter(',');
-        app.add_option("--reltol", opts.reltol, "Relative-to-initial absolute residual-norm convergence tolerance");
+        app.add_option("--reltol", opts.reltol, "Stabilized-reference residual reduction tolerance");
         app.add_option("--sat-eigval-threshold", opts.sat_eigval_threshold, "Stop if eigenvalue-history relative standard deviation is below this tolerance; 0 disables it");
         app.add_option("--sat-rnorm-threshold", opts.sat_rnorm_threshold,
                        "Stop if rescaled residual history standard deviation is below this fraction of the current rescaled residual; 0 disables it");
         auto *inner_tol_opt = app.add_option("--inner-tol", opts.inner_tol, "Jacobi-Davidson inner tolerance, or a comma list")->delimiter(',');
-        auto *auto_ritz_tolerance_opt = app.add_option("--auto-ritz-tolerance", opts.auto_ritz_tolerance, "Residual-relative Ritz localization and cheap Olsen probe progress tolerance")->check(CLI::PositiveNumber);
-        auto *auto_probe_interval_opt = app.add_option("--auto-probe-interval", opts.auto_probe_interval, "Active-method outer iterations between AUTO probes")->check(CLI::PositiveNumber);
-        auto *auto_probe_length_opt = app.add_option("--auto-probe-length", opts.auto_probe_length, "Outer iterations using the method tested by each AUTO probe")->check(CLI::PositiveNumber);
+        app.add_option("--ritz-stabilization-tolerance", opts.ritz_stabilization_tolerance, "Residual-relative Ritz stabilization and AUTO probe progress tolerance")
+            ->check(CLI::PositiveNumber);
+        auto *auto_probe_interval_opt =
+            app.add_option("--auto-probe-interval", opts.auto_probe_interval, "Active-method outer iterations between AUTO probes")->check(CLI::PositiveNumber);
+        auto *auto_probe_length_opt =
+            app.add_option("--auto-probe-length", opts.auto_probe_length, "Outer iterations using the method tested by each AUTO probe")->check(CLI::PositiveNumber);
         app.add_option("--seed", opts.seed, "Random seed for deterministic initial guess");
         app.add_option("--ritz", opts.ritz, "Ritz target [SR, LR, SM, LM], or a comma list")->type_name("ENUM");
         app.add_option("--log-level", opts.log_level, "Solver log level [trace, debug, info, warn, err, critical, off]")->transform(CLI::CheckedTransformer(log_level_map, CLI::ignore_case))->type_name("ENUM");
@@ -170,14 +172,13 @@ namespace bench_generalized {
         auto *adaptive_inner_tolerance_opt = app.add_option("--use-adaptive-inner-tolerance", opts.use_adaptive_inner_tolerance, "Enable adaptive inner tolerance, or use [true,false]")->delimiter(',');
         /* clang-format off */
 
-        app.callback([&opts, inner_max_iters_opt, max_retain_blocks_opt, inner_tol_opt, auto_ritz_tolerance_opt, auto_probe_interval_opt, auto_probe_length_opt, residual_correction_opt,
+        app.callback([&opts, inner_max_iters_opt, max_retain_blocks_opt, inner_tol_opt, auto_probe_interval_opt, auto_probe_length_opt, residual_correction_opt,
                       use_jd_b_only_opt, adaptive_inner_tolerance_opt]() {
             opts.explicit_inner_max_iters               = inner_max_iters_opt->count() > 0;
             opts.explicit_max_retain_blocks             = max_retain_blocks_opt->count() > 0;
             opts.explicit_inner_tol                     = inner_tol_opt->count() > 0;
-            opts.explicit_auto_ritz_tolerance           = auto_ritz_tolerance_opt->count() > 0;
-            opts.explicit_auto_probe_interval = auto_probe_interval_opt->count() > 0;
-            opts.explicit_auto_probe_length   = auto_probe_length_opt->count() > 0;
+            opts.explicit_auto_probe_interval            = auto_probe_interval_opt->count() > 0;
+            opts.explicit_auto_probe_length              = auto_probe_length_opt->count() > 0;
             opts.explicit_residual_correction           = residual_correction_opt->count() > 0;
             opts.explicit_use_jd_b_only                 = use_jd_b_only_opt->count() > 0;
             opts.explicit_use_adaptive_inner_tolerance  = adaptive_inner_tolerance_opt->count() > 0;
@@ -198,7 +199,8 @@ namespace bench_generalized {
         if(opts.reltol < 0.0) throw std::runtime_error("--reltol must be non-negative");
         if(opts.sat_eigval_threshold < 0.0) throw std::runtime_error("--sat-eigval-threshold must be non-negative");
         if(opts.sat_rnorm_threshold < 0.0) throw std::runtime_error("--sat-rnorm-threshold must be non-negative");
-        if(!std::isfinite(opts.auto_ritz_tolerance) || opts.auto_ritz_tolerance <= 0.0) throw std::runtime_error("--auto-ritz-tolerance must be finite and positive");
+        if(!std::isfinite(opts.ritz_stabilization_tolerance) || opts.ritz_stabilization_tolerance <= 0.0)
+            throw std::runtime_error("--ritz-stabilization-tolerance must be finite and positive");
         if(opts.auto_probe_interval <= 0) throw std::runtime_error("--auto-probe-interval must be positive");
         if(opts.auto_probe_length <= 0) throw std::runtime_error("--auto-probe-length must be positive");
         validate_algo_specific_options(opts);
@@ -253,9 +255,9 @@ namespace bench_generalized {
                                             opts.sat_eigval_threshold         = cli.sat_eigval_threshold;
                                             opts.sat_rnorm_threshold          = cli.sat_rnorm_threshold;
                                             opts.inner_tol                    = inner_tol;
-                                            opts.auto_ritz_tolerance          = cli.auto_ritz_tolerance;
-                                            opts.auto_probe_interval = cli.auto_probe_interval;
-                                            opts.auto_probe_length = cli.auto_probe_length;
+                                            opts.ritz_stabilization_tolerance = cli.ritz_stabilization_tolerance;
+                                            opts.auto_probe_interval           = cli.auto_probe_interval;
+                                            opts.auto_probe_length             = cli.auto_probe_length;
                                             opts.seed                         = cli.seed;
                                             opts.ritz                         = ritz;
                                             opts.log_level                    = cli.log_level;

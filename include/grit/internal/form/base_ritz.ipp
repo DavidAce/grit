@@ -89,7 +89,7 @@ namespace grit::form {
         }
 
         Eigen::Index rows = std::min(cfg().nev, status.rNormsAbs.size());
-        if(status.rNormsAbsInit.size() != rows) status.rNormsAbsInit = status.rNormsAbs.topRows(rows).eval();
+        if(status.rnorm_abs_reference.size() != rows) status.rnorm_abs_reference = VectorReal::Zero(rows);
     }
 
     template<typename Scalar, grit::Form form_>

@@ -27,10 +27,10 @@ namespace bench_standard {
         int32_t               inner_max_iters               = 0;
         double                abstol                        = 0.0;
         double                reltol                        = 0.0;
+        double                ritz_stabilization_tolerance  = 0.0;
         double                sat_eigval_threshold          = 0.0;
         double                sat_rnorm_threshold           = 0.0;
         double                inner_tol                     = 0.0;
-        double                auto_ritz_tolerance              = 0.0;
         int32_t               auto_probe_interval = 0;
         int32_t               auto_probe_length   = 0;
         h5pp::fstr_t<16>      ritz;
@@ -115,6 +115,7 @@ namespace bench_standard {
         int32_t            max_matvecs          = 0;
         double             abstol               = 0.0;
         double             reltol               = 0.0;
+        double             ritz_stabilization_tolerance = 0.0;
         double             sat_eigval_threshold = 0.0;
         double             sat_rnorm_threshold  = 0.0;
         h5pp::fstr_t<16>   ritz;
@@ -173,6 +174,7 @@ namespace bench_standard {
         int32_t            max_matvecs          = 0;
         double             abstol               = 0.0;
         double             reltol               = 0.0;
+        double             ritz_stabilization_tolerance = 0.0;
         double             sat_eigval_threshold = 0.0;
         double             sat_rnorm_threshold  = 0.0;
         h5pp::fstr_t<16>   ritz;

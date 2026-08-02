@@ -127,9 +127,10 @@ namespace grit::form {
         VectorReal rNormAbsTargets = VectorReal::Constant(cfg().nev, cfg().abstol);
         if(cfg().use_rescaled_rnorm_tolerance) rNormAbsTargets = rNormAbsTargets.cwiseProduct(rNormScales());
 
-        Eigen::Index rows = std::min(cfg().nev, status.rNormsAbsInit.size());
+        Eigen::Index rows = std::min(cfg().nev, status.rnorm_abs_reference.size());
         if(cfg().reltol > RealScalar{0} && rows > 0) {
-            rNormAbsTargets.topRows(rows) = rNormAbsTargets.topRows(rows).cwiseMax((cfg().reltol * status.rNormsAbsInit.topRows(rows)).eval());
+            rNormAbsTargets.topRows(rows) =
+                rNormAbsTargets.topRows(rows).cwiseMax((cfg().reltol * status.rnorm_abs_reference.topRows(rows)).eval());
         }
         return rNormAbsTargets;
     }
@@ -375,7 +376,7 @@ namespace grit::form {
         }
         status.op_norm_estimate = get_op_norm_estimate();
         Eigen::Index rows       = std::min(cfg().nev, status.rNormsAbs.size());
-        status.rNormsAbsInit    = status.rNormsAbs.topRows(rows);
+        status.rnorm_abs_reference = VectorReal::Zero(rows);
         assert(V.cols() == cfg().block_size);
         assert_allFinite(V);
     }
@@ -492,6 +493,32 @@ namespace grit::form {
         while(status.rNormsAbsHistory.size() > status.max_history_size) status.rNormsAbsHistory.pop_front();
         while(status.eigVals_history.size() > status.max_history_size) status.eigVals_history.pop_front();
         while(status.matvecs_history.size() > status.max_history_size) status.matvecs_history.pop_front();
+
+        if(cfg().reltol > RealScalar{0}) {
+            Eigen::Index rows = std::min({cfg().nev, status.rNormsAbs.size(), status.absDiff.size(), V.cols()});
+            if constexpr(form_ == grit::Form::GENERALIZED) rows = std::min(rows, BV.cols());
+            if(status.rnorm_abs_reference.size() != rows) status.rnorm_abs_reference = VectorReal::Zero(rows);
+            VectorReal metric_norms(rows);
+            for(Eigen::Index i = 0; i < rows; ++i) {
+                if constexpr(form_ == grit::Form::GENERALIZED)
+                    metric_norms(i) = BV.col(i).norm();
+                else
+                    metric_norms(i) = V.col(i).norm();
+            }
+            if(status.eigVals_history.size() >= 3) {
+                VectorReal residual_scales =
+                    status.rNormsAbs.topRows(rows).cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
+                VectorReal stabilization =
+                    get_standard_deviations(status.eigVals_history, false).topRows(rows).cwiseProduct(metric_norms).cwiseQuotient(residual_scales);
+                for(Eigen::Index i = 0; i < rows; ++i) {
+                    if(stabilization(i) > cfg().ritz_stabilization_tolerance)
+                        status.rnorm_abs_reference(i) = RealScalar{0};
+                    else if(status.rnorm_abs_reference(i) <= RealScalar{0})
+                        status.rnorm_abs_reference(i) = status.rNormsAbs(i);
+                }
+            } else
+                status.rnorm_abs_reference.setZero();
+        }
 
         if(eigVals_have_saturated())
             status.saturation_count_eigVal++;

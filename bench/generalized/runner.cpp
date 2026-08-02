@@ -76,6 +76,7 @@ namespace bench_generalized {
             snapshot.max_matvecs                  = static_cast<int32_t>(opts.max_matvecs);
             snapshot.abstol                       = opts.abstol;
             snapshot.reltol                       = opts.reltol;
+            snapshot.ritz_stabilization_tolerance = opts.ritz_stabilization_tolerance;
             snapshot.sat_eigval_threshold         = opts.sat_eigval_threshold;
             snapshot.sat_rnorm_threshold          = opts.sat_rnorm_threshold;
             snapshot.ritz                         = fixed_string<16>(std::string(grit::enum2sv(opts.ritz)), "ritz");
@@ -113,7 +114,6 @@ namespace bench_generalized {
             snapshot.max_basis_blocks                 = static_cast<int32_t>(opts.ncv / opts.block_size);
             snapshot.inner_max_iters                  = static_cast<int32_t>(solver.config.inner_max_iters);
             snapshot.inner_tol                        = solver.config.inner_tol;
-            snapshot.auto_ritz_tolerance              = opts.auto_ritz_tolerance;
             snapshot.auto_probe_interval = static_cast<int32_t>(opts.auto_probe_interval);
             snapshot.auto_probe_length   = static_cast<int32_t>(opts.auto_probe_length);
             snapshot.residual_correction              = fixed_string<32>(residual_correction_name(opts.residual_correction), "residual_correction");
@@ -217,6 +217,7 @@ namespace bench_generalized {
             solver.config.max_matvecs                  = opts.max_matvecs;
             solver.config.abstol                       = opts.abstol;
             solver.config.reltol                       = opts.reltol;
+            solver.config.ritz_stabilization_tolerance = opts.ritz_stabilization_tolerance;
             solver.config.sat_eigval_threshold         = opts.sat_eigval_threshold;
             solver.config.sat_rnorm_threshold          = opts.sat_rnorm_threshold;
             solver.config.log_level                    = opts.log_level;
@@ -227,7 +228,6 @@ namespace bench_generalized {
                 solver.config.use_adaptive_inner_tolerance  = opts.use_adaptive_inner_tolerance;
                 solver.config.inner_max_iters               = opts.inner_max_iters;
                 solver.config.inner_tol                     = opts.inner_tol;
-                solver.config.auto_ritz_tolerance           = opts.auto_ritz_tolerance;
                 solver.config.auto_probe_interval = opts.auto_probe_interval;
                 solver.config.auto_probe_length   = opts.auto_probe_length;
             } else if constexpr(std::is_same_v<Solver, LanczosSolver>) {

@@ -71,13 +71,13 @@ namespace bench_standard {
                      bool_text(opts.use_rescaled_rnorm_tolerance), opts.sat_eigval_threshold, opts.sat_rnorm_threshold);
         std::println("  sweep axes: ncv {} | block-size {} | ritz {}", list_text(opts.ncv), list_text(opts.block_size), opts.ritz);
         std::println("  sweep axes: abstol {}", list_text(opts.abstol));
+        std::println("  ritz stabilization tolerance: {:.3e}", opts.ritz_stabilization_tolerance);
         if(opts.algo == Algo::gdplusk) {
             std::println("  sweep axes: residual correction {} | inner tol {} | inner max iterations {} | refined {} | adaptive {}", opts.residual_correction,
                          list_text(opts.inner_tol), list_text(opts.inner_max_iters), bool_list_text(opts.use_refined_rayleigh_ritz),
                          bool_list_text(opts.use_adaptive_inner_tolerance));
             if(opts.residual_correction.find("auto") != std::string::npos || opts.residual_correction.find("AUTO") != std::string::npos) {
-                std::println("  auto correction: Ritz tolerance {:.3e} | probe interval {} | probe length {}", opts.auto_ritz_tolerance,
-                             opts.auto_probe_interval, opts.auto_probe_length);
+                std::println("  auto correction: probe interval {} | probe length {}", opts.auto_probe_interval, opts.auto_probe_length);
             }
         } else if(opts.algo == Algo::lanczos) {
             std::println("  sweep axes: max retain blocks {} | refined {}", list_text(opts.max_retain_blocks), bool_list_text(opts.use_refined_rayleigh_ritz));

@@ -333,7 +333,7 @@ TEST_CASE("standard auto residual correction starts with cheap Olsen and schedul
     REQUIRE(solver.auto_residual_correction.iteration_method == Correction::CHEAP_OLSEN);
 }
 
-TEST_CASE("standard auto residual correction switches on Ritz localization despite residual oscillation") {
+TEST_CASE("standard auto residual correction requires three Ritz entries before testing stabilization") {
     using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorReal = grit::form::base<double>::VectorReal;
     using Correction = grit::ResidualCorrectionType;
@@ -350,15 +350,15 @@ TEST_CASE("standard auto residual correction switches on Ritz localization despi
     solver.V                               = Matrix::Identity(4, 1);
     solver.status.eigVal                   = VectorReal::Constant(1, 1e-8);
     solver.status.rNormsAbs                = VectorReal::Constant(1, 1.0);
+    solver.status.max_history_size         = 9;
     solver.status.rNormsAbsHistory         = {VectorReal::Constant(1, 1e-1), VectorReal::Constant(1, 1e-3), VectorReal::Constant(1, 1e-1),
                                              VectorReal::Constant(1, 1e-3), VectorReal::Constant(1, 1e-1)};
-    solver.status.eigVals_history          = {VectorReal::Constant(1, -2e-6), VectorReal::Constant(1, -1e-6), VectorReal::Constant(1, 0.0),
-                                             VectorReal::Constant(1, 1e-6), VectorReal::Constant(1, 2e-6)};
-    solver.auto_residual_correction.cheap_olsen_iters = 3;
+    solver.status.eigVals_history          = {VectorReal::Constant(1, -1e-6), VectorReal::Constant(1, 0.0)};
 
     solver.update_auto_residual_correction_state();
     REQUIRE(solver.auto_residual_correction.active == Correction::CHEAP_OLSEN);
 
+    solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, 1e-6));
     solver.update_auto_residual_correction_state();
     REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
     REQUIRE(solver.auto_residual_correction.cheap_olsen_to_jd_switch_outer_iters.size() == 1);
@@ -425,7 +425,7 @@ TEST_CASE("standard auto residual correction evaluates every unconverged Ritz sl
     REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
 }
 
-TEST_CASE("standard auto residual correction ignores converged Ritz slots in localization") {
+TEST_CASE("standard auto residual correction ignores converged Ritz slots in stabilization") {
     using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorReal = grit::form::base<double>::VectorReal;
     using Correction = grit::ResidualCorrectionType;
@@ -452,7 +452,7 @@ TEST_CASE("standard auto residual correction ignores converged Ritz slots in loc
     REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
 }
 
-TEST_CASE("standard auto residual correction probe follows the requested Ritz objective") {
+TEST_CASE("standard auto residual correction probe keeps Olsen when the rolling Ritz history is unstable") {
     using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorReal = grit::form::base<double>::VectorReal;
     using Correction = grit::ResidualCorrectionType;
@@ -468,40 +468,15 @@ TEST_CASE("standard auto residual correction probe follows the requested Ritz ob
     solver.config.residual_correction_type = Correction::AUTO;
     solver.V                               = Matrix::Identity(4, 1);
     solver.status.rNormsAbs                = VectorReal::Ones(1);
+    solver.status.eigVal                   = VectorReal::Constant(1, 3.0);
+    solver.status.eigVals_history          = {VectorReal::Constant(1, 1.0), VectorReal::Constant(1, 2.0), VectorReal::Constant(1, 3.0)};
     solver.auto_residual_correction.active = Correction::JACOBI_DAVIDSON;
     solver.auto_residual_correction.iteration_method = Correction::CHEAP_OLSEN;
-
-    SECTION("SR improves for positive values") {
-        solver.config.ritz  = grit::Ritz::SR;
-        solver.status.oldVal = VectorReal::Constant(1, 5.0);
-        solver.status.eigVal = VectorReal::Constant(1, 4.0);
-    }
-    SECTION("SR improves for negative values") {
-        solver.config.ritz  = grit::Ritz::SR;
-        solver.status.oldVal = VectorReal::Constant(1, -5.0);
-        solver.status.eigVal = VectorReal::Constant(1, -6.0);
-    }
-    SECTION("LR improves for negative values") {
-        solver.config.ritz  = grit::Ritz::LR;
-        solver.status.oldVal = VectorReal::Constant(1, -6.0);
-        solver.status.eigVal = VectorReal::Constant(1, -5.0);
-    }
-    SECTION("SM improves by magnitude") {
-        solver.config.ritz  = grit::Ritz::SM;
-        solver.status.oldVal = VectorReal::Constant(1, -2.0);
-        solver.status.eigVal = VectorReal::Constant(1, 1.0);
-    }
-    SECTION("LM improves by magnitude") {
-        solver.config.ritz  = grit::Ritz::LM;
-        solver.status.oldVal = VectorReal::Constant(1, -1.0);
-        solver.status.eigVal = VectorReal::Constant(1, 2.0);
-    }
 
     solver.update_auto_residual_correction_state();
 
     REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
     REQUIRE(solver.auto_residual_correction.cheap_olsen_iters == 1);
-    solver.status.oldVal = solver.status.eigVal;
 
     solver.update_auto_residual_correction_state();
 
@@ -515,7 +490,7 @@ TEST_CASE("standard auto residual correction probe follows the requested Ritz ob
     REQUIRE(solver.auto_residual_correction.jd_to_cheap_olsen_switch_outer_iters.size() == 1);
 }
 
-TEST_CASE("standard auto residual correction rejects an unproductive multi-iteration cheap Olsen probe") {
+TEST_CASE("standard auto residual correction probe returns to JD when the rolling Ritz history is stabilized") {
     using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorReal = grit::form::base<double>::VectorReal;
     using Correction = grit::ResidualCorrectionType;
@@ -527,13 +502,12 @@ TEST_CASE("standard auto residual correction rejects an unproductive multi-itera
     solver.config.nev                      = 1;
     solver.config.ncv                      = 4;
     solver.config.block_size               = 1;
-    solver.config.ritz                     = grit::Ritz::SR;
     solver.config.abstol                   = 1e-6;
     solver.config.residual_correction_type = Correction::AUTO;
     solver.V                               = Matrix::Identity(4, 1);
-    solver.status.oldVal                   = VectorReal::Constant(1, 1.0);
     solver.status.eigVal                   = VectorReal::Constant(1, 2.0);
     solver.status.rNormsAbs                = VectorReal::Ones(1);
+    solver.status.eigVals_history          = {VectorReal::Constant(1, 2.0), VectorReal::Constant(1, 2.0), VectorReal::Constant(1, 2.0)};
     solver.auto_residual_correction.active = Correction::JACOBI_DAVIDSON;
     solver.auto_residual_correction.iteration_method = Correction::CHEAP_OLSEN;
 
@@ -541,7 +515,6 @@ TEST_CASE("standard auto residual correction rejects an unproductive multi-itera
 
     REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
     REQUIRE(solver.auto_residual_correction.cheap_olsen_iters == 1);
-    solver.status.oldVal = solver.status.eigVal;
 
     solver.update_auto_residual_correction_state();
 
@@ -555,7 +528,7 @@ TEST_CASE("standard auto residual correction rejects an unproductive multi-itera
     REQUIRE(solver.auto_residual_correction.jd_to_cheap_olsen_switch_outer_iters.empty());
 }
 
-TEST_CASE("standard gdplusk validates the AUTO Ritz tolerance") {
+TEST_CASE("standard gdplusk validates the Ritz stabilization tolerance") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
     Matrix A_matrix = Matrix::Identity(4, 4);
@@ -565,7 +538,7 @@ TEST_CASE("standard gdplusk validates the AUTO Ritz tolerance") {
     solver.config.nev                 = 1;
     solver.config.ncv                 = 4;
     solver.config.block_size          = 1;
-    solver.config.auto_ritz_tolerance = 0;
+    solver.config.ritz_stabilization_tolerance = 0;
 
     REQUIRE_THROWS_AS(solver.run(), std::runtime_error);
 }
