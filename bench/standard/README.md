@@ -117,26 +117,32 @@ The following options are `gdplusk`-only and will be rejected for `lanczos` and
 - `--use-adaptive-inner-tolerance`
 - all `--auto-*` options
 
+With `--reltol` enabled, GRIT records a separate residual reference for each requested Ritz pair after that Ritz value
+stabilizes. The test starts after three entries and uses the available rolling history, which retains up to five entries.
+The relative target is `reltol * reference residual`; before a reference exists, only `--abstol` applies.
+`--ritz-stabilization-tolerance` controls the common stabilization test for every solver.
+
 ## AUTO Residual Correction
 
 `--residual-correction=auto` starts with cheap Olsen and switches to Jacobi-Davidson when every unconverged Ritz value is
-localized over the solver's five-entry history. For Ritz pair `i`, AUTO compares
+stabilized. The same rolling-history test starts after three entries and is evaluated after every outer iteration. For Ritz
+pair `i`, AUTO compares
 
 ```text
 stddev(lambda_i) * norm(B * v_i) / norm(r_i)
 ```
 
-with `--auto-ritz-tolerance`, using `B * v_i = v_i` for standard problems. The numerator is the residual perturbation
+with `--ritz-stabilization-tolerance`, using `B * v_i = v_i` for standard problems. The numerator is the residual perturbation
 caused by varying only the Ritz value, while the denominator is the current residual uncertainty. This ratio is unchanged
 by equivalent scaling of a standard or generalized problem. Residual oscillation therefore does not prevent JD activation
 once the Ritz values have stabilized relative to the residual.
 
 While JD is active, AUTO performs a probe of `--auto-probe-length` consecutive cheap Olsen outer iterations every
-`--auto-probe-interval` JD outer iterations. AUTO compares the selected Ritz values before and after the complete
-probe. It continues with cheap Olsen when at least one unconverged Ritz value improves the requested SR, LR, SM, or LM
-objective by more than `--auto-ritz-tolerance` under the same normalization; otherwise AUTO resumes JD.
+`--auto-probe-interval` JD outer iterations. The rolling stabilization test continues during the probe. After the requested
+number of probe iterations, AUTO resumes JD if every unconverged Ritz value is stabilized; otherwise it continues with
+cheap Olsen. The same result updates the residual reference used by `--reltol` after every outer iteration.
 
-The AUTO controls and defaults are `--auto-ritz-tolerance=1e-3`, `--auto-probe-interval=5`, and
+The AUTO controls and defaults are `--ritz-stabilization-tolerance=1e-3`, `--auto-probe-interval=5`, and
 `--auto-probe-length=3`.
 
 ## Warm Start

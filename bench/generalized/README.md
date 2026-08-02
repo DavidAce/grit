@@ -85,10 +85,14 @@ GD+K also supports sweeps over residual correction and inner-solver controls:
 --residual-correction=[cheap-olsen,jacobi-davidson,auto]
 --inner-tol=[1e-1,1e-3]
 --inner-max-iters=[100,1000]
---auto-ritz-tolerance=1e-3
+--ritz-stabilization-tolerance=1e-3
 --auto-probe-interval=5
 --auto-probe-length=3
 ```
+
+With `--reltol` enabled, GRIT records the residual reference for each requested Ritz pair after its Ritz value stabilizes.
+Before that point, only `--abstol` applies. The stabilization test scales Ritz variation by `norm(B * v) / norm(r)` and
+uses `--ritz-stabilization-tolerance`; it therefore uses the same criterion as AUTO correction switching.
 
 ## Warm Start
 
