@@ -33,7 +33,9 @@ Read the relevant project skill before making focused changes:
 - Preserve xDMRGpp solver logic closely when porting it.
 - Keep DMRG-specific logic out of GRIT.
 - Use existing CMake presets. Do not create ad hoc build directories.
-- Use `std::print` and `std::format`; do not add `<iostream>` or `<iomanip>`.
-- Keep changes scoped and add tests when solver behavior changes.
+- Use `std::print` and `fmt::format` (or `std::format`); do not add `<iostream>` or `<iomanip>`.
+- Keep changes scoped and add tests when solver behavior changes (not necessary for logging).
 - Prefer `snake_case` for functions, variables, fields, files, and user-facing options.
 - Reserve `CamelCase` for types and enum names.
+- When adding code: prefer solutions with low complexity, avoid helper functions/lambdas unless necessary, keep new variables to a minimum.
+- Do not use latex/mathjax in chats. Prefer raw text or unicode.
