@@ -323,6 +323,7 @@ TEST_CASE("standard auto residual correction starts with cheap Olsen and schedul
     solver.config.block_size               = 1;
     solver.config.residual_correction_type = Correction::AUTO;
     REQUIRE(solver.config.auto_probe_length == 3);
+    REQUIRE(solver.config.auto_max_probes == 1);
 
     solver.adjust_residual_correction_type();
     REQUIRE(solver.residual_correction_type_internal == Correction::CHEAP_OLSEN);
@@ -331,6 +332,57 @@ TEST_CASE("standard auto residual correction starts with cheap Olsen and schedul
     solver.auto_residual_correction.jd_outer_iters_since_probe = solver.config.auto_probe_interval;
     solver.adjust_residual_correction_type();
     REQUIRE(solver.auto_residual_correction.iteration_method == Correction::CHEAP_OLSEN);
+}
+
+TEST_CASE("standard auto residual correction limits probes in a stabilized Ritz basin") {
+    using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    using Correction = grit::ResidualCorrectionType;
+
+    Matrix A_matrix = Matrix::Identity(4, 4);
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.residual_correction_type                      = Correction::AUTO;
+    solver.auto_residual_correction.active                      = Correction::JACOBI_DAVIDSON;
+    solver.auto_residual_correction.jd_outer_iters_since_probe = solver.config.auto_probe_interval;
+
+    SECTION("zero disables probes") {
+        solver.config.auto_max_probes = 0;
+        solver.adjust_residual_correction_type();
+        REQUIRE(solver.auto_residual_correction.iteration_method == Correction::JACOBI_DAVIDSON);
+    }
+
+    SECTION("the default permits one probe") {
+        solver.adjust_residual_correction_type();
+        REQUIRE(solver.auto_residual_correction.iteration_method == Correction::CHEAP_OLSEN);
+
+        solver.auto_residual_correction.probes_started    = 1;
+        solver.auto_residual_correction.cheap_olsen_iters = 1;
+        solver.adjust_residual_correction_type();
+        REQUIRE(solver.auto_residual_correction.iteration_method == Correction::CHEAP_OLSEN);
+
+        solver.auto_residual_correction.cheap_olsen_iters = 0;
+        solver.adjust_residual_correction_type();
+        REQUIRE(solver.auto_residual_correction.iteration_method == Correction::JACOBI_DAVIDSON);
+    }
+
+    SECTION("positive values permit the requested number") {
+        solver.config.auto_max_probes                  = 2;
+        solver.auto_residual_correction.probes_started = 1;
+        solver.adjust_residual_correction_type();
+        REQUIRE(solver.auto_residual_correction.iteration_method == Correction::CHEAP_OLSEN);
+
+        solver.auto_residual_correction.probes_started = 2;
+        solver.adjust_residual_correction_type();
+        REQUIRE(solver.auto_residual_correction.iteration_method == Correction::JACOBI_DAVIDSON);
+    }
+
+    SECTION("minus one permits unlimited probes") {
+        solver.config.auto_max_probes                   = -1;
+        solver.auto_residual_correction.probes_started = 100;
+        solver.adjust_residual_correction_type();
+        REQUIRE(solver.auto_residual_correction.iteration_method == Correction::CHEAP_OLSEN);
+    }
 }
 
 TEST_CASE("standard auto residual correction requires three Ritz entries before testing stabilization") {
@@ -477,6 +529,7 @@ TEST_CASE("standard auto residual correction probe keeps Olsen when the rolling 
 
     REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
     REQUIRE(solver.auto_residual_correction.cheap_olsen_iters == 1);
+    REQUIRE(solver.auto_residual_correction.probes_started == 1);
 
     solver.update_auto_residual_correction_state();
 
@@ -487,7 +540,17 @@ TEST_CASE("standard auto residual correction probe keeps Olsen when the rolling 
 
     REQUIRE(solver.auto_residual_correction.active == Correction::CHEAP_OLSEN);
     REQUIRE(solver.auto_residual_correction.cheap_olsen_iters == 3);
+    REQUIRE(solver.auto_residual_correction.probes_started == 0);
     REQUIRE(solver.auto_residual_correction.jd_to_cheap_olsen_switch_outer_iters.size() == 1);
+
+    solver.status.eigVals_history = {VectorReal::Constant(1, 3.0), VectorReal::Constant(1, 3.0), VectorReal::Constant(1, 3.0)};
+    solver.update_auto_residual_correction_state();
+    REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
+    REQUIRE(solver.auto_residual_correction.probes_started == 0);
+
+    solver.auto_residual_correction.jd_outer_iters_since_probe = solver.config.auto_probe_interval;
+    solver.adjust_residual_correction_type();
+    REQUIRE(solver.auto_residual_correction.iteration_method == Correction::CHEAP_OLSEN);
 }
 
 TEST_CASE("standard auto residual correction probe returns to JD when the rolling Ritz history is stabilized") {
@@ -525,7 +588,12 @@ TEST_CASE("standard auto residual correction probe returns to JD when the rollin
 
     REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
     REQUIRE(solver.auto_residual_correction.cheap_olsen_iters == 0);
+    REQUIRE(solver.auto_residual_correction.probes_started == 1);
     REQUIRE(solver.auto_residual_correction.jd_to_cheap_olsen_switch_outer_iters.empty());
+
+    solver.auto_residual_correction.jd_outer_iters_since_probe = solver.config.auto_probe_interval;
+    solver.adjust_residual_correction_type();
+    REQUIRE(solver.auto_residual_correction.iteration_method == Correction::JACOBI_DAVIDSON);
 }
 
 TEST_CASE("standard gdplusk validates the Ritz stabilization tolerance") {
@@ -554,6 +622,21 @@ TEST_CASE("standard gdplusk validates the AUTO probe length") {
     solver.config.ncv                           = 4;
     solver.config.block_size                    = 1;
     solver.config.auto_probe_length             = 0;
+
+    REQUIRE_THROWS_AS(solver.run(), std::runtime_error);
+}
+
+TEST_CASE("standard gdplusk validates the AUTO maximum probes") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = Matrix::Identity(4, 4);
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev             = 1;
+    solver.config.ncv             = 4;
+    solver.config.block_size      = 1;
+    solver.config.auto_max_probes = -2;
 
     REQUIRE_THROWS_AS(solver.run(), std::runtime_error);
 }

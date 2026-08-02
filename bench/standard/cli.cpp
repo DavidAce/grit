@@ -89,6 +89,7 @@ namespace bench_standard {
                 reject(opts.explicit_use_adaptive_inner_tolerance, "use-adaptive-inner-tolerance");
                 reject(opts.explicit_auto_probe_interval, "auto-probe-interval");
                 reject(opts.explicit_auto_probe_length, "auto-probe-length");
+                reject(opts.explicit_auto_max_probes, "auto-max-probes");
             }
 
             if(opts.algo != Algo::lanczos && opts.explicit_max_retain_blocks) {
@@ -157,6 +158,8 @@ namespace bench_standard {
             app.add_option("--auto-probe-interval", opts.auto_probe_interval, "Active-method outer iterations between AUTO probes")->check(CLI::PositiveNumber);
         auto *auto_probe_length_opt =
             app.add_option("--auto-probe-length", opts.auto_probe_length, "Outer iterations using the method tested by each AUTO probe")->check(CLI::PositiveNumber);
+        auto *auto_max_probes_opt =
+            app.add_option("--auto-max-probes", opts.auto_max_probes, "Maximum AUTO probes while Ritz values remain stabilized; 0 disables and -1 allows unlimited probes");
         app.add_option("--seed", opts.seed, "Random seed for deterministic initial guess");
         app.add_option("--ritz", opts.ritz, "Ritz target [SR, LR, SM, LM], or a comma list")->type_name("ENUM");
         app.add_option("--log-level", opts.log_level, "Solver log level [trace, debug, info, warn, err, critical, off]")->transform(CLI::CheckedTransformer(log_level_map, CLI::ignore_case))->type_name("ENUM");
@@ -166,13 +169,14 @@ namespace bench_standard {
         auto *adaptive_inner_tolerance_opt = app.add_option("--use-adaptive-inner-tolerance", opts.use_adaptive_inner_tolerance, "Enable adaptive inner tolerance, or use [true,false]")->delimiter(',');
         /* clang-format off */
 
-        app.callback([&opts, inner_max_iters_opt, max_retain_blocks_opt, inner_tol_opt, auto_probe_interval_opt, auto_probe_length_opt, residual_correction_opt,
-                      adaptive_inner_tolerance_opt]() {
+        app.callback([&opts, inner_max_iters_opt, max_retain_blocks_opt, inner_tol_opt, auto_probe_interval_opt, auto_probe_length_opt, auto_max_probes_opt,
+                      residual_correction_opt, adaptive_inner_tolerance_opt]() {
             opts.explicit_inner_max_iters               = inner_max_iters_opt->count() > 0;
             opts.explicit_max_retain_blocks             = max_retain_blocks_opt->count() > 0;
             opts.explicit_inner_tol                     = inner_tol_opt->count() > 0;
             opts.explicit_auto_probe_interval            = auto_probe_interval_opt->count() > 0;
             opts.explicit_auto_probe_length              = auto_probe_length_opt->count() > 0;
+            opts.explicit_auto_max_probes                = auto_max_probes_opt->count() > 0;
             opts.explicit_residual_correction           = residual_correction_opt->count() > 0;
             opts.explicit_use_adaptive_inner_tolerance  = adaptive_inner_tolerance_opt->count() > 0;
         });
@@ -194,6 +198,7 @@ namespace bench_standard {
             throw std::runtime_error("--ritz-stabilization-tolerance must be finite and positive");
         if(opts.auto_probe_interval <= 0) throw std::runtime_error("--auto-probe-interval must be positive");
         if(opts.auto_probe_length <= 0) throw std::runtime_error("--auto-probe-length must be positive");
+        if(opts.auto_max_probes < -1) throw std::runtime_error("--auto-max-probes must be at least -1");
         validate_algo_specific_options(opts);
     }
 
@@ -244,6 +249,7 @@ namespace bench_standard {
                                             opts.ritz_stabilization_tolerance = cli.ritz_stabilization_tolerance;
                                             opts.auto_probe_interval           = cli.auto_probe_interval;
                                             opts.auto_probe_length             = cli.auto_probe_length;
+                                            opts.auto_max_probes               = cli.auto_max_probes;
                                             opts.seed                         = cli.seed;
                                             opts.ritz                         = ritz;
                                             opts.log_level                    = cli.log_level;

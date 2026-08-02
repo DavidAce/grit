@@ -138,12 +138,14 @@ by equivalent scaling of a standard or generalized problem. Residual oscillation
 once the Ritz values have stabilized relative to the residual.
 
 While JD is active, AUTO performs a probe of `--auto-probe-length` consecutive cheap Olsen outer iterations every
-`--auto-probe-interval` JD outer iterations. The rolling stabilization test continues during the probe. After the requested
-number of probe iterations, AUTO resumes JD if every unconverged Ritz value is stabilized; otherwise it continues with
-cheap Olsen. The same result updates the residual reference used by `--reltol` after every outer iteration.
+`--auto-probe-interval` JD outer iterations, up to `--auto-max-probes` times while the Ritz values remain stabilized. Zero
+disables probes and `-1` allows unlimited probes. The rolling stabilization test continues during the probe. After the
+requested number of probe iterations, AUTO resumes JD if every unconverged Ritz value is stabilized; otherwise it continues
+with cheap Olsen and resets the probe count. The same result updates the residual reference used by `--reltol` after every
+outer iteration.
 
 The AUTO controls and defaults are `--ritz-stabilization-tolerance=1e-3`, `--auto-probe-interval=5`, and
-`--auto-probe-length=3`.
+`--auto-probe-length=3`, and `--auto-max-probes=1`.
 
 ## Warm Start
 

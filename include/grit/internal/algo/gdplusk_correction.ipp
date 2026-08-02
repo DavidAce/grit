@@ -30,8 +30,11 @@ namespace grit::algo {
     void gdplusk<Scalar, form_>::adjust_residual_correction_type() {
         residual_correction_type_internal = config.residual_correction_type;
         if(residual_correction_type_internal == ResidualCorrectionType::AUTO) {
+            bool probe_in_progress = auto_residual_correction.active == ResidualCorrectionType::JACOBI_DAVIDSON &&
+                                     auto_residual_correction.cheap_olsen_iters > 0;
+            bool probe_available = config.auto_max_probes < 0 || auto_residual_correction.probes_started < config.auto_max_probes;
             if(auto_residual_correction.active == ResidualCorrectionType::JACOBI_DAVIDSON &&
-               auto_residual_correction.jd_outer_iters_since_probe >= config.auto_probe_interval) {
+               (probe_in_progress || (probe_available && auto_residual_correction.jd_outer_iters_since_probe >= config.auto_probe_interval))) {
                 auto_residual_correction.iteration_method = ResidualCorrectionType::CHEAP_OLSEN;
             } else {
                 auto_residual_correction.iteration_method = auto_residual_correction.active;
@@ -127,6 +130,7 @@ namespace grit::algo {
 
         if(auto_residual_correction.active == ResidualCorrectionType::JACOBI_DAVIDSON &&
            auto_residual_correction.iteration_method == ResidualCorrectionType::CHEAP_OLSEN) {
+            if(auto_residual_correction.cheap_olsen_iters == 0) auto_residual_correction.probes_started++;
             auto_residual_correction.cheap_olsen_iters++;
             if(auto_residual_correction.cheap_olsen_iters < config.auto_probe_length) {
                 if(log) {
@@ -141,7 +145,10 @@ namespace grit::algo {
             auto_residual_correction.cheap_olsen_iters          = keep_cheap_olsen ? config.auto_probe_length : 0;
             auto_residual_correction.active =
                 keep_cheap_olsen ? ResidualCorrectionType::CHEAP_OLSEN : ResidualCorrectionType::JACOBI_DAVIDSON;
-            if(keep_cheap_olsen) auto_residual_correction.jd_to_cheap_olsen_switch_outer_iters.push_back(status.outer_iter);
+            if(keep_cheap_olsen) {
+                auto_residual_correction.probes_started = 0;
+                auto_residual_correction.jd_to_cheap_olsen_switch_outer_iters.push_back(status.outer_iter);
+            }
 
             if(log) {
                 log->debug("auto residual correction cheap Olsen probe: {} after {} iterations | Ritz stability {::.3e} = std(ritz, last {} iters)*|{}|/|r| | tol {:.3e} | outer_iter {} mv_total {} time_iter {:.3e}s",

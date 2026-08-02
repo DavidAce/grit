@@ -234,6 +234,7 @@ namespace grit::form {
             ResidualCorrectionType    iteration_method                  = ResidualCorrectionType::CHEAP_OLSEN; /*!< Correction used in the current outer iteration. */
             Eigen::Index              cheap_olsen_iters                 = 0;                                   /*!< Consecutive cheap Olsen outer iterations. */
             Eigen::Index              jd_outer_iters_since_probe        = 0;                                   /*!< Jacobi-Davidson outer iterations since the last cheap Olsen probe. */
+            Eigen::Index              probes_started                    = 0;                                   /*!< AUTO probes started in the current stabilized Ritz basin. */
             double                    outer_iteration_time_start         = 0.0;                                 /*!< Wall-time marker for the current outer iteration. */
             std::vector<Eigen::Index> cheap_olsen_to_jd_switch_outer_iters; /*!< Outer iterations switching from cheap Olsen to Jacobi-Davidson. */
             std::vector<Eigen::Index> jd_to_cheap_olsen_switch_outer_iters; /*!< Outer iterations switching from Jacobi-Davidson to cheap Olsen. */

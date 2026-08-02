@@ -78,7 +78,8 @@ namespace bench_generalized {
                          opts.residual_correction, list_text(opts.inner_tol), list_text(opts.inner_max_iters), bool_list_text(opts.use_refined_rayleigh_ritz),
                          bool_list_text(opts.use_jd_b_only), bool_list_text(opts.use_adaptive_inner_tolerance));
             if(opts.residual_correction.find("auto") != std::string::npos || opts.residual_correction.find("AUTO") != std::string::npos) {
-                std::println("  auto correction: probe interval {} | probe length {}", opts.auto_probe_interval, opts.auto_probe_length);
+                std::println("  auto correction: probe interval {} | probe length {} | max probes {}", opts.auto_probe_interval, opts.auto_probe_length,
+                             opts.auto_max_probes);
             }
         } else if(opts.algo == Algo::lanczos) {
             std::println("  sweep axes: max retain blocks {} | refined {}", list_text(opts.max_retain_blocks), bool_list_text(opts.use_refined_rayleigh_ritz));

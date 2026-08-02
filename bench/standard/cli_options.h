@@ -29,6 +29,7 @@ namespace bench_standard {
         double               ritz_stabilization_tolerance = 1e-3; /*!< Residual-relative Ritz stabilization and AUTO probe progress tolerance. */
         int                  auto_probe_interval           = 5;    /*!< Active-method outer iterations between AUTO probes. */
         int                  auto_probe_length             = 3;    /*!< Outer iterations using the method tested by each AUTO probe. */
+        int                  auto_max_probes               = 1;    /*!< Maximum AUTO probes while Ritz values remain stabilized; -1 allows unlimited probes. */
         unsigned int         seed                          = 0;
         std::string               ritz = "SR";
         spdlog::level::level_enum log_level                    = spdlog::level::warn;
@@ -43,6 +44,7 @@ namespace bench_standard {
         bool explicit_residual_correction           = false;
         bool explicit_auto_probe_interval            = false;
         bool explicit_auto_probe_length              = false;
+        bool explicit_auto_max_probes                = false;
         bool explicit_use_adaptive_inner_tolerance  = false;
     };
 }

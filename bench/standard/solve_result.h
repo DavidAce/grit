@@ -33,6 +33,7 @@ namespace bench_standard {
         double                inner_tol                     = 0.0;
         int32_t               auto_probe_interval = 0;
         int32_t               auto_probe_length   = 0;
+        int32_t               auto_max_probes     = 0;
         h5pp::fstr_t<16>      ritz;
         h5pp::fstr_t<32>      residual_correction;
         uint8_t               use_refined_rayleigh_ritz    = 0;

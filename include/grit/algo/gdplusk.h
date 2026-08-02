@@ -88,6 +88,7 @@ namespace grit::algo {
             Eigen::Index                inner_max_iters                  = 1000;               /*!< Maximum inner iterations in each inner correction solve. */
             Eigen::Index                auto_probe_interval               = 5;                  /*!< Active-method outer iterations between AUTO probes. */
             Eigen::Index                auto_probe_length                 = 3;                  /*!< Outer iterations using the method tested by each AUTO probe. */
+            Eigen::Index                auto_max_probes                   = 1;                  /*!< Maximum AUTO probes while the Ritz values remain stabilized; -1 allows unlimited probes. */
             std::function<void(const gdplusk<Scalar, form_> &)> user_callback;                 /*!< Callback called after each outer iteration. */
             Eigen::Index                                        max_extra_ritz_history    = 1; /*!< Extra Ritz history retained for progress checks. */
             Eigen::Index                                        max_ritz_residual_history = 1; /*!< Ritz residual history retained for progress checks. */

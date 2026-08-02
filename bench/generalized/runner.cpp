@@ -116,6 +116,7 @@ namespace bench_generalized {
             snapshot.inner_tol                        = solver.config.inner_tol;
             snapshot.auto_probe_interval = static_cast<int32_t>(opts.auto_probe_interval);
             snapshot.auto_probe_length   = static_cast<int32_t>(opts.auto_probe_length);
+            snapshot.auto_max_probes     = static_cast<int32_t>(opts.auto_max_probes);
             snapshot.residual_correction              = fixed_string<32>(residual_correction_name(opts.residual_correction), "residual_correction");
             snapshot.use_jd_b_only                    = static_cast<uint8_t>(opts.use_jd_b_only);
             snapshot.use_adaptive_inner_tolerance     = static_cast<uint8_t>(opts.use_adaptive_inner_tolerance);
@@ -230,6 +231,7 @@ namespace bench_generalized {
                 solver.config.inner_tol                     = opts.inner_tol;
                 solver.config.auto_probe_interval = opts.auto_probe_interval;
                 solver.config.auto_probe_length   = opts.auto_probe_length;
+                solver.config.auto_max_probes     = opts.auto_max_probes;
             } else if constexpr(std::is_same_v<Solver, LanczosSolver>) {
                 solver.config.maxRetainBlocks = opts.maxRetainBlocks;
             }

@@ -85,6 +85,7 @@ namespace grit::algo {
         }
         if(config.auto_probe_interval < 1) { throw std::runtime_error("gdplusk config error: auto_probe_interval must be at least 1"); }
         if(config.auto_probe_length < 1) { throw std::runtime_error("gdplusk config error: auto_probe_length must be at least 1"); }
+        if(config.auto_max_probes < -1) { throw std::runtime_error("gdplusk config error: auto_max_probes must be at least -1"); }
         if(this->has_initial_guess()) {
             if(this->initial_guess().rows() != this->N) throw std::runtime_error("gdplusk config error: initial guess row count must match the operator size");
             if(this->initial_guess().cols() < 1) throw std::runtime_error("gdplusk config error: initial guess must have at least one column");
