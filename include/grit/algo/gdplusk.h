@@ -1,8 +1,8 @@
 #pragma once
 
+#include "grit/form/base.h"
 #include <Eigen/Core>
 #include <functional>
-#include "grit/form/base.h"
 #include <limits>
 #include <optional>
 #include <spdlog/common.h>
@@ -45,9 +45,9 @@ namespace grit::algo {
         using Base::N;
         using Base::orthonormalize_Z;
         using Base::qBlocks;
-        using Base::rNormsRel;
-        using Base::rNormScales;
         using Base::residual_correction_type_internal;
+        using Base::rNormScales;
+        using Base::rNormsRel;
         using Base::status;
         using Base::T1;
         using Base::T2;
@@ -70,6 +70,7 @@ namespace grit::algo {
         using Base::get_refined_ritz_eigenvectors_gen;
         using Base::get_refined_ritz_eigenvectors_std;
         using Base::get_residuals;
+        using Base::get_slopes;
         using Base::get_standard_deviations;
         using Base::log;
         using Base::normTol;
@@ -84,11 +85,10 @@ namespace grit::algo {
             bool                        inject_randomness                = false; /*!< Randomize dependent correction vectors. */
             Eigen::Index                maxRetainBlocks                  = 1;     /*!< Number of Ritz blocks kept during restart compression. */
             Eigen::Index                maxPrevBlocks                    = 1;     /*!< Number of previous active Ritz blocks kept between outer iterations. */
-            RealScalar                  inner_tol                        = RealScalar{0.1f};   /*!< Initial tolerance for inner correction solves. */
-            Eigen::Index                inner_max_iters                  = 1000;               /*!< Maximum inner iterations in each inner correction solve. */
-            Eigen::Index                auto_probe_interval               = 5;                  /*!< Active-method outer iterations between AUTO probes. */
-            Eigen::Index                auto_probe_length                 = 3;                  /*!< Outer iterations using the method tested by each AUTO probe. */
-            Eigen::Index                auto_max_probes                   = 1;                  /*!< Maximum AUTO probes while the Ritz values remain stabilized; -1 allows unlimited probes. */
+            RealScalar                  inner_tol                        = RealScalar{0.1f}; /*!< Initial tolerance for inner correction solves. */
+            Eigen::Index                inner_max_iters                  = 1000;             /*!< Maximum inner iterations in each inner correction solve. */
+            Eigen::Index                auto_probe_length                = 3; /*!< Outer iterations using the method tested by each AUTO probe. */
+            Eigen::Index                auto_max_probes = 1; /*!< Maximum AUTO probes while the Ritz values remain stabilized; -1 allows unlimited probes. */
             std::function<void(const gdplusk<Scalar, form_> &)> user_callback;                 /*!< Callback called after each outer iteration. */
             Eigen::Index                                        max_extra_ritz_history    = 1; /*!< Extra Ritz history retained for progress checks. */
             Eigen::Index                                        max_ritz_residual_history = 1; /*!< Ritz residual history retained for progress checks. */

@@ -129,8 +129,7 @@ namespace grit::form {
 
         Eigen::Index rows = std::min(cfg().nev, status.rnorm_abs_reference.size());
         if(cfg().reltol > RealScalar{0} && rows > 0) {
-            rNormAbsTargets.topRows(rows) =
-                rNormAbsTargets.topRows(rows).cwiseMax((cfg().reltol * status.rnorm_abs_reference.topRows(rows)).eval());
+            rNormAbsTargets.topRows(rows) = rNormAbsTargets.topRows(rows).cwiseMax((cfg().reltol * status.rnorm_abs_reference.topRows(rows)).eval());
         }
         return rNormAbsTargets;
     }
@@ -374,8 +373,8 @@ namespace grit::form {
                 status.op_norm_estimate = std::max({A_max_abs, AQ.norm() / Q.norm(), RealScalar{1}});
             }
         }
-        status.op_norm_estimate = get_op_norm_estimate();
-        Eigen::Index rows       = std::min(cfg().nev, status.rNormsAbs.size());
+        status.op_norm_estimate    = get_op_norm_estimate();
+        Eigen::Index rows          = std::min(cfg().nev, status.rNormsAbs.size());
         status.rnorm_abs_reference = VectorReal::Zero(rows);
         assert(V.cols() == cfg().block_size);
         assert_allFinite(V);
@@ -421,6 +420,28 @@ namespace grit::form {
         if(matrix.cols() <= 1) return VectorReal::Zero(rows);
         VectorReal stddev = (((matrix.colwise() - means).array().square().rowwise().sum()) / static_cast<RealScalar>((matrix.cols() - 1))).sqrt();
         return stddev;
+    }
+
+    template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::get_slopes(const std::deque<VectorReal> &v, bool apply_log10, Eigen::Index last_n) {
+        if(v.empty()) return {};
+        auto rows = static_cast<Eigen::Index>(v.front().size());
+        auto cols = last_n < 0 ? static_cast<Eigen::Index>(v.size()) : std::min(last_n, static_cast<Eigen::Index>(v.size()));
+        if(cols < 2) return VectorReal::Constant(rows, std::numeric_limits<RealScalar>::quiet_NaN());
+
+        MatrixReal matrix(rows, cols);
+        VectorReal x  = VectorReal::LinSpaced(cols, RealScalar{0}, static_cast<RealScalar>(cols - 1));
+        x.array()    -= x.mean();
+        auto offset   = static_cast<Eigen::Index>(v.size()) - cols;
+        for(Eigen::Index idx = 0; idx < cols; ++idx) {
+            const auto &history = v[static_cast<typename std::deque<VectorReal>::size_type>(offset + idx)];
+            if(history.size() < rows) throw std::runtime_error("history has unequal size vectors");
+            if(apply_log10)
+                matrix.col(idx) = history.topRows(rows).array().log10();
+            else
+                matrix.col(idx) = history.topRows(rows);
+        }
+        return matrix * x / x.squaredNorm();
     }
 
     template<typename Scalar, grit::Form form_>
@@ -506,8 +527,7 @@ namespace grit::form {
                     metric_norms(i) = V.col(i).norm();
             }
             if(status.eigVals_history.size() >= 3) {
-                VectorReal residual_scales =
-                    status.rNormsAbs.topRows(rows).cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
+                VectorReal residual_scales = status.rNormsAbs.topRows(rows).cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
                 VectorReal stabilization =
                     get_standard_deviations(status.eigVals_history, false).topRows(rows).cwiseProduct(metric_norms).cwiseQuotient(residual_scales);
                 for(Eigen::Index i = 0; i < rows; ++i) {
@@ -541,8 +561,7 @@ namespace grit::form {
         if(status.residual_converged) {
             std::string msg_rnorm_gap = fmt::format(" | gap {:.3e} (rel {:.3e})", status.gap, relGap);
             status.stopMessage.emplace_back(fmt::format("converged rNormAbs {::.3e} < target {::.3e}{} | outer_iter {} | mv {} | {:.3e} s", rNormsAbs, targets,
-                                                        msg_rnorm_gap,
-                                                        status.outer_iter + 1, status.num_matvecs_total, status.time_elapsed.get_time()));
+                                                        msg_rnorm_gap, status.outer_iter + 1, status.num_matvecs_total, status.time_elapsed.get_time()));
             status.stopReason |= StopReason::converged;
         }
 
@@ -636,7 +655,7 @@ namespace grit::form {
         }
 
         const auto op_norm_estimate = get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
-        const auto rNormAbsTargets = this->rNormAbsTargets();
+        const auto rNormAbsTargets  = this->rNormAbsTargets();
 
         log->info("outer_iter {:3} mv {:3} pc {:3} t {:.1e}s dim {} {}eigVal {::.16f}{} "
                   "oErr {:.3e} rNormsAbs {::.8e} target {::.3e} abstol {:.2e} reltol {:.2e} rescaled {} "

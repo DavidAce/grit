@@ -173,7 +173,7 @@ namespace grit {
         [[nodiscard]] std::string_view residual_correction_iteration_name() const;
         /*! Consecutive AUTO outer iterations spent in cheap Olsen mode. */
         [[nodiscard]] Eigen::Index auto_cheap_olsen_iters() const;
-        /*! AUTO Jacobi-Davidson outer iterations since the last cheap Olsen probe. */
+        /*! Number of outer iterations using JD corrections since the last cheap Olsen correction. */
         [[nodiscard]] Eigen::Index auto_jd_outer_iters_since_probe() const;
         /*! Iterations where AUTO switched from cheap Olsen to Jacobi-Davidson. */
         [[nodiscard]] const std::vector<Eigen::Index> &cheap_olsen_to_jd_switch_outer_iters() const;

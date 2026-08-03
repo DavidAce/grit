@@ -38,7 +38,7 @@ namespace Eigen {
             typedef typename Dest::Scalar      Scalar;
             typedef Matrix<Scalar, Dynamic, 1> VectorType;
 
-            RealScalar abstol      = tol_error;
+            RealScalar abstol   = tol_error;
             Index      maxIters = iters;
 
             Index n = mat.cols();

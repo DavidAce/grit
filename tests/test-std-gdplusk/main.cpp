@@ -310,8 +310,41 @@ TEST_CASE("standard jacobi-davidson correction defaults to identity precondition
     require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
 }
 
-TEST_CASE("standard auto residual correction starts with cheap Olsen and schedules probes independently of ncv") {
+TEST_CASE("standard history slopes use the requested trailing entries") {
     using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorReal = grit::form::base<double>::VectorReal;
+
+    Matrix A_matrix = Matrix::Identity(4, 4);
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::gdplusk<double> solver(A);
+    std::deque<VectorReal> history = {
+        (VectorReal(2) << 1e3, 8.0).finished(),
+        (VectorReal(2) << 1e2, 4.0).finished(),
+        (VectorReal(2) << 1e1, 2.0).finished(),
+        (VectorReal(2) << 1e0, 1.0).finished(),
+    };
+
+    auto slopes = solver.get_slopes(history, true);
+    REQUIRE(std::abs(slopes(0) + 1.0) < 1e-12);
+    REQUIRE(std::abs(slopes(1) + std::log10(2.0)) < 1e-12);
+
+    auto negative_last_n = solver.get_slopes(history, true, -7);
+    REQUIRE((negative_last_n - slopes).norm() < 1e-12);
+
+    auto last_two = solver.get_slopes(history, false, 2);
+    REQUIRE(std::abs(last_two(0) + 9.0) < 1e-12);
+    REQUIRE(std::abs(last_two(1) + 1.0) < 1e-12);
+
+    auto last_ten = solver.get_slopes(history, true, 10);
+    REQUIRE((last_ten - slopes).norm() < 1e-12);
+    REQUIRE(solver.get_slopes(history, true, 0).array().isNaN().all());
+    REQUIRE(solver.get_slopes(history, true, 1).array().isNaN().all());
+}
+
+TEST_CASE("standard auto residual correction starts with cheap Olsen and schedules probes from residual slopes") {
+    using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorReal = grit::form::base<double>::VectorReal;
     using Correction = grit::ResidualCorrectionType;
 
     Matrix A_matrix = Matrix::Identity(4, 4);
@@ -328,14 +361,89 @@ TEST_CASE("standard auto residual correction starts with cheap Olsen and schedul
     solver.adjust_residual_correction_type();
     REQUIRE(solver.residual_correction_type_internal == Correction::CHEAP_OLSEN);
 
-    solver.auto_residual_correction.active                    = Correction::JACOBI_DAVIDSON;
-    solver.auto_residual_correction.jd_outer_iters_since_probe = solver.config.auto_probe_interval;
+    solver.status.rNormsAbs                         = VectorReal::Ones(1);
+    solver.status.rNormsAbsHistory                  = {VectorReal::Ones(1), VectorReal::Ones(1)};
+    solver.auto_residual_correction.active          = Correction::JACOBI_DAVIDSON;
+    solver.auto_residual_correction.jd_outer_iters_since_probe = 2;
     solver.adjust_residual_correction_type();
     REQUIRE(solver.auto_residual_correction.iteration_method == Correction::CHEAP_OLSEN);
 }
 
+TEST_CASE("standard auto residual correction probes when an unconverged residual slope is nonnegative") {
+    using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorReal = grit::form::base<double>::VectorReal;
+    using Correction = grit::ResidualCorrectionType;
+
+    Matrix A_matrix = Matrix::Identity(4, 4);
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev                                           = 2;
+    solver.config.abstol                                        = 1e-6;
+    solver.config.residual_correction_type                      = Correction::AUTO;
+    solver.status.rNormsAbs                                     = VectorReal::Ones(2);
+    solver.auto_residual_correction.active                      = Correction::JACOBI_DAVIDSON;
+    solver.auto_residual_correction.jd_outer_iters_since_probe = 3;
+
+    SECTION("negative slopes continue JD") {
+        solver.status.rNormsAbsHistory = {(VectorReal(2) << 1.0, 1.0).finished(), (VectorReal(2) << 0.5, 0.25).finished(),
+                                          (VectorReal(2) << 0.25, 0.125).finished()};
+        solver.adjust_residual_correction_type();
+        REQUIRE(solver.auto_residual_correction.iteration_method == Correction::JACOBI_DAVIDSON);
+    }
+
+    SECTION("a zero slope starts a probe") {
+        solver.status.rNormsAbsHistory = {(VectorReal(2) << 1.0, 1.0).finished(), (VectorReal(2) << 0.5, 1.0).finished(),
+                                          (VectorReal(2) << 0.25, 1.0).finished()};
+        solver.adjust_residual_correction_type();
+        REQUIRE(solver.auto_residual_correction.iteration_method == Correction::CHEAP_OLSEN);
+    }
+
+    SECTION("a positive slope starts a probe") {
+        solver.status.rNormsAbsHistory = {(VectorReal(2) << 1.0, 1.0).finished(), (VectorReal(2) << 0.5, 2.0).finished(),
+                                          (VectorReal(2) << 0.25, 4.0).finished()};
+        solver.adjust_residual_correction_type();
+        REQUIRE(solver.auto_residual_correction.iteration_method == Correction::CHEAP_OLSEN);
+    }
+
+    SECTION("a converged slot does not start a probe") {
+        solver.status.rNormsAbs        = (VectorReal(2) << 1.0, 1e-8).finished();
+        solver.status.rNormsAbsHistory = {(VectorReal(2) << 1.0, 1.0).finished(), (VectorReal(2) << 0.5, 2.0).finished(),
+                                          (VectorReal(2) << 0.25, 4.0).finished()};
+        solver.adjust_residual_correction_type();
+        REQUIRE(solver.auto_residual_correction.iteration_method == Correction::JACOBI_DAVIDSON);
+    }
+
+    SECTION("zero or one JD entry cannot start a probe") {
+        solver.status.rNormsAbsHistory                             = {VectorReal::Ones(2), VectorReal::Ones(2)};
+        solver.auto_residual_correction.jd_outer_iters_since_probe = 1;
+        solver.adjust_residual_correction_type();
+        REQUIRE(solver.auto_residual_correction.iteration_method == Correction::JACOBI_DAVIDSON);
+    }
+
+    SECTION("only the trailing consecutive JD entries are used") {
+        solver.status.rNormsAbsHistory = {(VectorReal(2) << 1.0, 1.0).finished(), (VectorReal(2) << 2.0, 2.0).finished(),
+                                          (VectorReal(2) << 4.0, 4.0).finished(), (VectorReal(2) << 2.0, 2.0).finished(),
+                                          (VectorReal(2) << 1.0, 1.0).finished()};
+        solver.auto_residual_correction.jd_outer_iters_since_probe = 2;
+        solver.adjust_residual_correction_type();
+        REQUIRE(solver.auto_residual_correction.iteration_method == Correction::JACOBI_DAVIDSON);
+    }
+
+    SECTION("the configured history size limits the slope window") {
+        solver.status.max_history_size = 3;
+        solver.status.rNormsAbsHistory = {(VectorReal(2) << 1e3, 1.0).finished(), (VectorReal(2) << 1e2, 0.5).finished(),
+                                          (VectorReal(2) << 1.0, 0.25).finished(), (VectorReal(2) << 2.0, 0.125).finished(),
+                                          (VectorReal(2) << 4.0, 0.0625).finished()};
+        solver.auto_residual_correction.jd_outer_iters_since_probe = 5;
+        solver.adjust_residual_correction_type();
+        REQUIRE(solver.auto_residual_correction.iteration_method == Correction::CHEAP_OLSEN);
+    }
+}
+
 TEST_CASE("standard auto residual correction limits probes in a stabilized Ritz basin") {
     using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorReal = grit::form::base<double>::VectorReal;
     using Correction = grit::ResidualCorrectionType;
 
     Matrix A_matrix = Matrix::Identity(4, 4);
@@ -343,8 +451,10 @@ TEST_CASE("standard auto residual correction limits probes in a stabilized Ritz 
 
     grit::standard::gdplusk<double> solver(A);
     solver.config.residual_correction_type                      = Correction::AUTO;
+    solver.status.rNormsAbs                                    = VectorReal::Ones(1);
+    solver.status.rNormsAbsHistory                             = {VectorReal::Ones(1), VectorReal::Ones(1)};
     solver.auto_residual_correction.active                      = Correction::JACOBI_DAVIDSON;
-    solver.auto_residual_correction.jd_outer_iters_since_probe = solver.config.auto_probe_interval;
+    solver.auto_residual_correction.jd_outer_iters_since_probe = 2;
 
     SECTION("zero disables probes") {
         solver.config.auto_max_probes = 0;
@@ -530,6 +640,7 @@ TEST_CASE("standard auto residual correction probe keeps Olsen when the rolling 
     REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
     REQUIRE(solver.auto_residual_correction.cheap_olsen_iters == 1);
     REQUIRE(solver.auto_residual_correction.probes_started == 1);
+    REQUIRE(solver.auto_residual_correction.jd_outer_iters_since_probe == 0);
 
     solver.update_auto_residual_correction_state();
 
@@ -548,7 +659,8 @@ TEST_CASE("standard auto residual correction probe keeps Olsen when the rolling 
     REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
     REQUIRE(solver.auto_residual_correction.probes_started == 0);
 
-    solver.auto_residual_correction.jd_outer_iters_since_probe = solver.config.auto_probe_interval;
+    solver.status.rNormsAbsHistory                             = {VectorReal::Ones(1), VectorReal::Ones(1)};
+    solver.auto_residual_correction.jd_outer_iters_since_probe = 2;
     solver.adjust_residual_correction_type();
     REQUIRE(solver.auto_residual_correction.iteration_method == Correction::CHEAP_OLSEN);
 }
@@ -591,7 +703,8 @@ TEST_CASE("standard auto residual correction probe returns to JD when the rollin
     REQUIRE(solver.auto_residual_correction.probes_started == 1);
     REQUIRE(solver.auto_residual_correction.jd_to_cheap_olsen_switch_outer_iters.empty());
 
-    solver.auto_residual_correction.jd_outer_iters_since_probe = solver.config.auto_probe_interval;
+    solver.status.rNormsAbsHistory                             = {VectorReal::Ones(1), VectorReal::Ones(1)};
+    solver.auto_residual_correction.jd_outer_iters_since_probe = 2;
     solver.adjust_residual_correction_type();
     REQUIRE(solver.auto_residual_correction.iteration_method == Correction::JACOBI_DAVIDSON);
 }

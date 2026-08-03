@@ -236,9 +236,9 @@ namespace Eigen {
                 bool rrnorm_has_converged  = residualNorm2 < threshold2;
 
                 static constexpr RealScalar rrnorm_floor = std::numeric_limits<RealScalar>::denorm_min();
-                RealScalar                  rnorm_rel       = std::sqrt(residualNorm2 / rhsNorm2); // Relative residual norm
+                RealScalar                  rnorm_rel    = std::sqrt(residualNorm2 / rhsNorm2); // Relative residual norm
 
-                rnorm_rel            = std::max(rnorm_rel, rrnorm_floor);
+                rnorm_rel         = std::max(rnorm_rel, rrnorm_floor);
                 RealScalar deltax = RealScalar{1};
 
                 if(!std::isfinite(rnorm_rel)) {
@@ -303,7 +303,7 @@ namespace Eigen {
                                 std::printf("MINRES k: %4ld |rk|=%.3e |r0|=%.3e |rk|/|r0|=%.3e δ=%.3e log10 "
                                             "| rr avg: %.3e  std: %.3e  rel: %.3e sla: %.3e sls: %.3e "
                                             "| dx avg: %.3e  std: %.3e  rel: %.3e sla: %.3e sls: %.3e",
-                                            iters, std::sqrt(residualNorm2), std::sqrt(rhsNorm2), rnorm_rel, deltax,                 //
+                                            iters, std::sqrt(residualNorm2), std::sqrt(rhsNorm2), rnorm_rel, deltax,              //
                                             rr_stats.avg, rr_stats.sdv, rr_stats.rel_sdv, rr_stats.slope_avg, rr_stats.slope_sdv, //
                                             dx_stats.avg, dx_stats.sdv, dx_stats.rel_sdv, dx_stats.slope_avg, dx_stats.slope_sdv  //
                                 );

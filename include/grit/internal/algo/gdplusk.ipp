@@ -83,7 +83,6 @@ namespace grit::algo {
         if(!std::isfinite(config.ritz_stabilization_tolerance) || config.ritz_stabilization_tolerance <= RealScalar{0}) {
             throw std::runtime_error("gdplusk config error: ritz_stabilization_tolerance must be finite and positive");
         }
-        if(config.auto_probe_interval < 1) { throw std::runtime_error("gdplusk config error: auto_probe_interval must be at least 1"); }
         if(config.auto_probe_length < 1) { throw std::runtime_error("gdplusk config error: auto_probe_length must be at least 1"); }
         if(config.auto_max_probes < -1) { throw std::runtime_error("gdplusk config error: auto_max_probes must be at least -1"); }
         if(this->has_initial_guess()) {
@@ -108,7 +107,8 @@ namespace grit::algo {
         Base::preamble();
         adjust_inner_tolerance(S);
         adjust_residual_correction_type();
-        if(config.residual_correction_type == ResidualCorrectionType::AUTO) auto_residual_correction.outer_iteration_time_start = status.time_elapsed.get_time();
+        if(config.residual_correction_type == ResidualCorrectionType::AUTO)
+            auto_residual_correction.outer_iteration_time_start = status.time_elapsed.get_time();
     }
 
     template<typename Scalar, grit::Form form_>
@@ -229,7 +229,7 @@ namespace grit::algo {
 
     template<typename Scalar, grit::Form form_>
     void gdplusk<Scalar, form_>::build() {
-        auto t_build = status.time_build.tic_token();
+        auto t_build      = status.time_build.tic_token();
         bool had_residual = S.cols() > 0;
         make_new_Q_block();
         build(Q, AQ, BQ, had_residual ? Q_new : MatrixType{}, had_residual ? AQ_new : MatrixType{}, had_residual ? BQ_new : MatrixType{});
@@ -256,7 +256,7 @@ namespace grit::algo {
 
         auto restart_basis = [&]() {
             auto         t_restart = status.time_restart.tic_token();
-            Eigen::Index cols_ks = 0;
+            Eigen::Index cols_ks   = 0;
 
             if constexpr(form_ == grit::Form::GENERALIZED) {
                 MatrixType T1 = Q.adjoint() * AQ;

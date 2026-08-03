@@ -105,8 +105,8 @@ namespace grit {
 
     template<typename Scalar_>
     void Matvec<Scalar_>::reset() {
-        num_mv = 0;
-        num_pc = 0;
+        num_mv        = 0;
+        num_pc        = 0;
         num_pc_update = 0;
     }
 

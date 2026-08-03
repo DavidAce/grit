@@ -70,9 +70,9 @@ namespace grit::internal::precondition {
         }
         template<typename Rhs>
         Eigen::Product<JacobiDavidsonOperator, Rhs, Eigen::AliasFreeProduct> gemm(const Eigen::MatrixBase<Rhs> &x) {
-            auto t_start   = std::chrono::steady_clock::now();
+            auto t_start  = std::chrono::steady_clock::now();
             auto result   = MatrixOp(x);
-            auto t_end     = std::chrono::steady_clock::now();
+            auto t_end    = std::chrono::steady_clock::now();
             m_optimer    += std::chrono::duration<double>(t_end - t_start).count();
             m_opcounter++;
             return result;
@@ -163,11 +163,11 @@ namespace grit::internal::precondition {
             auto t_end = std::chrono::steady_clock::now();
 
             cfg.result.num_inner_iters += solver.iterations();
-            cfg.result.matvecs      += matRepl.num_applications();
-            cfg.result.precond      += solver.preconditioner().num_applications();
-            cfg.result.time         += std::chrono::duration<double>(t_end - t_start).count();
-            cfg.result.time_matvecs += matRepl.elapsed_time();
-            cfg.result.time_precond += solver.preconditioner().elapsed_time();
+            cfg.result.matvecs         += matRepl.num_applications();
+            cfg.result.precond         += solver.preconditioner().num_applications();
+            cfg.result.time            += std::chrono::duration<double>(t_end - t_start).count();
+            cfg.result.time_matvecs    += matRepl.elapsed_time();
+            cfg.result.time_precond    += solver.preconditioner().elapsed_time();
 
             cfg.result.error = solver.error();
             cfg.result.info  = solver.info();

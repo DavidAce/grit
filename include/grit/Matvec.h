@@ -108,11 +108,11 @@ namespace grit {
         /*! Reset matrix-vector and preconditioner counters and timers. */
         void reset();
 
-        mutable long             num_mv    = 0;                                                /*!< Number of matrix-vector callback calls. */
-        mutable long             num_pc    = 0;                                                /*!< Number of preconditioner apply calls. */
-        mutable long             num_pc_update    = 0;                                                /*!< Number of preconditioner update calls. */
-        std::unique_ptr<tid::ur> t_mult    = std::make_unique<tid::ur>("Time Mult");           /*!< Timer for matrix-vector calls. */
-        std::unique_ptr<tid::ur> t_precond        = std::make_unique<tid::ur>("Time Preconditioner"); /*!< Timer for preconditioner apply calls. */
+        mutable long             num_mv           = 0;                                                       /*!< Number of matrix-vector callback calls. */
+        mutable long             num_pc           = 0;                                                       /*!< Number of preconditioner apply calls. */
+        mutable long             num_pc_update    = 0;                                                       /*!< Number of preconditioner update calls. */
+        std::unique_ptr<tid::ur> t_mult           = std::make_unique<tid::ur>("Time Mult");                  /*!< Timer for matrix-vector calls. */
+        std::unique_ptr<tid::ur> t_precond        = std::make_unique<tid::ur>("Time Preconditioner");        /*!< Timer for preconditioner apply calls. */
         std::unique_ptr<tid::ur> t_precond_update = std::make_unique<tid::ur>("Time Preconditioner Update"); /*!< Timer for preconditioner update calls. */
 
         private:

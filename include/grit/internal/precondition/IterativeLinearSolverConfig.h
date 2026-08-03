@@ -16,44 +16,44 @@ namespace grit {
 
         struct Result {
             Eigen::Index           num_inner_iters = 0;
-            Eigen::Index           matvecs      = 0;
-            Eigen::Index           precond      = 0;
-            double                 time         = 0;
-            double                 time_matvecs = 0;
-            double                 time_precond = 0;
-            Real                   error        = 0;
-            Eigen::ComputationInfo info         = Eigen::ComputationInfo::NoConvergence;
+            Eigen::Index           matvecs         = 0;
+            Eigen::Index           precond         = 0;
+            double                 time            = 0;
+            double                 time_matvecs    = 0;
+            double                 time_precond    = 0;
+            Real                   error           = 0;
+            Eigen::ComputationInfo info            = Eigen::ComputationInfo::NoConvergence;
 
             void    add_latest(const Result &other) { *this += other; }
             Result &operator+=(const Result &other) {
                 num_inner_iters += other.num_inner_iters;
-                matvecs      += other.matvecs;
-                precond      += other.precond;
-                time         += other.time;
-                time_matvecs += other.time_matvecs;
-                time_precond += other.time_precond;
-                error         = other.error;
-                info          = other.info;
+                matvecs         += other.matvecs;
+                precond         += other.precond;
+                time            += other.time;
+                time_matvecs    += other.time_matvecs;
+                time_precond    += other.time_precond;
+                error            = other.error;
+                info             = other.info;
                 return *this;
             }
             void copy_latest(const Result &other) {
                 num_inner_iters = other.num_inner_iters;
-                matvecs      = other.matvecs;
-                precond      = other.precond;
-                time         = other.time;
-                time_matvecs = other.time_matvecs;
-                time_precond = other.time_precond;
-                error        = other.error;
-                info         = other.info;
+                matvecs         = other.matvecs;
+                precond         = other.precond;
+                time            = other.time;
+                time_matvecs    = other.time_matvecs;
+                time_precond    = other.time_precond;
+                error           = other.error;
+                info            = other.info;
             }
             void reset() { *this = {}; }
         };
 
         long                    max_inner_iters = 1000;
-        Real                    tolerance    = Real{0.1f};
-        Real                    theta        = Real{0};
-        MatDef                  matdef       = MatDef::IND;
-        MatrixType              initialGuess = {};
+        Real                    tolerance       = Real{0.1f};
+        Real                    theta           = Real{0};
+        MatDef                  matdef          = MatDef::IND;
+        MatrixType              initialGuess    = {};
         PreconditionerApplyFunc preconditioner_apply;
         mutable Result          result = {};
     };

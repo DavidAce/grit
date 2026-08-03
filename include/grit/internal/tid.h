@@ -27,15 +27,15 @@ namespace grit::tid {
 
     class ur {
         private:
-        using clock                     = std::chrono::steady_clock;
-        clock::time_point tic_timepoint = clock::now();
-        clock::time_point lap_timepoint = clock::now();
-        double            measured_time = 0.0;
+        using clock                         = std::chrono::steady_clock;
+        clock::time_point tic_timepoint     = clock::now();
+        clock::time_point lap_timepoint     = clock::now();
+        double            measured_time     = 0.0;
         double            measured_time_lap = 0.0;
-        double            last_interval = 0.0;
-        double            last_time_lap = 0.0;
-        size_t            count         = 0;
-        bool              running       = false;
+        double            last_interval     = 0.0;
+        double            last_time_lap     = 0.0;
+        size_t            count             = 0;
+        bool              running           = false;
         std::string       label;
 
         public:

@@ -12,6 +12,6 @@
 #include "internal/scalars.h"
 #include "Matvec.h"
 #include "Result.h"
+#include "ResultView.h"
 #include "solv/generalized.h"
 #include "solv/standard.h"
-#include "ResultView.h"
