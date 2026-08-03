@@ -151,7 +151,7 @@ namespace bench_standard {
         app.add_option("--sat-rnorm-threshold", opts.sat_rnorm_threshold,
                        "Stop if rescaled residual history standard deviation is below this fraction of the current rescaled residual; 0 disables it");
         auto *inner_tol_opt = app.add_option("--inner-tol", opts.inner_tol, "Jacobi-Davidson inner tolerance, or a comma list")->delimiter(',');
-        app.add_option("--ritz-stabilization-tolerance", opts.ritz_stabilization_tolerance, "Tolerance for the Ritz-value stabilization test")
+        app.add_option("--ritz-stabilization-tolerance", opts.ritz_stabilization_tolerance, "Tolerance for residual-scaled Ritz-value tests")
             ->check(CLI::PositiveNumber);
         auto *auto_probe_length_opt =
             app.add_option("--auto-probe-length", opts.auto_probe_length, "Outer iterations using the method tested by each AUTO probe")->check(CLI::PositiveNumber);

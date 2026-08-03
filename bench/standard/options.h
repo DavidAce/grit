@@ -25,7 +25,7 @@ namespace bench_standard {
         double      sat_eigval_threshold      = 0.0;   /*!< Eigenvalue saturation threshold for stopping; zero disables this stop. */
         double      sat_rnorm_threshold       = 0.0;   /*!< Rescaled residual saturation threshold for stopping; zero disables this stop. */
         double      inner_tol                 = 0.1;   /*!< Target residual reduction for the inner correction solver. */
-        double       ritz_stabilization_tolerance = 1e-3; /*!< Tolerance for the Ritz-value stabilization test. */
+        double       ritz_stabilization_tolerance = 1e-3; /*!< Tolerance for residual-scaled Ritz-value tests. */
         int          auto_probe_length             = 3;    /*!< Outer iterations using the method tested by each AUTO probe. */
         int          auto_max_probes               = 1;    /*!< Maximum AUTO probes while Ritz values remain stabilized; -1 allows unlimited probes. */
         unsigned int seed                          = 0;

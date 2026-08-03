@@ -96,16 +96,22 @@ waits until the Ritz value stabilizes and then records the current residual norm
 Ritz value stays stable and is cleared if the Ritz value becomes unstable. Before a reference exists, only `--abstol`
 applies.
 
-The Ritz-value stabilization test starts after three history entries. It compares the variation of each Ritz value after
-scaling by `norm(B * v) / norm(r)` with `--ritz-stabilization-tolerance`. The residual norm supplies the scale for the
-Ritz-value comparison; this option does not test residual-norm stability. AUTO uses the same Ritz-value criterion for its
-initial switch from cheap Olsen to JD and for evaluating the result of a probe.
+The numerical Ritz-stability test for the relative reference starts after three history entries. It compares
+`stddev(lambda_i) * norm(B * v_i) / norm(r_i)` with `--ritz-stabilization-tolerance`. The residual norm supplies the scale
+for the Ritz-value comparison; this option does not test residual-norm stability.
+
+AUTO uses a separate directional test over the same available rolling history. It fits a slope `b_i` and standard error
+`se_i` to each Ritz value. Pair `i` is still moving only when `abs(b_i) > 2 * se_i` and
+`abs(b_i) * norm(B * v_i) / norm(r_i) > ritz_stabilization_tolerance`. Cheap Olsen continues while any unconverged pair is
+still moving; otherwise AUTO switches to JD. This recognizes noisy plateaus without treating very slow drift as useful
+Cheap Olsen progress.
 
 While JD is active, AUTO fits a least-squares line to each unconverged pair's retained history of `log10(norm(r_i))`. The
 fit uses only consecutive JD iterations, up to the configured history size, and requires at least two entries. JD continues
 while the slopes are negative. A zero or positive slope for any unconverged pair starts
-`--auto-probe-length` cheap Olsen iterations, subject to `--auto-max-probes`. After the probe, AUTO returns to JD if every
-unconverged Ritz value remains stable. Otherwise, it continues with cheap Olsen and resets the probe count.
+`--auto-probe-length` cheap Olsen iterations, subject to `--auto-max-probes`. After the probe, AUTO applies the same Ritz-slope
+test used for the initial switch. It returns to JD if no unconverged Ritz value is still moving. Otherwise, it continues
+with cheap Olsen and resets the probe count.
 
 ## Warm Start
 

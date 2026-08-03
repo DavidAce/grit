@@ -123,23 +123,29 @@ is `reltol * reference residual`, combined with the absolute target from `--abst
 while the Ritz value stays stable. If the Ritz value becomes unstable, GRIT clears the reference and records a new one when
 the Ritz value stabilizes again. Before a reference exists, only `--abstol` applies.
 
-The Ritz-value test starts after three history entries and uses the available rolling history, which retains up to five
-entries. `--ritz-stabilization-tolerance` controls only this Ritz-value test; it is not a residual-stability tolerance.
+The numerical Ritz-stability test starts after three history entries and uses the available rolling history, which retains
+up to five entries. For pair `i`, it compares
+
+```text
+stddev(lambda_i) * norm(v_i) / norm(r_i)
+```
+
+with `--ritz-stabilization-tolerance`. This option controls Ritz-value tests; it is not a residual-norm stability tolerance.
 
 ## AUTO Residual Correction
 
-`--residual-correction=auto` starts with cheap Olsen and switches to Jacobi-Davidson when every unconverged Ritz value is
-stabilized. The same rolling-history test starts after three entries and is evaluated after every outer iteration. For Ritz
-pair `i`, AUTO compares
+`--residual-correction=auto` starts with cheap Olsen. After every outer iteration with at least three Ritz-history entries,
+AUTO fits a line to each Ritz value over the available rolling history. Let `b_i` be the fitted slope and `se_i` its standard
+error. Pair `i` is still moving only when both
 
 ```text
-stddev(lambda_i) * norm(B * v_i) / norm(r_i)
+abs(b_i) > 2 * se_i
+abs(b_i) * norm(v_i) / norm(r_i) > ritz_stabilization_tolerance
 ```
 
-with `--ritz-stabilization-tolerance`, using `B * v_i = v_i` for standard problems. The numerator is the residual perturbation
-caused by varying only the Ritz value, while the denominator is the current residual uncertainty. This ratio is unchanged
-by equivalent scaling of a standard or generalized problem. Residual oscillation therefore does not prevent JD activation
-once the Ritz values have stabilized relative to the residual.
+The first condition rejects undirected noise. The second rejects coherent motion that is too small to matter relative to the
+current residual. Cheap Olsen continues while any unconverged pair is still moving; otherwise AUTO switches to
+Jacobi-Davidson. The absolute slope makes this independent of the selected Ritz mode.
 
 While JD is active, AUTO checks whether JD is still reducing each unconverged residual. For each Ritz pair, it fits a
 least-squares line to the retained history of `log10(norm(r_i))`, using only consecutive JD iterations and at most the
@@ -147,10 +153,9 @@ configured history size. At least two JD history entries are required. A negativ
 decreasing, so JD continues. A zero or positive slope for any unconverged pair starts a probe of
 `--auto-probe-length` consecutive cheap Olsen iterations.
 
-`--auto-max-probes` limits the probes performed while the Ritz values remain in the same stabilized region. Zero disables
-probes and `-1` allows unlimited probes. After a probe, AUTO applies the same rolling Ritz-value stabilization test used for
-the initial switch. It returns to JD if every unconverged Ritz value remains stable. Otherwise, it continues with cheap
-Olsen and resets the probe count because the iteration has moved away from the previously stabilized Ritz values.
+`--auto-max-probes` limits the probes performed while the Ritz values remain in the same region. Zero disables probes and
+`-1` allows unlimited probes. After a probe, AUTO applies the same slope test used for the initial switch. It returns to JD
+if no unconverged Ritz value is still moving. Otherwise, it continues with cheap Olsen and resets the probe count.
 
 The AUTO controls and defaults are `--ritz-stabilization-tolerance=1e-3`, `--auto-probe-length=3`, and
 `--auto-max-probes=1`.
