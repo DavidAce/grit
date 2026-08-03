@@ -105,7 +105,6 @@ namespace bench_generalized {
                 insert_field(h5type, "max_basis_blocks", &Row::max_basis_blocks);
                 insert_field(h5type, "inner_max_iters", &Row::inner_max_iters);
                 insert_field(h5type, "inner_tol", &Row::inner_tol);
-                insert_field(h5type, "auto_probe_interval", &Row::auto_probe_interval);
                 insert_field(h5type, "auto_probe_length", &Row::auto_probe_length);
                 insert_field(h5type, "auto_max_probes", &Row::auto_max_probes);
                 insert_field(h5type, "residual_correction", &Row::residual_correction);
@@ -287,7 +286,6 @@ namespace bench_generalized {
                 file.writeAttribute(to_string(snapshot.residual_correction), group_path(algo), "residual_correction");
                 file.writeAttribute(static_cast<bool>(snapshot.use_jd_b_only), group_path(algo), "use_jd_b_only");
                 file.writeAttribute(static_cast<bool>(snapshot.use_adaptive_inner_tolerance), group_path(algo), "use_adaptive_inner_tolerance");
-                file.writeAttribute(snapshot.auto_probe_interval, group_path(algo), "auto_probe_interval");
                 file.writeAttribute(snapshot.auto_probe_length, group_path(algo), "auto_probe_length");
                 file.writeAttribute(snapshot.auto_max_probes, group_path(algo), "auto_max_probes");
             }

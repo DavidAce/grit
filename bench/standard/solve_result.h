@@ -31,7 +31,6 @@ namespace bench_standard {
         double                sat_eigval_threshold          = 0.0;
         double                sat_rnorm_threshold           = 0.0;
         double                inner_tol                     = 0.0;
-        int32_t               auto_probe_interval = 0;
         int32_t               auto_probe_length   = 0;
         int32_t               auto_max_probes     = 0;
         h5pp::fstr_t<16>      ritz;

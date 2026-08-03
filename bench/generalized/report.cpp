@@ -1,37 +1,13 @@
 #include "report.h"
 #include "memory.h"
 #include <Eigen/Core>
+#include <fmt/ranges.h>
 #include <format>
 #include <print>
 #include <string>
 #include <type_traits>
-#include <vector>
 
 namespace bench_generalized {
-    namespace {
-        template<typename T>
-        std::string list_text(const std::vector<T> &values) {
-            std::string text = "[";
-            for(std::size_t i = 0; i < values.size(); ++i) {
-                if(i > 0) text += ",";
-                text += std::format("{}", values[i]);
-            }
-            text += "]";
-            return text;
-        }
-
-        std::string bool_list_text(const std::vector<bool> &values) {
-            std::string text = "[";
-            for(std::size_t i = 0; i < values.size(); ++i) {
-                if(i > 0) text += ",";
-                text += values[i] ? "true" : "false";
-            }
-            text += "]";
-            return text;
-        }
-
-    }
-
     std::string_view bool_text(bool value) { return value ? "true" : "false"; }
 
     std::string_view residual_correction_name(ResidualCorrection correction) {
@@ -67,24 +43,25 @@ namespace bench_generalized {
         std::println("  cases: {} | reps: {} | seed: {} | seed per repetition: seed + rep - 1", cases, opts.reps, opts.seed);
         std::println("  limits: max-iters {} | max-matvecs {} | abstol {} | reltol {:.4e} | rescaled rnorm tolerance: {} | eigval saturation {:.4e} | "
                      "rnorm_rel saturation {:.4e}",
-                     limit_text(opts.max_iters), limit_text(opts.max_matvecs), list_text(opts.abstol), opts.reltol,
+                     limit_text(opts.max_iters), limit_text(opts.max_matvecs), fmt::format("{}", opts.abstol), opts.reltol,
                      bool_text(opts.use_rescaled_rnorm_tolerance), opts.sat_eigval_threshold, opts.sat_rnorm_threshold);
-        std::println("  sweep axes: ncv {} | block-size {} | ritz {} | B inner product {}", list_text(opts.ncv), list_text(opts.block_size), opts.ritz,
-                     bool_list_text(opts.use_b_inner_product));
-        std::println("  sweep axes: abstol {}", list_text(opts.abstol));
+        std::println("  sweep axes: ncv {} | block-size {} | ritz {} | B inner product {}", fmt::format("{}", opts.ncv),
+                     fmt::format("{}", opts.block_size), opts.ritz, fmt::format("{}", opts.use_b_inner_product));
+        std::println("  sweep axes: abstol {}", fmt::format("{}", opts.abstol));
         std::println("  ritz stabilization tolerance: {:.3e}", opts.ritz_stabilization_tolerance);
         if(opts.algo == Algo::gdplusk) {
             std::println("  sweep axes: residual correction {} | inner tol {} | inner max iterations {} | refined {} | JD B-only {} | adaptive {}",
-                         opts.residual_correction, list_text(opts.inner_tol), list_text(opts.inner_max_iters), bool_list_text(opts.use_refined_rayleigh_ritz),
-                         bool_list_text(opts.use_jd_b_only), bool_list_text(opts.use_adaptive_inner_tolerance));
+                         opts.residual_correction, fmt::format("{}", opts.inner_tol), fmt::format("{}", opts.inner_max_iters),
+                         fmt::format("{}", opts.use_refined_rayleigh_ritz), fmt::format("{}", opts.use_jd_b_only),
+                         fmt::format("{}", opts.use_adaptive_inner_tolerance));
             if(opts.residual_correction.find("auto") != std::string::npos || opts.residual_correction.find("AUTO") != std::string::npos) {
-                std::println("  auto correction: probe interval {} | probe length {} | max probes {}", opts.auto_probe_interval, opts.auto_probe_length,
-                             opts.auto_max_probes);
+                std::println("  auto correction: probe length {} | max probes {}", opts.auto_probe_length, opts.auto_max_probes);
             }
         } else if(opts.algo == Algo::lanczos) {
-            std::println("  sweep axes: max retain blocks {} | refined {}", list_text(opts.max_retain_blocks), bool_list_text(opts.use_refined_rayleigh_ritz));
+            std::println("  sweep axes: max retain blocks {} | refined {}", fmt::format("{}", opts.max_retain_blocks),
+                         fmt::format("{}", opts.use_refined_rayleigh_ritz));
         } else {
-            std::println("  sweep axes: refined {}", bool_list_text(opts.use_refined_rayleigh_ritz));
+            std::println("  sweep axes: refined {}", fmt::format("{}", opts.use_refined_rayleigh_ritz));
         }
         std::println("  initial guess: {}", opts.initial_guess.empty() ? "random" : opts.initial_guess);
         if(!opts.save_eigvec.empty()) std::println("  save eigvec: {}", opts.save_eigvec);

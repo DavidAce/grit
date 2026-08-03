@@ -86,14 +86,26 @@ GD+K also supports sweeps over residual correction and inner-solver controls:
 --inner-tol=[1e-1,1e-3]
 --inner-max-iters=[100,1000]
 --ritz-stabilization-tolerance=1e-3
---auto-probe-interval=5
 --auto-probe-length=3
 --auto-max-probes=1
 ```
 
-With `--reltol` enabled, GRIT records the residual reference for each requested Ritz pair after its Ritz value stabilizes.
-Before that point, only `--abstol` applies. The stabilization test scales Ritz variation by `norm(B * v) / norm(r)` and
-uses `--ritz-stabilization-tolerance`; it therefore uses the same criterion as AUTO correction switching.
+With `--reltol` enabled, GRIT does not use the residual of the initial guess as its reference. For each requested pair, it
+waits until the Ritz value stabilizes and then records the current residual norm. The relative target is
+`reltol * reference residual`, combined with the absolute target from `--abstol`. The reference remains fixed while the
+Ritz value stays stable and is cleared if the Ritz value becomes unstable. Before a reference exists, only `--abstol`
+applies.
+
+The Ritz-value stabilization test starts after three history entries. It compares the variation of each Ritz value after
+scaling by `norm(B * v) / norm(r)` with `--ritz-stabilization-tolerance`. The residual norm supplies the scale for the
+Ritz-value comparison; this option does not test residual-norm stability. AUTO uses the same Ritz-value criterion for its
+initial switch from cheap Olsen to JD and for evaluating the result of a probe.
+
+While JD is active, AUTO fits a least-squares line to each unconverged pair's retained history of `log10(norm(r_i))`. The
+fit uses only consecutive JD iterations, up to the configured history size, and requires at least two entries. JD continues
+while the slopes are negative. A zero or positive slope for any unconverged pair starts
+`--auto-probe-length` cheap Olsen iterations, subject to `--auto-max-probes`. After the probe, AUTO returns to JD if every
+unconverged Ritz value remains stable. Otherwise, it continues with cheap Olsen and resets the probe count.
 
 ## Warm Start
 

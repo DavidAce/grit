@@ -27,8 +27,7 @@ namespace bench_generalized {
         double                  sat_eigval_threshold = 0.0;   /*!< Eigenvalue saturation threshold for stopping; zero disables this stop. */
         double                  sat_rnorm_threshold  = 0.0;   /*!< Rescaled residual saturation threshold for stopping; zero disables this stop. */
         std::vector<double>     inner_tol            = {0.1}; /*!< Inner correction tolerance, optionally as a sweep list. */
-        double                  ritz_stabilization_tolerance = 1e-3; /*!< Residual-relative Ritz stabilization and AUTO probe progress tolerance. */
-        int                     auto_probe_interval           = 5;    /*!< Active-method outer iterations between AUTO probes. */
+        double                  ritz_stabilization_tolerance = 1e-3; /*!< Tolerance for the Ritz-value stabilization test. */
         int                     auto_probe_length             = 3;    /*!< Outer iterations using the method tested by each AUTO probe. */
         int                     auto_max_probes               = 1;    /*!< Maximum AUTO probes while Ritz values remain stabilized; -1 allows unlimited probes. */
         unsigned int            seed                          = 0;
@@ -45,7 +44,6 @@ namespace bench_generalized {
         bool explicit_max_retain_blocks             = false;
         bool explicit_inner_tol                     = false;
         bool explicit_residual_correction           = false;
-        bool explicit_auto_probe_interval            = false;
         bool explicit_auto_probe_length              = false;
         bool explicit_auto_max_probes                = false;
         bool explicit_use_adaptive_inner_tolerance  = false;
