@@ -76,7 +76,7 @@ namespace grit::form {
             Ritz                      ritz                                    = Ritz::SR;    /*!< Which Ritz values to target. */
             RealScalar                abstol                                  = eps * 10000; /*!< Absolute residual tolerance floor. */
             RealScalar                reltol                       = 0; /*!< Residual reduction from the stabilized Ritz reference; zero disables it. */
-            RealScalar                ritz_stabilization_tolerance = RealScalar{1e-3f}; /*!< Tolerance for the Ritz-value stabilization test. */
+            RealScalar                ritz_stabilization_tolerance = RealScalar{1e-3f}; /*!< Tolerance for residual-scaled Ritz-value tests. */
             Eigen::Index              max_iters                    = 100l;              /*!< Maximum outer iterations; negative means unlimited. */
             Eigen::Index              max_matvecs                  = -1l;               /*!< Maximum total matrix-vector products; negative means unlimited. */
             RealScalar                sat_eigval_threshold         = RealScalar{0};     /*!< Eigenvalue saturation threshold for stopping; zero disables it. */
@@ -650,9 +650,10 @@ namespace grit::form {
          * @param v History values.
          * @param apply_log10 Apply log10 before fitting.
          * @param last_n Number of trailing entries to use; negative uses the complete history.
+         * @param slope_errors Optional standard errors of the fitted slopes; NaNs when fewer than three entries are selected.
          * @return Slopes per selected Ritz pair, or NaNs when fewer than two entries are selected.
          */
-        VectorReal get_slopes(const std::deque<VectorReal> &v, bool apply_log10, Eigen::Index last_n = -1);
+        VectorReal get_slopes(const std::deque<VectorReal> &v, bool apply_log10, Eigen::Index last_n = -1, VectorReal *slope_errors = nullptr);
         /*! Whether residual norms have saturated by the configured criterion. */
         bool rNorms_have_saturated();
         /*! Whether Ritz values have saturated by the configured criterion. */

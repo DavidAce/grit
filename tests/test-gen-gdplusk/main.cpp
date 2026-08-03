@@ -1,8 +1,8 @@
 #define CATCH_CONFIG_RUNNER
 #include "catch.hpp"
 #include "solver_test_utils.h"
-#include <cstdlib>
 #include <cmath>
+#include <cstdlib>
 #include <Eigen/Eigenvalues>
 #include <format>
 #include <grit/grit.h>
@@ -46,8 +46,7 @@ TEST_CASE("generalized refined Rayleigh-Ritz reports the Rayleigh quotient of th
     std::srand(1);
 
     Matrix A_matrix(5, 5);
-    A_matrix << 4.0, 1.0, 0.0, 0.0, 0.0, 1.0, 3.0, 0.5, 0.0, 0.0, 0.0, 0.5, 2.0, 0.25, 0.0, 0.0, 0.0, 0.25, 5.0, 0.5, 0.0, 0.0,
-        0.0, 0.5, 6.0;
+    A_matrix << 4.0, 1.0, 0.0, 0.0, 0.0, 1.0, 3.0, 0.5, 0.0, 0.0, 0.0, 0.5, 2.0, 0.25, 0.0, 0.0, 0.0, 0.25, 5.0, 0.5, 0.0, 0.0, 0.0, 0.5, 6.0;
 
     Matrix B_matrix = Matrix::Identity(5, 5);
     B_matrix.diagonal() << 1.0, 1.5, 2.0, 2.5, 3.0;
@@ -62,7 +61,7 @@ TEST_CASE("generalized refined Rayleigh-Ritz reports the Rayleigh quotient of th
     solver.config.maxRetainBlocks                         = 1;
     solver.config.ritz                                    = grit::Ritz::SR;
     solver.config.max_iters                               = 20;
-    solver.config.abstol                                     = 1e-14;
+    solver.config.abstol                                  = 1e-14;
     solver.config.residual_correction_type                = grit::ResidualCorrectionType::CHEAP_OLSEN;
     solver.config.use_refined_rayleigh_ritz               = true;
     solver.config.use_rayleigh_quotients_instead_of_evals = true;
@@ -84,9 +83,9 @@ TEST_CASE("generalized refined Ritz vector remains B-normalized with bm projecto
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
     Matrix A_matrix(8, 8);
-    A_matrix << 9.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 7.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 6.0, 0.4, 0.0, 0.0,
-        0.0, 0.0, 0.0, 0.0, 0.4, 5.0, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3, 4.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        0.2, 3.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 2.5, 0.05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.05, 2.0;
+    A_matrix << 9.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 7.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 6.0, 0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.4, 5.0, 0.3,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3, 4.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 3.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 2.5, 0.05, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.05, 2.0;
 
     Matrix B_matrix = Matrix::Identity(8, 8);
     B_matrix.diagonal() << 1.0, 1.2, 1.7, 2.3, 3.1, 4.2, 5.6, 7.4;
@@ -95,22 +94,22 @@ TEST_CASE("generalized refined Ritz vector remains B-normalized with bm projecto
     auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
 
     grit::generalized::gdplusk<double> solver(A, B);
-    solver.config.nev                       = 1;
-    solver.config.ncv                       = 8;
-    solver.config.block_size                = 1;
-    solver.config.maxRetainBlocks           = 2;
-    solver.config.maxPrevBlocks             = 2;
-    solver.config.ritz                      = grit::Ritz::LM;
-    solver.config.max_iters                 = 100;
-    solver.config.abstol                       = 1e-12;
-    solver.config.inner_max_iters           = 40;
-    solver.config.inner_tol                 = 1e-8;
-    solver.config.use_b_inner_product       = true;
-    solver.config.use_refined_rayleigh_ritz = true;
+    solver.config.nev                                     = 1;
+    solver.config.ncv                                     = 8;
+    solver.config.block_size                              = 1;
+    solver.config.maxRetainBlocks                         = 2;
+    solver.config.maxPrevBlocks                           = 2;
+    solver.config.ritz                                    = grit::Ritz::LM;
+    solver.config.max_iters                               = 100;
+    solver.config.abstol                                  = 1e-12;
+    solver.config.inner_max_iters                         = 40;
+    solver.config.inner_tol                               = 1e-8;
+    solver.config.use_b_inner_product                     = true;
+    solver.config.use_refined_rayleigh_ritz               = true;
     solver.config.use_rayleigh_quotients_instead_of_evals = true;
-    solver.config.use_jd_b_only             = true;
-    solver.config.residual_correction_type  = grit::ResidualCorrectionType::JACOBI_DAVIDSON;
-    solver.config.user_callback             = [&](const auto &s) {
+    solver.config.use_jd_b_only                           = true;
+    solver.config.residual_correction_type                = grit::ResidualCorrectionType::JACOBI_DAVIDSON;
+    solver.config.user_callback                           = [&](const auto &s) {
         const Eigen::Index active_ritz_cols = std::min<Eigen::Index>(s.config.block_size, s.V.cols());
         if(active_ritz_cols == 0) return;
 
@@ -144,7 +143,7 @@ TEST_CASE("bm orthogonalization removes the one-sided B projection") {
     constexpr double skew = 1e-5;
     auto             A    = grit::matvec<double>(2, [](auto const &X) { return X; });
     auto             B    = grit::matvec<double>(2, [skew](auto const &X) {
-        Matrix BX = X;
+        Matrix BX          = X;
         BX.row(0).array() += skew * X.row(1).array();
         return BX;
     });
@@ -227,7 +226,7 @@ TEST_CASE("generalized gdplusk converges with l2 and bm projectors") {
         solver.config.block_size               = 1;
         solver.config.ritz                     = grit::Ritz::SR;
         solver.config.max_iters                = 20;
-        solver.config.abstol                      = 1e-12;
+        solver.config.abstol                   = 1e-12;
         solver.config.use_b_inner_product      = use_b_inner_product;
         solver.config.residual_correction_type = grit::ResidualCorrectionType::CHEAP_OLSEN;
         solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 54));
@@ -289,14 +288,14 @@ TEST_CASE("B-metric orthogonality check accepts cancellation-scaled defects") {
     Matrix Y = Matrix::Zero(4, 1);
     Y(0, 0)  = 1.0e4;
 
-    const double gamma_n = static_cast<double>(X.rows()) * std::numeric_limits<double>::epsilon() /
-                           (1.0 - static_cast<double>(X.rows()) * std::numeric_limits<double>::epsilon());
+    const double gamma_n =
+        static_cast<double>(X.rows()) * std::numeric_limits<double>::epsilon() / (1.0 - static_cast<double>(X.rows()) * std::numeric_limits<double>::epsilon());
     const double cancellation_multiplier = solver.bm_cancellation_multiplier(Y, BY);
-    const double dotTol    = gamma_n * X.norm() * BY.norm();
-    const double scaledTol = 10.0 * std::max(solver.orthTol, dotTol * cancellation_multiplier);
-    const double oldTol    = 10.0 * std::max({solver.orthTol * static_cast<double>(X.cols()) * (X.norm() + BY.norm()), solver.orthTol,
-                                           solver.orthTol * static_cast<double>(X.cols()) * op_scale});
-    const double orthError = (X.adjoint() * BY).norm();
+    const double dotTol                  = gamma_n * X.norm() * BY.norm();
+    const double scaledTol               = 10.0 * std::max(solver.orthTol, dotTol * cancellation_multiplier);
+    const double oldTol                  = 10.0 * std::max({solver.orthTol * static_cast<double>(X.cols()) * (X.norm() + BY.norm()), solver.orthTol,
+                                                            solver.orthTol * static_cast<double>(X.cols()) * op_scale});
+    const double orthError               = (X.adjoint() * BY).norm();
 
     grit::generalized::gdplusk<double>::OrthMeta meta;
     REQUIRE(orthError > oldTol);
@@ -327,13 +326,13 @@ TEST_CASE("B-metric orthonormality check scales by local Rayleigh quotient") {
 
     grit::generalized::gdplusk<double>::OrthMeta meta;
 
-    const double gamma_n = static_cast<double>(X.rows()) * std::numeric_limits<double>::epsilon() /
-                           (1.0 - static_cast<double>(X.rows()) * std::numeric_limits<double>::epsilon());
-    const double rq       = std::abs(X.col(0).dot(B_X.col(0))) / X.col(0).squaredNorm();
+    const double gamma_n =
+        static_cast<double>(X.rows()) * std::numeric_limits<double>::epsilon() / (1.0 - static_cast<double>(X.rows()) * std::numeric_limits<double>::epsilon());
+    const double rq                      = std::abs(X.col(0).dot(B_X.col(0))) / X.col(0).squaredNorm();
     const double cancellation_multiplier = std::clamp(op_scale / rq, 1.0, 1.0 / std::sqrt(std::numeric_limits<double>::epsilon()));
-    const double dotTol    = gamma_n * X.norm() * B_X.norm();
-    const double scaledTol = 10.0 * std::max(solver.orthTol, dotTol * cancellation_multiplier);
-    const double symmError = std::abs((X.adjoint() * B_X)(0, 0) - 1.0);
+    const double dotTol                  = gamma_n * X.norm() * B_X.norm();
+    const double scaledTol               = 10.0 * std::max(solver.orthTol, dotTol * cancellation_multiplier);
+    const double symmError               = std::abs((X.adjoint() * B_X)(0, 0) - 1.0);
 
     REQUIRE(cancellation_multiplier > 1.0);
     REQUIRE(symmError < scaledTol);
@@ -394,7 +393,7 @@ TEST_CASE("generalized gdplusk handles nos4 restart block search") {
     solver.config.block_size               = 2;
     solver.config.ritz                     = grit::Ritz::SR;
     solver.config.max_iters                = 200;
-    solver.config.abstol                      = 1e-9;
+    solver.config.abstol                   = 1e-9;
     solver.config.use_b_inner_product      = false;
     solver.config.residual_correction_type = grit::ResidualCorrectionType::CHEAP_OLSEN;
     solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 31));
@@ -428,7 +427,7 @@ TEST_CASE("generalized gdplusk supports all Ritz targets on nos4") {
         solver.config.block_size               = 2;
         solver.config.ritz                     = ritz;
         solver.config.max_iters                = 250;
-        solver.config.abstol                      = 1e-9;
+        solver.config.abstol                   = 1e-9;
         solver.config.use_b_inner_product      = true;
         solver.config.residual_correction_type = grit::ResidualCorrectionType::CHEAP_OLSEN;
         solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 40 + static_cast<int>(ritz)));
@@ -625,7 +624,7 @@ TEST_CASE("generalized gdplusk handles small ncv restart without invalid input")
     solver.config.block_size               = 1;
     solver.config.ritz                     = grit::Ritz::SR;
     solver.config.max_iters                = 200;
-    solver.config.abstol                      = 1e-8;
+    solver.config.abstol                   = 1e-8;
     solver.config.use_b_inner_product      = true;
     solver.config.residual_correction_type = grit::ResidualCorrectionType::CHEAP_OLSEN;
     solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.ncv, 70));
@@ -675,7 +674,7 @@ TEST_CASE("generalized gdplusk with B as A squared targets A smallest magnitude 
     REQUIRE(std::abs(1.0 / view.eigVal()(0) - exact_A.eigenvalues()(0)) < 1e-10);
 }
 
-TEST_CASE("generalized auto Ritz stabilization compares the Bv perturbation with the residual") {
+TEST_CASE("generalized auto Ritz progress compares the Bv perturbation with the residual") {
     using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorReal = grit::form::base<double>::VectorReal;
     using Correction = grit::ResidualCorrectionType;
@@ -686,28 +685,30 @@ TEST_CASE("generalized auto Ritz stabilization compares the Bv perturbation with
     auto   B        = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
 
     grit::generalized::gdplusk<double> solver(A, B);
-    solver.config.nev                      = 1;
-    solver.config.ncv                      = 4;
-    solver.config.block_size               = 1;
-    solver.config.abstol                   = 1e-6;
-    solver.config.residual_correction_type = Correction::AUTO;
-    solver.V                               = Matrix::Identity(4, 1);
-    solver.BV                              = B_matrix * solver.V;
-    solver.status.eigVal                   = VectorReal::Constant(1, 0.2);
-    solver.status.rNormsAbs                = VectorReal::Ones(1);
-    solver.status.eigVals_history          = {VectorReal::Constant(1, 0.198), VectorReal::Constant(1, 0.199), VectorReal::Constant(1, 0.2),
-                                             VectorReal::Constant(1, 0.201), VectorReal::Constant(1, 0.202)};
+    solver.config.nev                                 = 1;
+    solver.config.ncv                                 = 4;
+    solver.config.block_size                          = 1;
+    solver.config.abstol                              = 1e-6;
+    solver.config.residual_correction_type            = Correction::AUTO;
+    solver.V                                          = Matrix::Identity(4, 1);
+    solver.BV                                         = B_matrix * solver.V;
+    solver.status.eigVal                              = VectorReal::Constant(1, 0.2);
+    solver.status.rNormsAbs                           = VectorReal::Ones(1);
+    solver.status.eigVals_history                     = {VectorReal::Constant(1, 0.198), VectorReal::Constant(1, 0.199), VectorReal::Constant(1, 0.2),
+                                                         VectorReal::Constant(1, 0.201), VectorReal::Constant(1, 0.202)};
     solver.auto_residual_correction.cheap_olsen_iters = 4;
 
-    SECTION("motion above the residual-scaled tolerance remains in cheap Olsen mode") { solver.config.ritz_stabilization_tolerance = 15e-3; }
-    SECTION("motion below the residual-scaled tolerance starts JD") { solver.config.ritz_stabilization_tolerance = 16e-3; }
-
-    solver.update_auto_residual_correction_state();
-
-    if(solver.config.ritz_stabilization_tolerance == 15e-3)
+    SECTION("motion above the residual-scaled tolerance remains in cheap Olsen mode") {
+        solver.config.ritz_stabilization_tolerance = 9e-3;
+        solver.update_auto_residual_correction_state();
         REQUIRE(solver.auto_residual_correction.active == Correction::CHEAP_OLSEN);
-    else
+    }
+
+    SECTION("motion below the residual-scaled tolerance starts JD") {
+        solver.config.ritz_stabilization_tolerance = 11e-3;
+        solver.update_auto_residual_correction_state();
         REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
+    }
 }
 
 int main(int argc, char **argv) {

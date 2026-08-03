@@ -30,21 +30,29 @@ namespace grit::algo {
     void gdplusk<Scalar, form_>::adjust_residual_correction_type() {
         residual_correction_type_internal = config.residual_correction_type;
         if(residual_correction_type_internal == ResidualCorrectionType::AUTO) {
-            auto slopes      = get_slopes(status.rNormsAbsHistory, true,
-                                          std::min(static_cast<Eigen::Index>(status.max_history_size), auto_residual_correction.jd_outer_iters_since_probe));
-            auto targets     = this->rNormAbsTargets();
-            auto rows        = std::min({cfg().nev, slopes.size(), status.rNormsAbs.size(), targets.size()});
-            bool probe_ready = false;
+            auto         samples    = std::min(static_cast<Eigen::Index>(status.max_history_size), auto_residual_correction.jd_outer_iters_since_probe);
+            auto         slopes     = get_slopes(status.rNormsAbsHistory, true, samples);
+            auto         targets    = this->rNormAbsTargets();
+            auto         rows       = std::min({cfg().nev, slopes.size(), status.rNormsAbs.size(), targets.size()});
+            Eigen::Index probe_slot = -1;
             for(Eigen::Index i = 0; i < rows; ++i) {
-                if(status.rNormsAbs(i) > targets(i) && std::isfinite(slopes(i)) && slopes(i) >= RealScalar{0}) probe_ready = true;
+                if(status.rNormsAbs(i) > targets(i) && std::isfinite(slopes(i)) && slopes(i) >= RealScalar{0}) {
+                    probe_slot = i;
+                    break;
+                }
             }
             bool probe_in_progress =
                 auto_residual_correction.active == ResidualCorrectionType::JACOBI_DAVIDSON && auto_residual_correction.cheap_olsen_iters > 0;
             bool probe_available = config.auto_max_probes < 0 || auto_residual_correction.probes_started < config.auto_max_probes;
-            if(auto_residual_correction.active == ResidualCorrectionType::JACOBI_DAVIDSON && (probe_in_progress || (probe_available && probe_ready))) {
+            if(auto_residual_correction.active == ResidualCorrectionType::JACOBI_DAVIDSON && (probe_in_progress || (probe_available && probe_slot >= 0))) {
                 auto_residual_correction.iteration_method = ResidualCorrectionType::CHEAP_OLSEN;
             } else {
                 auto_residual_correction.iteration_method = auto_residual_correction.active;
+            }
+            if(log && auto_residual_correction.active == ResidualCorrectionType::JACOBI_DAVIDSON && !probe_in_progress && probe_available && probe_slot >= 0) {
+                log->debug("auto residual correction probe start: JD residual slope {::.3e} samples {} | rNorm {::.3e} target {::.3e} trigger slot {} | "
+                           "outer_iter {} mv_total {}",
+                           slopes, samples, status.rNormsAbs, targets, probe_slot, status.outer_iter, status.num_matvecs_total);
             }
             residual_correction_type_internal = auto_residual_correction.iteration_method;
         } else {
@@ -118,15 +126,24 @@ namespace grit::algo {
                 b_norms(i) = V.col(i).norm();
         }
 
-        const bool stabilization_ready        = status.eigVals_history.size() >= 3;
-        VectorReal stabilization              = VectorReal::Constant(rows, std::numeric_limits<RealScalar>::infinity());
-        bool       all_unconverged_stabilized = false;
-        if(stabilization_ready) {
+        const bool   ritz_progress_ready   = status.eigVals_history.size() >= 3;
+        VectorReal   ritz_slopes           = VectorReal::Constant(rows, std::numeric_limits<RealScalar>::quiet_NaN());
+        VectorReal   slope_errors          = ritz_slopes;
+        VectorReal   scaled_slopes         = VectorReal::Constant(rows, std::numeric_limits<RealScalar>::infinity());
+        bool         ritz_progress_stopped = false;
+        Eigen::Index moving_slot           = -1;
+        if(ritz_progress_ready) {
             VectorReal residual_scales = status.rNormsAbs.topRows(rows).cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
-            stabilization = get_standard_deviations(status.eigVals_history, false).topRows(rows).cwiseProduct(b_norms).cwiseQuotient(residual_scales);
-            all_unconverged_stabilized = true;
+            ritz_slopes                = get_slopes(status.eigVals_history, false, -1, &slope_errors).topRows(rows);
+            scaled_slopes              = ritz_slopes.cwiseAbs().cwiseProduct(b_norms).cwiseQuotient(residual_scales);
+            ritz_progress_stopped      = true;
             for(Eigen::Index i = 0; i < rows; ++i) {
-                if(status.rNormsAbs(i) > targets(i) && stabilization(i) > config.ritz_stabilization_tolerance) all_unconverged_stabilized = false;
+                bool moving = std::isfinite(ritz_slopes(i)) && std::isfinite(slope_errors(i)) && std::isfinite(scaled_slopes(i)) &&
+                              std::abs(ritz_slopes(i)) > RealScalar{2} * slope_errors(i) && scaled_slopes(i) > config.ritz_stabilization_tolerance;
+                if(status.rNormsAbs(i) > targets(i) && moving) {
+                    ritz_progress_stopped = false;
+                    if(moving_slot < 0) moving_slot = i;
+                }
             }
         }
 
@@ -147,7 +164,7 @@ namespace grit::algo {
                 return;
             }
 
-            bool keep_cheap_olsen                      = !all_unconverged_stabilized;
+            bool keep_cheap_olsen                      = !ritz_progress_stopped;
             auto_residual_correction.cheap_olsen_iters = keep_cheap_olsen ? config.auto_probe_length : 0;
             auto_residual_correction.active            = keep_cheap_olsen ? ResidualCorrectionType::CHEAP_OLSEN : ResidualCorrectionType::JACOBI_DAVIDSON;
             if(keep_cheap_olsen) {
@@ -156,11 +173,11 @@ namespace grit::algo {
             }
 
             if(log) {
-                log->debug("auto residual correction cheap Olsen probe: {} after {} iterations | Ritz stability {::.3e} = std(ritz, last {} iters)*|{}|/|r| | "
-                           "tol {:.3e} | outer_iter {} mv_total {} time_iter {:.3e}s",
-                           keep_cheap_olsen ? "keep CHEAP_OLSEN" : "return JACOBI_DAVIDSON", config.auto_probe_length, stabilization,
-                           status.eigVals_history.size(), form_ == grit::Form::GENERALIZED ? "Bv" : "v", config.ritz_stabilization_tolerance, status.outer_iter,
-                           status.num_matvecs_total, outer_iteration_time);
+                log->debug("auto residual correction cheap Olsen probe: {} after {} iterations | Ritz slope {::.3e} se {::.3e} scaled {::.3e} = "
+                           "|slope|*|{}|/|r| samples {} moving_slot {} tol {:.3e} | outer_iter {} mv_total {} time_iter {:.3e}s",
+                           keep_cheap_olsen ? "keep CHEAP_OLSEN" : "return JACOBI_DAVIDSON", config.auto_probe_length, ritz_slopes, slope_errors, scaled_slopes,
+                           form_ == grit::Form::GENERALIZED ? "Bv" : "v", status.eigVals_history.size(), moving_slot, config.ritz_stabilization_tolerance,
+                           status.outer_iter, status.num_matvecs_total, outer_iteration_time);
             }
             return;
         }
@@ -174,26 +191,26 @@ namespace grit::algo {
 
         auto_residual_correction.active = ResidualCorrectionType::CHEAP_OLSEN;
         auto_residual_correction.cheap_olsen_iters++;
-        if(status.residual_converged || !stabilization_ready) return;
+        if(status.residual_converged || !ritz_progress_ready) return;
 
         if(log) {
-            log->trace("auto residual correction Ritz stability {::.3e} = std(ritz, last {} iters)*|{}|/|r| | tol {:.3e} stabilized {} | cheap_olsen_iters {} "
-                       "outer_iter {} mv_total {}",
-                       stabilization, status.eigVals_history.size(), form_ == grit::Form::GENERALIZED ? "Bv" : "v", config.ritz_stabilization_tolerance,
-                       all_unconverged_stabilized, auto_residual_correction.cheap_olsen_iters, status.outer_iter, status.num_matvecs_total);
+            log->trace("auto residual correction Ritz slope {::.3e} se {::.3e} scaled {::.3e} = |slope|*|{}|/|r| samples {} moving_slot {} tol {:.3e} | "
+                       "cheap_olsen_iters {} outer_iter {} mv_total {}",
+                       ritz_slopes, slope_errors, scaled_slopes, form_ == grit::Form::GENERALIZED ? "Bv" : "v", status.eigVals_history.size(), moving_slot,
+                       config.ritz_stabilization_tolerance, auto_residual_correction.cheap_olsen_iters, status.outer_iter, status.num_matvecs_total);
         }
-        if(!all_unconverged_stabilized) return;
+        if(!ritz_progress_stopped) return;
 
         auto_residual_correction.active                     = ResidualCorrectionType::JACOBI_DAVIDSON;
         auto_residual_correction.cheap_olsen_iters          = 0;
         auto_residual_correction.jd_outer_iters_since_probe = 0;
         auto_residual_correction.cheap_olsen_to_jd_switch_outer_iters.push_back(status.outer_iter);
         if(log) {
-            log->debug("auto residual correction switch: {} -> {} | Ritz stability {::.3e} = std(ritz, last {} iters)*|{}|/|r| | tol {:.3e} | outer_iter {} "
-                       "mv_total {} time_iter {:.3e}s",
+            log->debug("auto residual correction switch: {} -> {} | Ritz slope {::.3e} se {::.3e} scaled {::.3e} = |slope|*|{}|/|r| samples {} tol {:.3e} | "
+                       "outer_iter {} mv_total {} time_iter {:.3e}s",
                        ResidualCorrectionToString(ResidualCorrectionType::CHEAP_OLSEN), ResidualCorrectionToString(ResidualCorrectionType::JACOBI_DAVIDSON),
-                       stabilization, status.eigVals_history.size(), form_ == grit::Form::GENERALIZED ? "Bv" : "v", config.ritz_stabilization_tolerance,
-                       status.outer_iter, status.num_matvecs_total, outer_iteration_time);
+                       ritz_slopes, slope_errors, scaled_slopes, form_ == grit::Form::GENERALIZED ? "Bv" : "v", status.eigVals_history.size(),
+                       config.ritz_stabilization_tolerance, status.outer_iter, status.num_matvecs_total, outer_iteration_time);
         }
     }
 

@@ -1582,7 +1582,7 @@ namespace Catch {
     #include <string>
     #include <type_traits>
     #include <vector>
-    // start catch_stream.h
+  // start catch_stream.h
 
     #include <cstddef>
     #include <iosfwd>
@@ -1664,7 +1664,7 @@ namespace Catch {
     #endif
 
     #ifdef __OBJC__
-        // start catch_objc_arc.hpp
+  // start catch_objc_arc.hpp
 
         #import <Foundation/Foundation.h>
 
@@ -3845,7 +3845,7 @@ namespace Catch {
 
     // end catch_capture_matchers.h
     #endif
-    // start catch_generators.hpp
+// start catch_generators.hpp
 
     // start catch_interfaces_generatortracker.h
 
@@ -4887,7 +4887,7 @@ namespace Catch {
 
     // Benchmarking needs the externally-facing parts of reporters to work
     #if defined(CATCH_CONFIG_EXTERNAL_INTERFACES) || defined(CATCH_CONFIG_ENABLE_BENCHMARKING)
-        // start catch_external_interfaces.h
+  // start catch_external_interfaces.h
 
         // start catch_reporter_bases.hpp
 
@@ -6171,7 +6171,7 @@ namespace Catch {
     #endif
 
     #if defined(CATCH_CONFIG_ENABLE_BENCHMARKING)
-        // start catch_benchmarking_all.hpp
+  // start catch_benchmarking_all.hpp
 
         // A proxy header that includes all of the benchmarking headers to allow
         // concise include of the benchmarking features. You should prefer the
@@ -7504,7 +7504,7 @@ namespace Catch {
 } // namespace Catch
 
     #endif // CATCH_CONFIG_ENABLE_BENCHMARKING
-    // end catch_stats.cpp
+// end catch_stats.cpp
     // start catch_approx.cpp
 
     #include <cmath>
@@ -10218,7 +10218,7 @@ namespace Catch {
 } // end namespace Catch
 
     #endif // CATCH_CONFIG_POSIX_SIGNALS
-    // end catch_fatal_condition.cpp
+// end catch_fatal_condition.cpp
     // start catch_generators.cpp
 
     #include <limits>
@@ -11144,7 +11144,7 @@ namespace Catch {
 } // end namespace Catch
 
     #endif // TWOBLUECUBES_CATCH_OUTPUT_REDIRECT_H
-    // end catch_output_redirect.h
+  // end catch_output_redirect.h
     #include <cstdio>
     #include <cstring>
     #include <fstream>
@@ -11257,7 +11257,7 @@ namespace Catch {
             #undef fileno
         #endif
     #endif
-    // end catch_output_redirect.cpp
+  // end catch_output_redirect.cpp
     // start catch_polyfills.cpp
 
     #include <cmath>
@@ -12463,7 +12463,7 @@ namespace Catch {
 
 } // end namespace Catch
     #endif
-    // end catch_startup_exception_registry.cpp
+  // end catch_startup_exception_registry.cpp
     // start catch_stream.cpp
 
     #include <cstdio>
@@ -14539,7 +14539,7 @@ namespace Catch {
 
     #if defined(__clang__)
         #pragma clang diagnostic push
-        // For simplicity, benchmarking-only helpers are always enabled
+  // For simplicity, benchmarking-only helpers are always enabled
         #pragma clang diagnostic ignored "-Wunused-function"
     #endif
 
@@ -15103,7 +15103,7 @@ namespace Catch {
     #if defined(__clang__)
         #pragma clang diagnostic pop
     #endif
-    // end catch_reporter_console.cpp
+  // end catch_reporter_console.cpp
     // start catch_reporter_junit.cpp
 
     #include <algorithm>

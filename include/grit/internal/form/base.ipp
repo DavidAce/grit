@@ -423,11 +423,18 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
-    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::get_slopes(const std::deque<VectorReal> &v, bool apply_log10, Eigen::Index last_n) {
-        if(v.empty()) return {};
+    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::get_slopes(const std::deque<VectorReal> &v, bool apply_log10, Eigen::Index last_n,
+                                                                             VectorReal *slope_errors) {
+        if(v.empty()) {
+            if(slope_errors) slope_errors->resize(0);
+            return {};
+        }
         auto rows = static_cast<Eigen::Index>(v.front().size());
         auto cols = last_n < 0 ? static_cast<Eigen::Index>(v.size()) : std::min(last_n, static_cast<Eigen::Index>(v.size()));
-        if(cols < 2) return VectorReal::Constant(rows, std::numeric_limits<RealScalar>::quiet_NaN());
+        if(cols < 2) {
+            if(slope_errors) *slope_errors = VectorReal::Constant(rows, std::numeric_limits<RealScalar>::quiet_NaN());
+            return VectorReal::Constant(rows, std::numeric_limits<RealScalar>::quiet_NaN());
+        }
 
         MatrixReal matrix(rows, cols);
         VectorReal x  = VectorReal::LinSpaced(cols, RealScalar{0}, static_cast<RealScalar>(cols - 1));
@@ -441,7 +448,18 @@ namespace grit::form {
             else
                 matrix.col(idx) = history.topRows(rows);
         }
-        return matrix * x / x.squaredNorm();
+        auto       x_squared_norm = x.squaredNorm();
+        VectorReal slopes         = matrix * x / x_squared_norm;
+        if(slope_errors) {
+            if(cols < 3) {
+                *slope_errors = VectorReal::Constant(rows, std::numeric_limits<RealScalar>::quiet_NaN());
+            } else {
+                MatrixReal residuals  = matrix.colwise() - matrix.rowwise().mean();
+                residuals.noalias()  -= slopes * x.transpose();
+                *slope_errors         = (residuals.rowwise().squaredNorm() / (static_cast<RealScalar>(cols - 2) * x_squared_norm)).array().sqrt();
+            }
+        }
+        return slopes;
     }
 
     template<typename Scalar, grit::Form form_>
