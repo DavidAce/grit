@@ -36,7 +36,7 @@ namespace grit::algo {
             auto         rows       = std::min({cfg().nev, slopes.size(), status.rNormsAbs.size(), targets.size()});
             Eigen::Index probe_slot = -1;
             for(Eigen::Index i = 0; i < rows; ++i) {
-                if(status.rNormsAbs(i) > targets(i) && std::isfinite(slopes(i)) && slopes(i) >= RealScalar{0}) {
+                if(status.rNormsAbs(i) * current_inner_tol > targets(i) && std::isfinite(slopes(i)) && slopes(i) >= RealScalar{0}) {
                     probe_slot = i;
                     break;
                 }
@@ -118,14 +118,17 @@ namespace grit::algo {
         if constexpr(form_ == grit::Form::GENERALIZED) rows = std::min(rows, BV.cols());
         if(rows <= 0) return;
 
-        VectorReal b_norms = VectorReal::Zero(rows);
+        // Cheap Olsen remains useful while an unconverged Ritz value has directed motion. Scale that motion by |Bv|/|r|
+        // (or |v|/|r|) to express it in units set by the current residual.
+        VectorReal metric_norms = VectorReal::Zero(rows);
         for(Eigen::Index i = 0; i < rows; ++i) {
             if constexpr(form_ == grit::Form::GENERALIZED)
-                b_norms(i) = BV.col(i).norm();
+                metric_norms(i) = BV.col(i).norm();
             else
-                b_norms(i) = V.col(i).norm();
+                metric_norms(i) = V.col(i).norm();
         }
 
+        // Require at least three samples so the fitted slope can be distinguished from scatter around the fit.
         const bool   ritz_progress_ready   = status.eigVals_history.size() >= 3;
         VectorReal   ritz_slopes           = VectorReal::Constant(rows, std::numeric_limits<RealScalar>::quiet_NaN());
         VectorReal   slope_errors          = ritz_slopes;
@@ -135,9 +138,10 @@ namespace grit::algo {
         if(ritz_progress_ready) {
             VectorReal residual_scales = status.rNormsAbs.topRows(rows).cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
             ritz_slopes                = get_slopes(status.eigVals_history, false, -1, &slope_errors).topRows(rows);
-            scaled_slopes              = ritz_slopes.cwiseAbs().cwiseProduct(b_norms).cwiseQuotient(residual_scales);
+            scaled_slopes              = ritz_slopes.cwiseAbs().cwiseProduct(metric_norms).cwiseQuotient(residual_scales);
             ritz_progress_stopped      = true;
             for(Eigen::Index i = 0; i < rows; ++i) {
+                // Reject trends that are indistinguishable from noise or too small relative to the residual.
                 bool moving = std::isfinite(ritz_slopes(i)) && std::isfinite(slope_errors(i)) && std::isfinite(scaled_slopes(i)) &&
                               std::abs(ritz_slopes(i)) > RealScalar{2} * slope_errors(i) && scaled_slopes(i) > config.ritz_stabilization_tolerance;
                 if(status.rNormsAbs(i) > targets(i) && moving) {
@@ -149,6 +153,9 @@ namespace grit::algo {
 
         auto outer_iteration_time = std::max(0.0, status.time_elapsed.get_time() - auto_residual_correction.outer_iteration_time_start);
 
+        // The active method identifies the current phase; iteration_method records the correction just used. Cheap Olsen iterations
+        // selected during the JD phase form a probe. Complete its requested length, then use the same Ritz-motion test to continue
+        // Cheap Olsen or return to JD.
         if(auto_residual_correction.active == ResidualCorrectionType::JACOBI_DAVIDSON &&
            auto_residual_correction.iteration_method == ResidualCorrectionType::CHEAP_OLSEN) {
             if(auto_residual_correction.cheap_olsen_iters == 0) {
@@ -182,6 +189,7 @@ namespace grit::algo {
             return;
         }
 
+        // Count consecutive JD iterations so the next probe decision uses only residuals produced since the previous probe.
         if(auto_residual_correction.iteration_method == ResidualCorrectionType::JACOBI_DAVIDSON) {
             auto_residual_correction.active            = ResidualCorrectionType::JACOBI_DAVIDSON;
             auto_residual_correction.cheap_olsen_iters = 0;
@@ -189,6 +197,8 @@ namespace grit::algo {
             return;
         }
 
+        // During the initial or resumed Cheap Olsen phase, wait for a usable Ritz history and hand control to JD once no
+        // unconverged Ritz value has directed motion.
         auto_residual_correction.active = ResidualCorrectionType::CHEAP_OLSEN;
         auto_residual_correction.cheap_olsen_iters++;
         if(status.residual_converged || !ritz_progress_ready) return;
@@ -206,7 +216,7 @@ namespace grit::algo {
         auto_residual_correction.jd_outer_iters_since_probe = 0;
         auto_residual_correction.cheap_olsen_to_jd_switch_outer_iters.push_back(status.outer_iter);
         if(log) {
-            log->debug("auto residual correction switch: {} -> {} | Ritz slope {::.3e} se {::.3e} scaled {::.3e} = |slope|*|{}|/|r| samples {} tol {:.3e} | "
+            log->info("auto residual correction switch: {} -> {} | Ritz slope {::.3e} se {::.3e} scaled {::.3e} = |slope|*|{}|/|r| samples {} tol {:.3e} | "
                        "outer_iter {} mv_total {} time_iter {:.3e}s",
                        ResidualCorrectionToString(ResidualCorrectionType::CHEAP_OLSEN), ResidualCorrectionToString(ResidualCorrectionType::JACOBI_DAVIDSON),
                        ritz_slopes, slope_errors, scaled_slopes, form_ == grit::Form::GENERALIZED ? "Bv" : "v", status.eigVals_history.size(),

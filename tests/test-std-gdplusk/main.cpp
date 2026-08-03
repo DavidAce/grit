@@ -504,6 +504,35 @@ TEST_CASE("standard auto residual correction limits probes in a stabilized Ritz 
     }
 }
 
+TEST_CASE("standard auto residual correction does not probe near the residual target") {
+    using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorReal = grit::form::base<double>::VectorReal;
+    using Correction = grit::ResidualCorrectionType;
+
+    Matrix A_matrix = Matrix::Identity(4, 4);
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.abstol                                       = 1e-2;
+    solver.config.residual_correction_type                     = Correction::AUTO;
+    solver.auto_residual_correction.active                     = Correction::JACOBI_DAVIDSON;
+    solver.auto_residual_correction.jd_outer_iters_since_probe = 2;
+
+    SECTION("residual below target divided by inner tolerance stays in JD") {
+        solver.status.rNormsAbs        = VectorReal::Constant(1, 9e-2);
+        solver.status.rNormsAbsHistory = {solver.status.rNormsAbs, solver.status.rNormsAbs};
+        solver.adjust_residual_correction_type();
+        REQUIRE(solver.auto_residual_correction.iteration_method == Correction::JACOBI_DAVIDSON);
+    }
+
+    SECTION("residual above target divided by inner tolerance permits a probe") {
+        solver.status.rNormsAbs        = VectorReal::Constant(1, 1.1e-1);
+        solver.status.rNormsAbsHistory = {solver.status.rNormsAbs, solver.status.rNormsAbs};
+        solver.adjust_residual_correction_type();
+        REQUIRE(solver.auto_residual_correction.iteration_method == Correction::CHEAP_OLSEN);
+    }
+}
+
 TEST_CASE("standard auto residual correction requires three Ritz entries and ignores very slow drift") {
     using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorReal = grit::form::base<double>::VectorReal;
