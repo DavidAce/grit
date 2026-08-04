@@ -665,10 +665,10 @@ namespace grit::form {
         const auto  num_matvecs_iter = status.num_matvecs + status.num_matvecs_inner;
         const auto  num_precond_iter = status.num_precond + status.num_precond_inner;
         std::string pcMsg;
-        if(num_precond_iter > 0) pcMsg = fmt::format(" pc={}|{}", num_precond_iter, status.num_precond_total);
+        if(num_precond_iter > 0) pcMsg = fmt::format(" pc={:>4}|{:<4}", num_precond_iter, status.num_precond_total);
         std::string rescaledMsg = cfg().use_rescaled_rnorm_tolerance ? " (rescaled)" : "";
 
-        log->info("it={} dim={} ritz={} mv={}|{}{} t={:.1e}|{:.1e}s{} eigVal={::.16f} orthErr={:.3e} "
+        log->info("it={:>3} dim={} ritz={} mv={:>4}|{:<4}{} t={:.1e}|{:.1e}s{} eigVal={::.16f} orthErr={:.3e} "
                   "|rNorm|={::.3e} tgt={::.3e} ({:.2e}/mv) tol={:.1e} rtol={:.1e}{} sat={}:{}/{} col={} bs={} "
                   "|op|={:.2e} cond={:.2e} sens={:.2e}{}",
                   status.outer_iter, N, enum2sv(cfg().ritz), num_matvecs_iter, status.num_matvecs_total, pcMsg, status.time_elapsed.get_time_lap(),
