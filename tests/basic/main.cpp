@@ -45,15 +45,23 @@ TEST_CASE("info logging reports every outer iteration") {
     const auto message = output.str();
     auto       pos     = std::string::size_type{0};
     auto       count   = Eigen::Index{0};
-    while((pos = message.find("outer_iter ", pos)) != std::string::npos) {
+    while((pos = message.find("] [info] it=", pos)) != std::string::npos) {
         count++;
-        pos += std::string_view("outer_iter ").size();
+        pos += std::string_view("] [info] it=").size();
     }
 
     logger->sinks() = std::move(old_sinks);
     logger->set_level(old_level);
 
     REQUIRE(count == solver.get_result_view().outer_iter());
+    REQUIRE(message.find(" dim=3 ritz=") != std::string::npos);
+    REQUIRE(message.find("it=0 dim=3 ritz=SR mv=1|1") != std::string::npos);
+    REQUIRE(message.find(" mv=") != std::string::npos);
+    REQUIRE(message.find(" eigVal=[") != std::string::npos);
+    REQUIRE(message.find(" orthErr=") != std::string::npos);
+    REQUIRE(message.find(" |rNorm|=[") != std::string::npos);
+    REQUIRE(message.find(" tgt=[") != std::string::npos);
+    REQUIRE(message.find(" bs=1 ") != std::string::npos);
 }
 
 TEST_CASE("identity operator converges") {

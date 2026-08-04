@@ -373,9 +373,12 @@ namespace grit::form {
                 status.op_norm_estimate = std::max({A_max_abs, AQ.norm() / Q.norm(), RealScalar{1}});
             }
         }
-        status.op_norm_estimate    = get_op_norm_estimate();
-        Eigen::Index rows          = std::min(cfg().nev, status.rNormsAbs.size());
-        status.rnorm_abs_reference = VectorReal::Zero(rows);
+        status.op_norm_estimate     = get_op_norm_estimate();
+        Eigen::Index rows           = std::min(cfg().nev, status.rNormsAbs.size());
+        status.rnorm_abs_reference  = VectorReal::Zero(rows);
+        status.num_matvecs_total   += status.num_matvecs;
+        status.num_matvecs_a_total += status.num_matvecs_a;
+        status.num_matvecs_b_total += status.num_matvecs_b;
         assert(V.cols() == cfg().block_size);
         assert_allFinite(V);
     }
@@ -577,7 +580,8 @@ namespace grit::form {
         status.residual_below_gap = rNormsAbs.maxCoeff() < beta * relGap;
 
         if(status.residual_converged) {
-            std::string msg_rnorm_gap = fmt::format(" | gap {:.3e} (rel {:.3e})", status.gap, relGap);
+            std::string msg_rnorm_gap;
+            if(std::isfinite(status.gap)) msg_rnorm_gap = fmt::format(" | gap {:.3e} (rel {:.3e})", status.gap, relGap);
             status.stopMessage.emplace_back(fmt::format("converged rNormAbs {::.3e} < target {::.3e}{} | outer_iter {} | mv {} | {:.3e} s", rNormsAbs, targets,
                                                         msg_rnorm_gap, status.outer_iter + 1, status.num_matvecs_total, status.time_elapsed.get_time()));
             status.stopReason |= StopReason::converged;
@@ -619,8 +623,6 @@ namespace grit::form {
     void base<Scalar, form_>::printStatus() {
         if(!log || !log->should_log(spdlog::level::info) || status.eigVal.size() == 0 || status.rNormsAbs.size() == 0) return;
 
-        std::string msg_rnorm_gap = fmt::format(" | gap {:.3e}", status.gap);
-
         std::string rCorrMsg;
         switch(residual_correction_type_internal) {
             case ResidualCorrectionType::NONE: rCorrMsg = "NO"; break;
@@ -632,28 +634,23 @@ namespace grit::form {
 
         std::string innerMsg;
         if(status.num_matvecs_inner > 0 || status.num_operator_inner > 0 || status.num_precond_inner > 0) {
-            const auto time_solve_inner          = status.time_solve_inner.get_time_lap();
-            const auto time_operator_inner       = status.time_operator_inner.get_time_lap();
-            const auto time_preconditioner_inner = status.time_preconditioner_inner.get_time_lap();
-            const auto time_krylov_other         = std::max(0.0, time_solve_inner - time_operator_inner - time_preconditioner_inner);
-            innerMsg                             = fmt::format("[inner: ({}) it {} mv {} A {}/{:.1e}s B {}/{:.1e}s op {}/{:.1e}s pc {}/{:.1e}s "
-                                                                                           "pc_update {}/{:.1e}s pc_apply {}/{:.1e}s project {:.1e}/{:.1e}s err {:.2e} tol {:.2e} wall {:.1e}s other {:.1e}s] ",
-                                                               rCorrMsg, status.num_inner_iters, status.num_matvecs_inner, status.num_matvecs_a_inner,
-                                                               status.time_matvecs_a_inner.get_time_lap(), status.num_matvecs_b_inner, status.time_matvecs_b_inner.get_time_lap(),
-                                                               status.num_operator_inner, time_operator_inner, status.num_precond_inner, time_preconditioner_inner,
-                                                               status.num_preconditioner_updates_inner, status.time_preconditioner_update_inner.get_time_lap(),
-                                                               status.num_preconditioner_apply_inner, status.time_preconditioner_apply_inner.get_time_lap(),
-                                                               status.time_project_left_inner.get_time_lap(), status.time_project_right_inner.get_time_lap(), status.inner_error_last,
-                                                               status.inner_tol_last, time_solve_inner, time_krylov_other);
+            const auto  time_solve_inner          = status.time_solve_inner.get_time_lap();
+            const auto  time_operator_inner       = status.time_operator_inner.get_time_lap();
+            const auto  time_preconditioner_inner = status.time_preconditioner_inner.get_time_lap();
+            const auto  time_krylov_other         = std::max(0.0, time_solve_inner - time_operator_inner - time_preconditioner_inner);
+            std::string pcMsg;
+            if(status.num_precond_inner > 0) pcMsg = fmt::format(" pc={}/{:.1e}s", status.num_precond_inner, time_preconditioner_inner);
+            innerMsg = fmt::format(" [{} it={} mv={} op={}/{:.1e}s{} err={:.2e} tol={:.2e} time={:.1e}s other={:.1e}s]", rCorrMsg, status.num_inner_iters,
+                                   status.num_matvecs_inner, status.num_operator_inner, time_operator_inner, pcMsg, status.inner_error_last,
+                                   status.inner_tol_last, time_solve_inner, time_krylov_other);
         }
 
         std::string timingMsg;
         if(status.outer_iter > 0) {
-            timingMsg = fmt::format(" [timing: build {:.1e}s correction {:.1e}s orthogonalize(bm {}) {:.1e}s orthonormalize {:.1e}s "
-                                    "diagonalize {:.1e}s ritz {:.1e}s restart {:.1e}s status {:.1e}s]",
-                                    status.time_build.get_time_lap(), status.time_residual_correction.get_time_lap(), cfg().use_b_inner_product,
-                                    status.time_orthogonalize.get_time_lap(), status.time_orthonormalize.get_time_lap(), status.time_diagonalize.get_time_lap(),
-                                    status.time_extract_ritz.get_time_lap(), status.time_restart.get_time_lap(), status.time_status_update.get_time_lap());
+            timingMsg = fmt::format(" bld={:.1e}s corr={:.1e}s og={:.1e}s on={:.1e}s diag={:.1e}s extr={:.1e}s rst={:.1e}s stat={:.1e}s",
+                                    status.time_build.get_time_lap(), status.time_residual_correction.get_time_lap(), status.time_orthogonalize.get_time_lap(),
+                                    status.time_orthonormalize.get_time_lap(), status.time_diagonalize.get_time_lap(), status.time_extract_ritz.get_time_lap(),
+                                    status.time_restart.get_time_lap(), status.time_status_update.get_time_lap());
         }
 
         RealScalar orthError = RealScalar{0};
@@ -663,26 +660,21 @@ namespace grit::form {
             orthError       = (Gram - MatrixType::Identity(Gram.rows(), Gram.cols())).norm();
         }
 
-        std::string evMsg;
-        if constexpr(form_ == grit::Form::GENERALIZED) {
-            if(V.cols() > 0 && AV.size() == V.size() && BV.size() == V.size()) {
-                VectorReal VAV = (V.adjoint() * AV).diagonal().real();
-                VectorReal VBV = (V.adjoint() * BV).diagonal().real();
-                evMsg          = fmt::format(" {::.16f} / {::.16f}", VAV, VBV);
-            }
-        }
+        const auto  op_norm_estimate = get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
+        const auto  rNormAbsTargets  = this->rNormAbsTargets();
+        const auto  num_matvecs_iter = status.num_matvecs + status.num_matvecs_inner;
+        const auto  num_precond_iter = status.num_precond + status.num_precond_inner;
+        std::string pcMsg;
+        if(num_precond_iter > 0) pcMsg = fmt::format(" pc={}|{}", num_precond_iter, status.num_precond_total);
+        std::string rescaledMsg = cfg().use_rescaled_rnorm_tolerance ? " (rescaled)" : "";
 
-        const auto op_norm_estimate = get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
-        const auto rNormAbsTargets  = this->rNormAbsTargets();
-
-        log->info("outer_iter {:3} mv {:3} pc {:3} t {:.1e}s dim {} {}eigVal {::.16f}{} "
-                  "oErr {:.3e} rNormsAbs {::.8e} target {::.3e} abstol {:.2e} reltol {:.2e} rescaled {} "
-                  "({:9.2e}/mv) sat {}:{}/{} col {:2} block_size {} ritz {} "
-                  "op norm {:.2e} cond {:.2e} sens {:.2e}{}{}",
-                  status.outer_iter, status.num_matvecs, status.num_precond, status.time_elapsed.get_time(), N, innerMsg, status.eigVal, evMsg, orthError,
-                  status.rNormsAbs, rNormAbsTargets, cfg().abstol, cfg().reltol, cfg().use_rescaled_rnorm_tolerance, get_rNorms_log10_change_per_matvec(),
-                  status.saturation_count_eigVal, status.saturation_count_rNorm, status.saturation_count_max, Q.cols(), cfg().block_size, enum2sv(cfg().ritz),
-                  op_norm_estimate, status.condition, status.sensitivity, msg_rnorm_gap, timingMsg);
+        log->info("it={} dim={} ritz={} mv={}|{}{} t={:.1e}|{:.1e}s{} eigVal={::.16f} orthErr={:.3e} "
+                  "|rNorm|={::.3e} tgt={::.3e} ({:.2e}/mv) tol={:.1e} rtol={:.1e}{} sat={}:{}/{} col={} bs={} "
+                  "|op|={:.2e} cond={:.2e} sens={:.2e}{}",
+                  status.outer_iter, N, enum2sv(cfg().ritz), num_matvecs_iter, status.num_matvecs_total, pcMsg, status.time_elapsed.get_time_lap(),
+                  status.time_elapsed.get_time(), innerMsg, status.eigVal, orthError, status.rNormsAbs, rNormAbsTargets, get_rNorms_log10_change_per_matvec(),
+                  cfg().abstol, cfg().reltol, rescaledMsg, status.saturation_count_eigVal, status.saturation_count_rNorm, status.saturation_count_max, Q.cols(),
+                  cfg().block_size, op_norm_estimate, status.condition, status.sensitivity, timingMsg);
     }
 
     template<typename Scalar, grit::Form form_>
@@ -699,12 +691,18 @@ namespace grit::form {
 
         for(Eigen::Index i = 0; i < nev; ++i) {
             const RealScalar op_norm_estimate = get_op_norm_estimate(std::optional<RealScalar>{status.eigVal(i)});
-            log->info("grit finished: {} | nev {}/{} | eigVal {:.16e} | rNormAbs {:.3e} | "
-                      "outer: it {} mv {} pc {} t {:.1e}s | inner: it {} mv {} op {} pc {} t {:.1e}s | "
-                      "total: mv {} pc {} t {:.1e}s | op norm {:.2e} cond {:.2e} sens {:.2e}",
-                      enum2s(status.stopReason), i + 1, nev, status.eigVal(i), status.rNormsAbs(i), status.outer_iter, outer_mv, outer_pc, outer_t,
-                      status.num_inner_iters_total, inner_mv, status.num_operator_inner_total, inner_pc, inner_t, status.num_matvecs_total,
-                      status.num_precond_total, status.time_elapsed.get_time(), op_norm_estimate, status.condition, status.sensitivity);
+            std::string      outerPcMsg;
+            std::string      innerPcMsg;
+            std::string      totalPcMsg;
+            if(outer_pc > 0) outerPcMsg = fmt::format(" pc={}", outer_pc);
+            if(inner_pc > 0) innerPcMsg = fmt::format(" pc={}", inner_pc);
+            if(status.num_precond_total > 0) totalPcMsg = fmt::format(" pc={}", status.num_precond_total);
+            log->info("grit finished: {} | nev={}/{} eigVal={:.16e} |rNorm|={:.3e} | "
+                      "outer: it={} mv={}{} t={:.1e}s | inner: it={} mv={} op={}{} t={:.1e}s | "
+                      "total: mv={}{} t={:.1e}s | |op|={:.2e} cond={:.2e} sens={:.2e}",
+                      enum2s(status.stopReason), i + 1, nev, status.eigVal(i), status.rNormsAbs(i), status.outer_iter, outer_mv, outerPcMsg, outer_t,
+                      status.num_inner_iters_total, inner_mv, status.num_operator_inner_total, innerPcMsg, inner_t, status.num_matvecs_total, totalPcMsg,
+                      status.time_elapsed.get_time(), op_norm_estimate, status.condition, status.sensitivity);
         }
     }
 

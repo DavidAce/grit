@@ -50,9 +50,8 @@ namespace grit::algo {
                 auto_residual_correction.iteration_method = auto_residual_correction.active;
             }
             if(log && auto_residual_correction.active == ResidualCorrectionType::JACOBI_DAVIDSON && !probe_in_progress && probe_available && probe_slot >= 0) {
-                log->debug("auto residual correction probe start: JD residual slope {::.3e} samples {} | rNorm {::.3e} target {::.3e} trigger slot {} | "
-                           "outer_iter {} mv_total {}",
-                           slopes, samples, status.rNormsAbs, targets, probe_slot, status.outer_iter, status.num_matvecs_total);
+                log->debug("AUTO probe start: JD | log10|r| slope={::.3e} samples={} |rNorm|={::.3e} tgt={::.3e} slot={} | it={} mv={}", slopes, samples,
+                           status.rNormsAbs, targets, probe_slot, status.outer_iter, status.num_matvecs_total);
             }
             residual_correction_type_internal = auto_residual_correction.iteration_method;
         } else {
@@ -151,7 +150,11 @@ namespace grit::algo {
             }
         }
 
-        auto outer_iteration_time = std::max(0.0, status.time_elapsed.get_time() - auto_residual_correction.outer_iteration_time_start);
+        auto        outer_iteration_time = std::max(0.0, status.time_elapsed.get_time() - auto_residual_correction.outer_iteration_time_start);
+        const auto  num_matvecs_iter     = status.num_matvecs + status.num_matvecs_inner;
+        const auto  num_precond_iter     = status.num_precond + status.num_precond_inner;
+        std::string pcMsg;
+        if(num_precond_iter > 0) pcMsg = fmt::format(" pc={}|{}", num_precond_iter, status.num_precond_total);
 
         // The active method identifies the current phase; iteration_method records the correction just used. Cheap Olsen iterations
         // selected during the JD phase form a probe. Complete its requested length, then use the same Ritz-motion test to continue
@@ -165,7 +168,7 @@ namespace grit::algo {
             auto_residual_correction.cheap_olsen_iters++;
             if(auto_residual_correction.cheap_olsen_iters < config.auto_probe_length) {
                 if(log) {
-                    log->trace("auto residual correction cheap Olsen probe: iteration {}/{} | outer_iter {} mv_total {}",
+                    log->trace("AUTO probe: {}/{} | it={} mv={}",
                                auto_residual_correction.cheap_olsen_iters, config.auto_probe_length, status.outer_iter, status.num_matvecs_total);
                 }
                 return;
@@ -180,11 +183,11 @@ namespace grit::algo {
             }
 
             if(log) {
-                log->debug("auto residual correction cheap Olsen probe: {} after {} iterations | Ritz slope {::.3e} se {::.3e} scaled {::.3e} = "
-                           "|slope|*|{}|/|r| samples {} moving_slot {} tol {:.3e} | outer_iter {} mv_total {} time_iter {:.3e}s",
+                log->debug("AUTO probe: {} after {} iterations | Ritz slope {::.3e}±{::.3e} (rescaled to {::.3e}) samples={} slot={} tol={:.3e} | "
+                           "it={} mv={}|{}{} t={:.1e}|{:.1e}s",
                            keep_cheap_olsen ? "keep CHEAP_OLSEN" : "return JACOBI_DAVIDSON", config.auto_probe_length, ritz_slopes, slope_errors, scaled_slopes,
-                           form_ == grit::Form::GENERALIZED ? "Bv" : "v", status.eigVals_history.size(), moving_slot, config.ritz_stabilization_tolerance,
-                           status.outer_iter, status.num_matvecs_total, outer_iteration_time);
+                           status.eigVals_history.size(), moving_slot, config.ritz_stabilization_tolerance, status.outer_iter, num_matvecs_iter,
+                           status.num_matvecs_total, pcMsg, outer_iteration_time, status.time_elapsed.get_time());
             }
             return;
         }
@@ -204,10 +207,9 @@ namespace grit::algo {
         if(status.residual_converged || !ritz_progress_ready) return;
 
         if(log) {
-            log->trace("auto residual correction Ritz slope {::.3e} se {::.3e} scaled {::.3e} = |slope|*|{}|/|r| samples {} moving_slot {} tol {:.3e} | "
-                       "cheap_olsen_iters {} outer_iter {} mv_total {}",
-                       ritz_slopes, slope_errors, scaled_slopes, form_ == grit::Form::GENERALIZED ? "Bv" : "v", status.eigVals_history.size(), moving_slot,
-                       config.ritz_stabilization_tolerance, auto_residual_correction.cheap_olsen_iters, status.outer_iter, status.num_matvecs_total);
+            log->trace("AUTO Cheap Olsen: Ritz slope {::.3e}±{::.3e} (rescaled to {::.3e}) samples={} slot={} tol={:.3e} | CO iters={} it={} mv={}",
+                       ritz_slopes, slope_errors, scaled_slopes, status.eigVals_history.size(), moving_slot, config.ritz_stabilization_tolerance,
+                       auto_residual_correction.cheap_olsen_iters, status.outer_iter, status.num_matvecs_total);
         }
         if(!ritz_progress_stopped) return;
 
@@ -216,11 +218,11 @@ namespace grit::algo {
         auto_residual_correction.jd_outer_iters_since_probe = 0;
         auto_residual_correction.cheap_olsen_to_jd_switch_outer_iters.push_back(status.outer_iter);
         if(log) {
-            log->info("auto residual correction switch: {} -> {} | Ritz slope {::.3e} se {::.3e} scaled {::.3e} = |slope|*|{}|/|r| samples {} tol {:.3e} | "
-                       "outer_iter {} mv_total {} time_iter {:.3e}s",
+            log->info("AUTO switch: {} -> {} | Ritz slope {::.3e}±{::.3e} (rescaled to {::.3e}) samples={} tol={:.3e} | "
+                      "it={} mv={}|{}{} t={:.1e}|{:.1e}s",
                        ResidualCorrectionToString(ResidualCorrectionType::CHEAP_OLSEN), ResidualCorrectionToString(ResidualCorrectionType::JACOBI_DAVIDSON),
-                       ritz_slopes, slope_errors, scaled_slopes, form_ == grit::Form::GENERALIZED ? "Bv" : "v", status.eigVals_history.size(),
-                       config.ritz_stabilization_tolerance, status.outer_iter, status.num_matvecs_total, outer_iteration_time);
+                       ritz_slopes, slope_errors, scaled_slopes, status.eigVals_history.size(), config.ritz_stabilization_tolerance, status.outer_iter,
+                       num_matvecs_iter, status.num_matvecs_total, pcMsg, outer_iteration_time, status.time_elapsed.get_time());
         }
     }
 
@@ -374,10 +376,12 @@ namespace grit::algo {
 
                 status.num_inner_iters           += cfg.result.num_inner_iters;
                 status.num_operator_inner        += cfg.result.matvecs;
-                status.num_precond_inner         += cfg.result.precond;
                 status.time_solve_inner          += cfg.result.time;
                 status.time_operator_inner       += cfg.result.time_matvecs;
-                status.time_preconditioner_inner += cfg.result.time_precond;
+                if(A.has_preconditioner_apply()) {
+                    status.num_precond_inner         += cfg.result.precond;
+                    status.time_preconditioner_inner += cfg.result.time_precond;
+                }
                 status.inner_error_last           = std::max(status.inner_error_last, cfg.result.error);
                 status.inner_tol_last             = std::max(status.inner_tol_last, cfg.tolerance);
             }
@@ -477,10 +481,12 @@ namespace grit::algo {
 
                 status.num_inner_iters           += cfg.result.num_inner_iters;
                 status.num_operator_inner        += cfg.result.matvecs;
-                status.num_precond_inner         += cfg.result.precond;
                 status.time_solve_inner          += cfg.result.time;
                 status.time_operator_inner       += cfg.result.time_matvecs;
-                status.time_preconditioner_inner += cfg.result.time_precond;
+                if(A.has_preconditioner_apply()) {
+                    status.num_precond_inner         += cfg.result.precond;
+                    status.time_preconditioner_inner += cfg.result.time_precond;
+                }
                 status.inner_error_last           = std::max(status.inner_error_last, cfg.result.error);
                 status.inner_tol_last             = std::max(status.inner_tol_last, cfg.tolerance);
             }

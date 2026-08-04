@@ -300,13 +300,8 @@ namespace Eigen {
                         if((iters >= rate_printf && iters % rate_printf == 0) or minres_has_converged or minres_has_saturated) {
                             bool has_printed = false;
                             if(iters >= rate_printf && iters % rate_printf == 0) {
-                                std::printf("MINRES k: %4ld |rk|=%.3e |r0|=%.3e |rk|/|r0|=%.3e δ=%.3e log10 "
-                                            "| rr avg: %.3e  std: %.3e  rel: %.3e sla: %.3e sls: %.3e "
-                                            "| dx avg: %.3e  std: %.3e  rel: %.3e sla: %.3e sls: %.3e",
-                                            iters, std::sqrt(residualNorm2), std::sqrt(rhsNorm2), rnorm_rel, deltax,              //
-                                            rr_stats.avg, rr_stats.sdv, rr_stats.rel_sdv, rr_stats.slope_avg, rr_stats.slope_sdv, //
-                                            dx_stats.avg, dx_stats.sdv, dx_stats.rel_sdv, dx_stats.slope_avg, dx_stats.slope_sdv  //
-                                );
+                                std::printf("MINRES it=%ld |r|=%.3e |r0|=%.3e rel=%.3e log10|r| slope=%.3e±%.3e", iters, std::sqrt(residualNorm2),
+                                            std::sqrt(rhsNorm2), rnorm_rel, rr_stats.slope_avg, rr_stats.slope_sdv);
                                 has_printed = true;
                             }
                             if(minres_has_saturated) {

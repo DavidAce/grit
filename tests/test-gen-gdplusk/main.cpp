@@ -604,6 +604,7 @@ TEST_CASE("generalized jacobi-davidson correction defaults to identity precondit
     REQUIRE(view.num_operator_inner() > 0);
     REQUIRE(view.num_matvecs_a_inner() > 0);
     REQUIRE(view.num_matvecs_b_inner() > 0);
+    REQUIRE(view.num_precond_total() == 0);
     REQUIRE(view.num_preconditioner_updates_total() == 0);
     REQUIRE(view.num_preconditioner_apply_inner_total() == 0);
     require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);

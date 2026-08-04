@@ -68,9 +68,6 @@ namespace grit::internal::precondition {
 
             if(!config->preconditioner_apply) {
                 x = b;
-                m_iterations++;
-                auto t_end      = std::chrono::steady_clock::now();
-                m_time_elapsed += std::chrono::duration<double>(t_end - t_start).count();
                 return;
             }
 
