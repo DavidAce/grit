@@ -7,6 +7,7 @@ description: Use when writing commit messages for GRIT.
 
 Use a clear subject line and a short itemized body when the change needs explanation.
 
+- Split large disparate changes into a few coherent commits.
 - Mention durable developer-facing facts. Stay relevant.
 - Describe the final state of the code, not the chronology of the work.
 - Keep wording direct and concrete. No jargon.
