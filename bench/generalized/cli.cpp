@@ -151,9 +151,7 @@ namespace bench_generalized {
         app.add_option("--reps", opts.reps, "Number of benchmark repetitions")->check(CLI::PositiveNumber);
         app.add_option("--abstol", opts.abstol, "Absolute residual-norm convergence tolerance, or rescaled residual tolerance with --use-rescaled-rnorm-tolerance")->delimiter(',');
         app.add_option("--reltol", opts.reltol, "Stabilized-reference residual reduction tolerance");
-        app.add_option("--sat-eigval-threshold", opts.sat_eigval_threshold, "Stop if eigenvalue-history relative standard deviation is below this tolerance; 0 disables it");
-        app.add_option("--sat-rnorm-threshold", opts.sat_rnorm_threshold,
-                       "Stop if rescaled residual history standard deviation is below this fraction of the current rescaled residual; 0 disables it");
+        app.add_option("--quit-when-saturated", opts.quit_when_saturated, "Stop after confirmed Ritz and residual saturation");
         auto *inner_tol_opt = app.add_option("--inner-tol", opts.inner_tol, "Jacobi-Davidson inner tolerance, or a comma list")->delimiter(',');
         app.add_option("--ritz-stabilization-tolerance", opts.ritz_stabilization_tolerance, "Tolerance for residual-scaled Ritz-value tests")
             ->check(CLI::PositiveNumber);
@@ -197,8 +195,6 @@ namespace bench_generalized {
         if(opts.use_jd_b_only.empty()) throw std::runtime_error("--use-jd-b-only must not be empty");
         if(opts.use_adaptive_inner_tolerance.empty()) throw std::runtime_error("--use-adaptive-inner-tolerance must not be empty");
         if(opts.reltol < 0.0) throw std::runtime_error("--reltol must be non-negative");
-        if(opts.sat_eigval_threshold < 0.0) throw std::runtime_error("--sat-eigval-threshold must be non-negative");
-        if(opts.sat_rnorm_threshold < 0.0) throw std::runtime_error("--sat-rnorm-threshold must be non-negative");
         if(!std::isfinite(opts.ritz_stabilization_tolerance) || opts.ritz_stabilization_tolerance <= 0.0)
             throw std::runtime_error("--ritz-stabilization-tolerance must be finite and positive");
         if(opts.auto_probe_length <= 0) throw std::runtime_error("--auto-probe-length must be positive");
@@ -252,8 +248,7 @@ namespace bench_generalized {
                                             opts.reps                         = cli.reps;
                                             opts.abstol                          = abstol;
                                             opts.reltol           = cli.reltol;
-                                            opts.sat_eigval_threshold         = cli.sat_eigval_threshold;
-                                            opts.sat_rnorm_threshold          = cli.sat_rnorm_threshold;
+                                            opts.quit_when_saturated          = cli.quit_when_saturated;
                                             opts.inner_tol                    = inner_tol;
                                             opts.ritz_stabilization_tolerance = cli.ritz_stabilization_tolerance;
                                             opts.auto_probe_length             = cli.auto_probe_length;

@@ -159,10 +159,10 @@ namespace grit {
         [[nodiscard]] Eigen::Index saturation_count_max() const;
         /*! Current operator norm estimate used for rescaled residuals. */
         [[nodiscard]] RealScalar op_norm_estimate() const;
-        /*! Current projected-problem condition estimate. */
-        [[nodiscard]] RealScalar condition() const;
-        /*! Current eigenvalue sensitivity estimate. */
-        [[nodiscard]] RealScalar sensitivity() const;
+        /*! Euclidean condition estimate of A on the current search subspace. */
+        [[nodiscard]] RealScalar condition_a() const;
+        /*! Euclidean condition estimate of B on the current search subspace. */
+        [[nodiscard]] RealScalar condition_b() const;
         /*! Current Ritz gap estimate. */
         [[nodiscard]] RealScalar gap() const;
         /*! Whether all selected residual norms are below tolerance. */

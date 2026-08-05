@@ -63,8 +63,6 @@ namespace grit::algo {
         if(!std::isfinite(config.ritz_stabilization_tolerance) || config.ritz_stabilization_tolerance <= RealScalar{0}) {
             throw std::runtime_error("lobpcg config error: ritz_stabilization_tolerance must be finite and positive");
         }
-        if(config.sat_eigval_threshold < RealScalar{0}) throw std::runtime_error("lobpcg config error: sat_eigval_threshold must be nonnegative");
-        if(config.sat_rnorm_threshold < RealScalar{0}) throw std::runtime_error("lobpcg config error: sat_rnorm_threshold must be nonnegative");
         if(this->has_initial_guess()) {
             if(this->initial_guess().rows() != this->N) throw std::runtime_error("lobpcg config error: initial guess row count must match the operator size");
             if(this->initial_guess().cols() < 1) throw std::runtime_error("lobpcg config error: initial guess must have at least one column");
@@ -279,6 +277,7 @@ namespace grit::algo {
         }
         qBlocks = Q.cols() / b;
         if(qBlocks < 1) throw std::runtime_error("lobpcg build error: basis lost all complete blocks");
+        this->update_condition_numbers();
     }
 
     template<typename Scalar, grit::Form form_>

@@ -79,8 +79,7 @@ namespace grit::form {
             RealScalar                ritz_stabilization_tolerance = RealScalar{1e-3f}; /*!< Tolerance for residual-scaled Ritz-value tests. */
             Eigen::Index              max_iters                    = 100l;              /*!< Maximum outer iterations; negative means unlimited. */
             Eigen::Index              max_matvecs                  = -1l;               /*!< Maximum total matrix-vector products; negative means unlimited. */
-            RealScalar                sat_eigval_threshold         = RealScalar{0};     /*!< Eigenvalue saturation threshold for stopping; zero disables it. */
-            RealScalar                sat_rnorm_threshold          = RealScalar{0};     /*!< Residual saturation threshold for stopping; zero disables it. */
+            bool                      quit_when_saturated          = true;               /*!< Stop after Ritz values and residuals remain saturated. */
             spdlog::level::level_enum log_level                    = spdlog::level::warn; /*!< Solver log level. */
         };
 
@@ -150,8 +149,8 @@ namespace grit::form {
             VectorReal                absDiff;                                                         /*!< Absolute Ritz-value changes. */
             VectorReal                relDiff;                                                         /*!< Relative Ritz-value changes. */
             RealScalar                initVal          = std::numeric_limits<RealScalar>::quiet_NaN(); /*!< Initial Ritz value used for progress checks. */
-            RealScalar                condition        = RealScalar{1};                                /*!< Current projected-problem condition estimate. */
-            RealScalar                sensitivity      = RealScalar{1};                                /*!< Current eigenvalue sensitivity estimate. */
+            RealScalar                condition_a = RealScalar{1}; /*!< Euclidean condition estimate of A on the search subspace. */
+            RealScalar                condition_b = RealScalar{1}; /*!< Euclidean condition estimate of B on the search subspace. */
             RealScalar                op_norm_estimate = RealScalar{1};                                /*!< Current operator norm estimate. */
             RealScalar                gap              = std::numeric_limits<RealScalar>::infinity();  /*!< Current Ritz gap estimate. */
             std::vector<Eigen::Index> optIdx;                                   /*!< Indices of selected Ritz values in the projected problem. */
@@ -219,7 +218,7 @@ namespace grit::form {
             std::deque<VectorReal>    rNormsAbsHistory;                   /*!< Recent absolute residual-norm history. */
             std::deque<VectorReal>    eigVals_history;                    /*!< Recent Ritz-value history. */
             std::deque<Eigen::Index>  matvecs_history;                    /*!< Recent matrix-vector count history. */
-            size_t                    max_history_size        = 5;        /*!< Maximum stored history length. */
+            size_t                    max_history_size        = 12;       /*!< Maximum stored history length. */
             Eigen::Index              saturation_count_eigVal = 0;        /*!< Consecutive eigenvalue saturation count. */
             Eigen::Index              saturation_count_rNorm  = 0;        /*!< Consecutive residual saturation count. */
             Eigen::Index              saturation_count_max    = 10;       /*!< Saturation count required before stopping. */
@@ -557,6 +556,12 @@ namespace grit::form {
         void refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &AV, MatrixType &S, VectorReal &rNormsAbs);
         /*! Apply refined Rayleigh-Ritz extraction to the current selected vectors. */
         void refinedRitzVectors();
+        /*! Refresh selected Ritz products and residuals from direct operator applications. */
+        void refresh_direct_ritz_residuals();
+        /*! Return restart diagnostics from direct operator applications. */
+        std::string get_direct_ritz_diagnostics();
+        /*! Update Euclidean condition estimates for A and B on the current search space. */
+        void update_condition_numbers();
         /*! Prepare a solver run. */
         virtual void preamble();
         /*! Update status after an outer iteration. */
@@ -642,9 +647,10 @@ namespace grit::form {
          * Standard deviations over recent history.
          * @param v History values.
          * @param apply_log10 Apply log10 before measuring deviations.
+         * @param last_n Number of trailing entries to use; negative uses the complete history.
          * @return Standard deviations per selected Ritz pair.
          */
-        VectorReal get_standard_deviations(const std::deque<VectorReal> &v, bool apply_log10);
+        VectorReal get_standard_deviations(const std::deque<VectorReal> &v, bool apply_log10, Eigen::Index last_n = -1);
         /*!
          * Least-squares slopes over recent history.
          * @param v History values.

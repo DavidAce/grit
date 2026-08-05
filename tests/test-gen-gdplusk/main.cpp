@@ -547,6 +547,7 @@ TEST_CASE("generalized jacobi-davidson correction invokes preconditioner callbac
     solver.config.block_size               = 1;
     solver.config.ritz                     = grit::Ritz::SR;
     solver.config.max_iters                = 100;
+    solver.config.abstol                   = 1e-6;
     solver.config.inner_max_iters          = 20;
     solver.config.inner_tol                = 1e-8;
     solver.config.use_b_inner_product      = true;
@@ -593,7 +594,7 @@ TEST_CASE("generalized jacobi-davidson correction defaults to identity precondit
     solver.config.inner_tol                = 1e-8;
     solver.config.use_b_inner_product      = false;
     solver.config.residual_correction_type = grit::ResidualCorrectionType::JACOBI_DAVIDSON;
-    solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.ncv, 63));
+    solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.ncv, 62));
 
     REQUIRE_NOTHROW(solver.run());
     Eigen::GeneralizedSelfAdjointEigenSolver<Matrix> exact(A_matrix, B_matrix);
@@ -709,6 +710,27 @@ TEST_CASE("generalized auto Ritz progress compares the Bv perturbation with the 
         solver.config.ritz_stabilization_tolerance = 11e-3;
         solver.update_auto_residual_correction_state();
         REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
+    }
+}
+
+TEST_CASE("generalized condition numbers do not depend on the solver inner product") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = (Matrix(2, 2) << 2.0, 0.0, 0.0, 8.0).finished();
+    Matrix B_matrix = (Matrix(2, 2) << 1.0, 0.0, 0.0, 4.0).finished();
+    auto   A        = grit::matvec<double>(2, [&](auto const &X) { return A_matrix * X; });
+    auto   B        = grit::matvec<double>(2, [&](auto const &X) { return B_matrix * X; });
+
+    for(bool use_b_inner_product : {false, true}) {
+        grit::generalized::gdplusk<double> solver(A, B);
+        solver.config.use_b_inner_product = use_b_inner_product;
+        solver.Q                          = (Matrix(2, 2) << 2.0, 1.0, 0.0, 3.0).finished();
+        solver.AQ                         = A_matrix * solver.Q;
+        solver.BQ                         = B_matrix * solver.Q;
+
+        solver.update_condition_numbers();
+        REQUIRE(std::abs(solver.status.condition_a - 4.0) < 1e-12);
+        REQUIRE(std::abs(solver.status.condition_b - 4.0) < 1e-12);
     }
 }
 

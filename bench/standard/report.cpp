@@ -41,10 +41,9 @@ namespace bench_standard {
         std::println("sweep:");
         std::println("  algo: {}", algo_name(opts.algo));
         std::println("  cases: {} | reps: {} | seed: {} | seed per repetition: seed + rep - 1", cases, opts.reps, opts.seed);
-        std::println("  limits: max-iters {} | max-matvecs {} | abstol {} | reltol {:.4e} | rescaled rnorm tolerance: {} | eigval saturation {:.4e} | "
-                     "rnorm_rel saturation {:.4e}",
+        std::println("  limits: max-iters {} | max-matvecs {} | abstol {} | reltol {:.4e} | rescaled rnorm tolerance: {} | quit when saturated: {}",
                      limit_text(opts.max_iters), limit_text(opts.max_matvecs), fmt::format("{}", opts.abstol), opts.reltol,
-                     bool_text(opts.use_rescaled_rnorm_tolerance), opts.sat_eigval_threshold, opts.sat_rnorm_threshold);
+                     bool_text(opts.use_rescaled_rnorm_tolerance), bool_text(opts.quit_when_saturated));
         std::println("  sweep axes: ncv {} | block-size {} | ritz {}", fmt::format("{}", opts.ncv), fmt::format("{}", opts.block_size), opts.ritz);
         std::println("  sweep axes: abstol {}", fmt::format("{}", opts.abstol));
         std::println("  ritz stabilization tolerance: {:.3e}", opts.ritz_stabilization_tolerance);

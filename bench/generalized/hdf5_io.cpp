@@ -63,8 +63,7 @@ namespace bench_generalized {
             insert_field(h5type, "abstol", &Row::abstol);
             insert_field(h5type, "reltol", &Row::reltol);
             insert_field(h5type, "ritz_stabilization_tolerance", &Row::ritz_stabilization_tolerance);
-            insert_field(h5type, "sat_eigval_threshold", &Row::sat_eigval_threshold);
-            insert_field(h5type, "sat_rnorm_threshold", &Row::sat_rnorm_threshold);
+            insert_field(h5type, "quit_when_saturated", &Row::quit_when_saturated);
             insert_field(h5type, "ritz", &Row::ritz);
             insert_field(h5type, "use_refined_rayleigh_ritz", &Row::use_refined_rayleigh_ritz);
             insert_field(h5type, "use_b_inner_product", &Row::use_b_inner_product);
@@ -86,8 +85,8 @@ namespace bench_generalized {
             insert_field(h5type, "saturation_count_rnorm", &Row::saturation_count_rnorm);
             insert_field(h5type, "saturation_count_max", &Row::saturation_count_max);
             insert_field(h5type, "op_norm_estimate", &Row::op_norm_estimate);
-            insert_field(h5type, "condition", &Row::condition);
-            insert_field(h5type, "sensitivity", &Row::sensitivity);
+            insert_field(h5type, "condition_a", &Row::condition_a);
+            insert_field(h5type, "condition_b", &Row::condition_b);
             insert_field(h5type, "gap", &Row::gap);
             insert_field(h5type, "residual_converged", &Row::residual_converged);
             insert_field(h5type, "residual_below_gap", &Row::residual_below_gap);
@@ -279,8 +278,7 @@ namespace bench_generalized {
             file.writeAttribute(static_cast<bool>(snapshot.use_b_inner_product), group_path(algo), "use_b_inner_product");
             file.writeAttribute(snapshot.abstol, group_path(algo), "abstol");
             file.writeAttribute(snapshot.ritz_stabilization_tolerance, group_path(algo), "ritz_stabilization_tolerance");
-            file.writeAttribute(snapshot.sat_eigval_threshold, group_path(algo), "sat_eigval_threshold");
-            file.writeAttribute(snapshot.sat_rnorm_threshold, group_path(algo), "sat_rnorm_threshold");
+            file.writeAttribute(static_cast<bool>(snapshot.quit_when_saturated), group_path(algo), "quit_when_saturated");
             if constexpr(std::is_same_v<Result, GdpluskSolveResult>) {
                 file.writeAttribute(snapshot.max_basis_blocks, group_path(algo), "max_basis_blocks");
                 file.writeAttribute(to_string(snapshot.residual_correction), group_path(algo), "residual_correction");

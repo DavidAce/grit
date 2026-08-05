@@ -343,13 +343,13 @@ namespace grit {
     }
 
     template<typename Scalar_>
-    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::condition() const {
-        return internal::visit_solver_source(source, [](const auto &src) { return src.status.condition; });
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::condition_a() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.status.condition_a; });
     }
 
     template<typename Scalar_>
-    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::sensitivity() const {
-        return internal::visit_solver_source(source, [](const auto &src) { return src.status.sensitivity; });
+    typename ResultView<Scalar_>::RealScalar ResultView<Scalar_>::condition_b() const {
+        return internal::visit_solver_source(source, [](const auto &src) { return src.status.condition_b; });
     }
 
     template<typename Scalar_>

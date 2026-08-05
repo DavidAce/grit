@@ -76,8 +76,7 @@ namespace bench_standard {
             snapshot.abstol                       = opts.abstol;
             snapshot.reltol                       = opts.reltol;
             snapshot.ritz_stabilization_tolerance = opts.ritz_stabilization_tolerance;
-            snapshot.sat_eigval_threshold         = opts.sat_eigval_threshold;
-            snapshot.sat_rnorm_threshold          = opts.sat_rnorm_threshold;
+            snapshot.quit_when_saturated          = static_cast<uint8_t>(opts.quit_when_saturated);
             snapshot.ritz                         = fixed_string<16>(std::string(grit::enum2sv(opts.ritz)), "ritz");
             snapshot.use_refined_rayleigh_ritz    = static_cast<uint8_t>(opts.use_refined_rayleigh_ritz);
             snapshot.use_rescaled_rnorm_tolerance = static_cast<uint8_t>(opts.use_rescaled_rnorm_tolerance);
@@ -98,8 +97,8 @@ namespace bench_standard {
             snapshot.saturation_count_rnorm       = static_cast<int64_t>(view.saturation_count_rnorm());
             snapshot.saturation_count_max         = static_cast<int64_t>(view.saturation_count_max());
             snapshot.op_norm_estimate             = view.op_norm_estimate();
-            snapshot.condition                    = view.condition();
-            snapshot.sensitivity                  = view.sensitivity();
+            snapshot.condition_a                  = view.condition_a();
+            snapshot.condition_b                  = view.condition_b();
             snapshot.gap                          = view.gap();
             snapshot.residual_converged           = static_cast<uint8_t>(view.residual_converged());
             snapshot.residual_below_gap           = static_cast<uint8_t>(view.residual_below_gap());
@@ -213,8 +212,7 @@ namespace bench_standard {
             solver.config.abstol                       = opts.abstol;
             solver.config.reltol                       = opts.reltol;
             solver.config.ritz_stabilization_tolerance = opts.ritz_stabilization_tolerance;
-            solver.config.sat_eigval_threshold         = opts.sat_eigval_threshold;
-            solver.config.sat_rnorm_threshold          = opts.sat_rnorm_threshold;
+            solver.config.quit_when_saturated          = opts.quit_when_saturated;
             solver.config.log_level                    = opts.log_level;
 
             if constexpr(std::is_same_v<Solver, GdSolver>) {

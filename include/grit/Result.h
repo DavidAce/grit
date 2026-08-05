@@ -80,8 +80,8 @@ namespace grit {
             saturation_count_rnorm_               = view.saturation_count_rnorm();
             saturation_count_max_                 = view.saturation_count_max();
             op_norm_estimate_                     = view.op_norm_estimate();
-            condition_                            = view.condition();
-            sensitivity_                          = view.sensitivity();
+            condition_a_                          = view.condition_a();
+            condition_b_                          = view.condition_b();
             gap_                                  = view.gap();
             residual_converged_                   = view.residual_converged();
             residual_below_gap_                   = view.residual_below_gap();
@@ -221,10 +221,10 @@ namespace grit {
         [[nodiscard]] Eigen::Index saturation_count_max() const { return saturation_count_max_; }
         /*! Current operator norm estimate used for rescaled residuals. */
         [[nodiscard]] RealScalar op_norm_estimate() const { return op_norm_estimate_; }
-        /*! Current projected-problem condition estimate. */
-        [[nodiscard]] RealScalar condition() const { return condition_; }
-        /*! Current eigenvalue sensitivity estimate. */
-        [[nodiscard]] RealScalar sensitivity() const { return sensitivity_; }
+        /*! Euclidean condition estimate of A on the current search subspace. */
+        [[nodiscard]] RealScalar condition_a() const { return condition_a_; }
+        /*! Euclidean condition estimate of B on the current search subspace. */
+        [[nodiscard]] RealScalar condition_b() const { return condition_b_; }
         /*! Current Ritz gap estimate. */
         [[nodiscard]] RealScalar gap() const { return gap_; }
         /*! Whether all selected residual norms are below tolerance. */
@@ -305,8 +305,8 @@ namespace grit {
         Eigen::Index              saturation_count_rnorm_               = 0;
         Eigen::Index              saturation_count_max_                 = 0;
         RealScalar                op_norm_estimate_                     = RealScalar{0};
-        RealScalar                condition_                            = RealScalar{0};
-        RealScalar                sensitivity_                          = RealScalar{0};
+        RealScalar                condition_a_                          = RealScalar{0};
+        RealScalar                condition_b_                          = RealScalar{0};
         RealScalar                gap_                                  = RealScalar{0};
         bool                      residual_converged_                   = false;
         bool                      residual_below_gap_                   = false;

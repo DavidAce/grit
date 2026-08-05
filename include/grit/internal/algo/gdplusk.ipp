@@ -74,8 +74,6 @@ namespace grit::algo {
         if(config.max_matvecs == 0) throw std::runtime_error("gdplusk config error: max_matvecs must be positive or negative for unlimited");
         if(config.abstol <= RealScalar{0}) throw std::runtime_error("gdplusk config error: abstol must be positive");
         if(config.reltol < RealScalar{0}) throw std::runtime_error("gdplusk config error: reltol must be nonnegative");
-        if(config.sat_eigval_threshold < RealScalar{0}) throw std::runtime_error("gdplusk config error: sat_eigval_threshold must be nonnegative");
-        if(config.sat_rnorm_threshold < RealScalar{0}) throw std::runtime_error("gdplusk config error: sat_rnorm_threshold must be nonnegative");
         if(config.inner_tol <= RealScalar{0} || config.inner_tol > RealScalar{1}) {
             throw std::runtime_error("gdplusk config error: inner_tol must be in the interval (0, 1]");
         }
@@ -372,6 +370,7 @@ namespace grit::algo {
             }
 
             status.num_outer_iters_last_restart = status.outer_iter;
+            this->update_condition_numbers();
         };
 
         auto newCols = std::min<Eigen::Index>({Q.cols() + Q_new.cols(), N});

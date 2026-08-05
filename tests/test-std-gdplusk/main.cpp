@@ -339,6 +339,7 @@ TEST_CASE("standard history slopes use the requested trailing entries") {
 
     auto last_ten = solver.get_slopes(history, true, 10);
     REQUIRE((last_ten - slopes).norm() < 1e-12);
+    REQUIRE(std::abs(solver.get_standard_deviations(history, false, 2)(0) - std::sqrt(40.5)) < 1e-12);
     REQUIRE(solver.get_slopes(history, true, 0).array().isNaN().all());
     REQUIRE(solver.get_slopes(history, true, 1).array().isNaN().all());
 
@@ -803,26 +804,118 @@ TEST_CASE("standard gdplusk validates the AUTO maximum probes") {
     REQUIRE_THROWS_AS(solver.run(), std::runtime_error);
 }
 
-TEST_CASE("standard auto eigenvalue saturation is relative to average eigenvalue magnitude") {
-    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+TEST_CASE("standard saturation distinguishes noisy floors from directed progress") {
+    using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorReal = grit::form::base<double>::VectorReal;
 
     Matrix A_matrix = Matrix::Identity(4, 4);
     auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
 
     grit::standard::gdplusk<double> solver(A);
     solver.config.nev                  = 1;
-    solver.config.ncv                  = 4;
-    solver.config.block_size           = 1;
-    solver.config.sat_eigval_threshold = 1e-3;
-
-    using VectorReal         = grit::form::base<double>::VectorReal;
-    solver.status.outer_iter = 2;
-    solver.status.eigVal     = VectorReal::Constant(1, 1.0e6);
-    solver.status.eigVals_history.clear();
-    solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, 1.0e6));
-    solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, 1.0e6 + 5.0e2));
-
+    solver.config.abstol              = 1e-12;
+    solver.status.max_history_size    = 12;
+    solver.status.rNormsAbs           = VectorReal::Ones(1);
+    solver.status.eigVal              = VectorReal::Ones(1);
+    solver.V                          = Matrix::Identity(4, 1);
+    for(Eigen::Index i = 0; i < 12; ++i) {
+        solver.status.rNormsAbsHistory.emplace_back(VectorReal::Constant(1, i % 2 == 0 ? 1.0 : 1.2));
+        solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, 1.0 + (i % 2 == 0 ? -1e-8 : 1e-8)));
+    }
+    REQUIRE(solver.rNorms_have_saturated());
     REQUIRE(solver.eigVals_have_saturated());
+
+    solver.status.rNormsAbsHistory.clear();
+    for(Eigen::Index i = 0; i < 12; ++i) solver.status.rNormsAbsHistory.emplace_back(VectorReal::Constant(1, std::pow(0.5, i)));
+    REQUIRE_FALSE(solver.rNorms_have_saturated());
+
+    solver.status.eigVals_history.clear();
+    for(Eigen::Index i = 0; i < 12; ++i) solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, 1.0 + 0.1 * i));
+    REQUIRE_FALSE(solver.eigVals_have_saturated());
+}
+
+TEST_CASE("standard direct Ritz verification rejects cached convergence") {
+    using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorReal = grit::form::base<double>::VectorReal;
+
+    auto A = grit::matvec<double>(2, [](auto const &X) { return 2.0 * X; });
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev         = 1;
+    solver.V                  = Matrix::Identity(2, 1);
+    solver.AV                 = solver.V;
+    solver.BV                 = solver.V;
+    solver.S                  = Matrix::Zero(2, 1);
+    solver.status.eigVal      = VectorReal::Ones(1);
+    solver.status.rNormsAbs   = VectorReal::Zero(1);
+    solver.status.num_matvecs = 0;
+    solver.T_evals            = VectorReal::Ones(1);
+    solver.status.optIdx      = {0};
+    solver.config.max_iters   = -1;
+
+    static_cast<grit::form::base<double> &>(solver).updateStatus();
+    REQUIRE((solver.AV - 2.0 * solver.V).norm() < 1e-12);
+    REQUIRE(std::abs(solver.S.norm() - 1.0) < 1e-12);
+    REQUIRE(std::abs(solver.status.rNormsAbs(0) - 1.0) < 1e-12);
+    REQUIRE(solver.status.stopReason == grit::StopReason::none);
+    REQUIRE(solver.status.num_matvecs_total == 1);
+}
+
+TEST_CASE("standard condition numbers are basis independent") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = (Matrix(2, 2) << 2.0, 0.0, 0.0, 8.0).finished();
+    auto   A        = grit::matvec<double>(2, [&](auto const &X) { return A_matrix * X; });
+    grit::standard::gdplusk<double> solver(A);
+    solver.Q  = (Matrix(2, 2) << 2.0, 1.0, 0.0, 3.0).finished();
+    solver.AQ = A_matrix * solver.Q;
+    solver.BQ = solver.Q;
+
+    solver.update_condition_numbers();
+    REQUIRE(std::abs(solver.status.condition_a - 4.0) < 1e-12);
+    REQUIRE(std::abs(solver.status.condition_b - 1.0) < 1e-12);
+
+    solver.AQ.setZero();
+    solver.update_condition_numbers();
+    REQUIRE(std::isinf(solver.status.condition_a));
+}
+
+TEST_CASE("standard saturation stopping can be disabled without disabling its counters") {
+    using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorReal = grit::form::base<double>::VectorReal;
+
+    Matrix A_matrix = Matrix::Identity(2, 2);
+    auto   A        = grit::matvec<double>(2, [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev                        = 1;
+    solver.config.ncv                        = 3;
+    solver.config.block_size                 = 1;
+    solver.config.abstol                     = 1e-12;
+    solver.config.max_iters                  = -1;
+    solver.config.quit_when_saturated        = false;
+    solver.V                                 = Matrix::Identity(2, 1);
+    solver.AV                                = 2.0 * solver.V;
+    solver.BV                                = solver.V;
+    solver.S                                 = solver.V;
+    solver.Q                                 = solver.V;
+    solver.AQ                                = solver.AV;
+    solver.BQ                                = solver.V;
+    solver.T_evals                           = VectorReal::Ones(1);
+    solver.status.optIdx                     = {0};
+    solver.status.eigVal                     = VectorReal::Ones(1);
+    solver.status.rNormsAbs                  = VectorReal::Ones(1);
+    solver.status.max_history_size           = 12;
+    solver.status.saturation_count_eigVal    = solver.config.ncv - 1;
+    solver.status.saturation_count_rNorm     = solver.config.ncv - 1;
+    for(Eigen::Index i = 0; i < 11; ++i) {
+        solver.status.rNormsAbsHistory.emplace_back(VectorReal::Constant(1, i % 2 == 0 ? 1.0 : 1.2));
+        solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, 1.0 + (i % 2 == 0 ? -1e-8 : 1e-8)));
+    }
+
+    static_cast<grit::form::base<double> &>(solver).updateStatus();
+    REQUIRE(solver.status.stopReason == grit::StopReason::none);
+    REQUIRE(solver.status.saturation_count_rNorm == solver.config.ncv);
+    REQUIRE(solver.status.saturation_count_eigVal == solver.config.ncv);
 }
 
 int main(int argc, char **argv) {

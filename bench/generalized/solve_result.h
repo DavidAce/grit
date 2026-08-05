@@ -29,8 +29,7 @@ namespace bench_generalized {
         double                abstol                        = 0.0;
         double                reltol                        = 0.0;
         double                ritz_stabilization_tolerance  = 0.0;
-        double                sat_eigval_threshold          = 0.0;
-        double                sat_rnorm_threshold           = 0.0;
+        uint8_t               quit_when_saturated           = 1;
         double                inner_tol                     = 0.0;
         int32_t               auto_probe_length   = 0;
         int32_t               auto_max_probes     = 0;
@@ -87,8 +86,8 @@ namespace bench_generalized {
         int64_t               saturation_count_rnorm          = 0;
         int64_t               saturation_count_max            = 0;
         double                op_norm_estimate                = 0.0;
-        double                condition                       = 0.0;
-        double                sensitivity                     = 0.0;
+        double                condition_a                     = 0.0;
+        double                condition_b                     = 0.0;
         double                gap                             = std::numeric_limits<double>::infinity();
         uint8_t               residual_converged              = 0;
         uint8_t               residual_below_gap              = 0;
@@ -120,8 +119,7 @@ namespace bench_generalized {
         double             abstol               = 0.0;
         double             reltol               = 0.0;
         double             ritz_stabilization_tolerance = 0.0;
-        double             sat_eigval_threshold = 0.0;
-        double             sat_rnorm_threshold  = 0.0;
+        uint8_t            quit_when_saturated  = 1;
         h5pp::fstr_t<16>   ritz;
         uint8_t            use_refined_rayleigh_ritz    = 0;
         uint8_t            use_b_inner_product          = 0;
@@ -140,8 +138,8 @@ namespace bench_generalized {
         int64_t            precond_inner           = 0;
         int64_t            precond_total           = 0;
         double             op_norm_estimate        = 0.0;
-        double             condition               = 0.0;
-        double             sensitivity             = 0.0;
+        double             condition_a             = 0.0;
+        double             condition_b             = 0.0;
         double             gap                     = std::numeric_limits<double>::infinity();
         uint8_t            residual_converged      = 0;
         uint8_t            residual_below_gap      = 0;
@@ -181,8 +179,7 @@ namespace bench_generalized {
         double             abstol               = 0.0;
         double             reltol               = 0.0;
         double             ritz_stabilization_tolerance = 0.0;
-        double             sat_eigval_threshold = 0.0;
-        double             sat_rnorm_threshold  = 0.0;
+        uint8_t            quit_when_saturated  = 1;
         h5pp::fstr_t<16>   ritz;
         uint8_t            use_refined_rayleigh_ritz    = 0;
         uint8_t            use_b_inner_product          = 0;
@@ -201,8 +198,8 @@ namespace bench_generalized {
         int64_t            precond_inner           = 0;
         int64_t            precond_total           = 0;
         double             op_norm_estimate        = 0.0;
-        double             condition               = 0.0;
-        double             sensitivity             = 0.0;
+        double             condition_a             = 0.0;
+        double             condition_b             = 0.0;
         double             gap                     = std::numeric_limits<double>::infinity();
         uint8_t            residual_converged      = 0;
         uint8_t            residual_below_gap      = 0;

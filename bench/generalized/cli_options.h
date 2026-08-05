@@ -24,8 +24,7 @@ namespace bench_generalized {
         int                     reps              = 1;        /*!< Number of benchmark repetitions. */
         std::vector<double>     abstol            = {1e-12};  /*!< Absolute residual-norm convergence tolerance, or rescaled residual tolerance when enabled. */
         double                  reltol            = 0.0;      /*!< Stabilized-reference residual reduction tolerance; zero disables it. */
-        double                  sat_eigval_threshold = 0.0;   /*!< Eigenvalue saturation threshold for stopping; zero disables this stop. */
-        double                  sat_rnorm_threshold  = 0.0;   /*!< Rescaled residual saturation threshold for stopping; zero disables this stop. */
+        bool                    quit_when_saturated  = true;  /*!< Stop after confirmed Ritz and residual saturation. */
         std::vector<double>     inner_tol            = {0.1}; /*!< Inner correction tolerance, optionally as a sweep list. */
         double                  ritz_stabilization_tolerance = 1e-3; /*!< Tolerance for residual-scaled Ritz-value tests. */
         int                     auto_probe_length             = 3;    /*!< Outer iterations using the method tested by each AUTO probe. */
