@@ -694,13 +694,26 @@ namespace grit::form {
             std::string      outerPcMsg;
             std::string      innerPcMsg;
             std::string      totalPcMsg;
+            std::string      stop_reason_msg = enum2s(status.stopReason);
             if(outer_pc > 0) outerPcMsg = fmt::format(" pc={}", outer_pc);
             if(inner_pc > 0) innerPcMsg = fmt::format(" pc={}", inner_pc);
             if(status.num_precond_total > 0) totalPcMsg = fmt::format(" pc={}", status.num_precond_total);
+            if(has_flag(status.stopReason, StopReason::converged) && i < Eigen::Index{3}) {
+                RealScalar abstol_target = cfg().abstol;
+                if(cfg().use_rescaled_rnorm_tolerance) abstol_target *= rNormScale(i);
+                const RealScalar reltol_target =
+                    cfg().reltol > RealScalar{0} && i < status.rnorm_abs_reference.size() ? cfg().reltol * status.rnorm_abs_reference(i) : RealScalar{0};
+                if(reltol_target > abstol_target)
+                    stop_reason_msg += " (reltol)";
+                else if(reltol_target == abstol_target && reltol_target > RealScalar{0})
+                    stop_reason_msg += " (abstol+reltol)";
+                else
+                    stop_reason_msg += " (abstol)";
+            }
             log->info("grit finished: {} | nev={}/{} eigVal={:.16e} |rNorm|={:.3e} | "
                       "outer: it={} mv={}{} t={:.1e}s | inner: it={} mv={} op={}{} t={:.1e}s | "
                       "total: mv={}{} t={:.1e}s | |op|={:.2e} cond={:.2e} sens={:.2e}",
-                      enum2s(status.stopReason), i + 1, nev, status.eigVal(i), status.rNormsAbs(i), status.outer_iter, outer_mv, outerPcMsg, outer_t,
+                      stop_reason_msg, i + 1, nev, status.eigVal(i), status.rNormsAbs(i), status.outer_iter, outer_mv, outerPcMsg, outer_t,
                       status.num_inner_iters_total, inner_mv, status.num_operator_inner_total, innerPcMsg, inner_t, status.num_matvecs_total, totalPcMsg,
                       status.time_elapsed.get_time(), op_norm_estimate, status.condition, status.sensitivity);
         }

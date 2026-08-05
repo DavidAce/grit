@@ -5,8 +5,6 @@
 #include <Eigen/Eigenvalues>
 #include <format>
 #include <grit/grit.h>
-#include <spdlog/sinks/ostream_sink.h>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <unistd.h>

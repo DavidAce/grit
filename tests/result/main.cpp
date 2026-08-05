@@ -73,6 +73,32 @@ TEST_CASE("get_result returns an owning copy") {
     });
 }
 
+TEST_CASE("results contain only requested eigenpairs") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = Matrix::Identity(8, 8);
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    for(Eigen::Index nev = 1; nev <= 2; ++nev) {
+        grit::standard::gdplusk<double> solver(A);
+        solver.config.nev        = nev;
+        solver.config.ncv        = 8;
+        solver.config.block_size = 2 * nev;
+        solver.set_initial_guess(Matrix::Random(8, solver.config.block_size));
+        solver.run();
+
+        auto view = solver.get_result_view();
+        REQUIRE(view.eigVal().size() == nev);
+        REQUIRE(view.eigVecs().cols() == nev);
+        REQUIRE(view.rNormsAbs().size() == nev);
+
+        auto result = solver.get_result();
+        REQUIRE(result.eigVal().size() == nev);
+        REQUIRE(result.eigVecs().cols() == nev);
+        REQUIRE(result.rNormsAbs().size() == nev);
+    }
+}
+
 TEST_CASE("result view can be copied explicitly") {
     with_solved_identity_solver([](auto &solver) {
         auto view   = solver.get_result_view();

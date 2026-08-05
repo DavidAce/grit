@@ -26,6 +26,8 @@ namespace grit {
         using RealScalar = decltype(std::real(std::declval<Scalar>()));           /*!< Real scalar type used for Ritz values and norms. */
         using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>; /*!< Dense block of eigenvectors. */
         using VectorReal = Eigen::Matrix<RealScalar, Eigen::Dynamic, 1>;          /*!< Real-valued vector. */
+        using MatrixView = Eigen::Ref<const MatrixType>;                          /*!< Non-owning dense matrix view. */
+        using VectorView = Eigen::Ref<const VectorReal>;                          /*!< Non-owning real vector view. */
 
         ResultView() = default;
         /*!
@@ -38,9 +40,9 @@ namespace grit {
         /*! Selected Ritz values. */
         [[nodiscard]] const VectorReal &eigVal() const;
         /*! Selected Ritz vectors in columns. */
-        [[nodiscard]] const MatrixType &eigVecs() const;
+        [[nodiscard]] MatrixView eigVecs() const;
         /*! Residual norms for the selected Ritz pairs. */
-        [[nodiscard]] const VectorReal &rNormsAbs() const;
+        [[nodiscard]] VectorView rNormsAbs() const;
         /*! Reason why the solver stopped. */
         [[nodiscard]] StopReason stopReason() const;
         /*! Current outer iteration count. */

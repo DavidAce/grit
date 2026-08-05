@@ -33,13 +33,17 @@ namespace grit {
     }
 
     template<typename Scalar_>
-    const typename ResultView<Scalar_>::MatrixType &ResultView<Scalar_>::eigVecs() const {
-        return internal::visit_solver_source(source, [](const auto &src) -> const MatrixType & { return src.V; });
+    typename ResultView<Scalar_>::MatrixView ResultView<Scalar_>::eigVecs() const {
+        return internal::visit_solver_source(source, [](const auto &src) -> MatrixView {
+            return MatrixView(src.V.leftCols(std::min(src.status.eigVal.size(), src.V.cols())));
+        });
     }
 
     template<typename Scalar_>
-    const typename ResultView<Scalar_>::VectorReal &ResultView<Scalar_>::rNormsAbs() const {
-        return internal::visit_solver_source(source, [](const auto &src) -> const VectorReal & { return src.status.rNormsAbs; });
+    typename ResultView<Scalar_>::VectorView ResultView<Scalar_>::rNormsAbs() const {
+        return internal::visit_solver_source(source, [](const auto &src) -> VectorView {
+            return VectorView(src.status.rNormsAbs.topRows(std::min(src.status.eigVal.size(), src.status.rNormsAbs.size())));
+        });
     }
 
     template<typename Scalar_>
