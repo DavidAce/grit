@@ -627,6 +627,7 @@ TEST_CASE("generalized gdplusk handles small ncv restart without invalid input")
     solver.config.ritz                     = grit::Ritz::SR;
     solver.config.max_iters                = 200;
     solver.config.abstol                   = 1e-8;
+    solver.config.quit_when_saturated      = false;
     solver.config.use_b_inner_product      = true;
     solver.config.residual_correction_type = grit::ResidualCorrectionType::CHEAP_OLSEN;
     solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.ncv, 70));

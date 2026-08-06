@@ -89,6 +89,7 @@ TEST_CASE("generalized lobpcg handles nos4 restart block search") {
     solver.config.ritz                      = grit::Ritz::SR;
     solver.config.max_iters                 = 1000;
     solver.config.abstol                    = 1e-9;
+    solver.config.quit_when_saturated       = false;
     solver.config.use_b_inner_product       = true;
     solver.set_initial_guess(grit_test::seeded_initial_guess<double>(A_matrix.rows(), solver.config.block_size, 111));
     solver.run();

@@ -80,6 +80,7 @@ namespace grit::form {
             Eigen::Index              max_iters                    = 100l;              /*!< Maximum outer iterations; negative means unlimited. */
             Eigen::Index              max_matvecs                  = -1l;               /*!< Maximum total matrix-vector products; negative means unlimited. */
             bool                      quit_when_saturated          = true;               /*!< Stop after Ritz values and residuals remain saturated. */
+            Eigen::Index              saturation_count_max        = 5;                  /*!< Consecutive saturated outer iterations required before stopping. */
             spdlog::level::level_enum log_level                    = spdlog::level::warn; /*!< Solver log level. */
         };
 
@@ -221,7 +222,7 @@ namespace grit::form {
             size_t                    max_history_size        = 12;       /*!< Maximum stored history length. */
             Eigen::Index              saturation_count_eigVal = 0;        /*!< Consecutive eigenvalue saturation count. */
             Eigen::Index              saturation_count_rNorm  = 0;        /*!< Consecutive residual saturation count. */
-            Eigen::Index              saturation_count_max    = 10;       /*!< Saturation count required before stopping. */
+            Eigen::Index              saturation_count_max    = 5;        /*!< Saturation count required before stopping. */
             std::vector<std::string>  stopMessage             = {};       /*!< Human-readable stop messages. */
             StopReason                stopReason              = StopReason::none; /*!< Solver stop reason. */
             Ritz                      ritz_internal           = Ritz::NONE;       /*!< Effective Ritz selector used internally. */

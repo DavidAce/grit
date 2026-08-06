@@ -818,7 +818,14 @@ TEST_CASE("standard saturation distinguishes noisy floors from directed progress
     solver.status.rNormsAbs           = VectorReal::Ones(1);
     solver.status.eigVal              = VectorReal::Ones(1);
     solver.V                          = Matrix::Identity(4, 1);
-    for(Eigen::Index i = 0; i < 12; ++i) {
+    for(Eigen::Index i = 0; i < 3; ++i) {
+        solver.status.rNormsAbsHistory.emplace_back(VectorReal::Constant(1, i % 2 == 0 ? 1.0 : 1.2));
+        solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, 1.0 + (i % 2 == 0 ? -1e-8 : 1e-8)));
+    }
+    REQUIRE(solver.rNorms_have_saturated());
+    REQUIRE(solver.eigVals_have_saturated());
+
+    for(Eigen::Index i = 3; i < 12; ++i) {
         solver.status.rNormsAbsHistory.emplace_back(VectorReal::Constant(1, i % 2 == 0 ? 1.0 : 1.2));
         solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, 1.0 + (i % 2 == 0 ? -1e-8 : 1e-8)));
     }
@@ -832,6 +839,19 @@ TEST_CASE("standard saturation distinguishes noisy floors from directed progress
     solver.status.eigVals_history.clear();
     for(Eigen::Index i = 0; i < 12; ++i) solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, 1.0 + 0.1 * i));
     REQUIRE_FALSE(solver.eigVals_have_saturated());
+
+    solver.status.rNormsAbsHistory.clear();
+    solver.status.eigVals_history.clear();
+    for(Eigen::Index i = 0; i < 7; ++i) {
+        solver.status.rNormsAbsHistory.emplace_back(VectorReal::Constant(1, std::pow(0.5, i)));
+        solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, 1.0 + 0.1 * i));
+    }
+    for(Eigen::Index i = 0; i < 5; ++i) {
+        solver.status.rNormsAbsHistory.emplace_back(VectorReal::Constant(1, i % 2 == 0 ? 0.016 : 0.018));
+        solver.status.eigVals_history.emplace_back(VectorReal::Constant(1, 1.7 + (i % 2 == 0 ? -1e-8 : 1e-8)));
+    }
+    REQUIRE(solver.rNorms_have_saturated());
+    REQUIRE(solver.eigVals_have_saturated());
 }
 
 TEST_CASE("standard direct Ritz verification rejects cached convergence") {
