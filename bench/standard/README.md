@@ -117,47 +117,47 @@ The following options are `gdplusk`-only and will be rejected for `lanczos` and
 - `--use-adaptive-inner-tolerance`
 - all `--auto-*` options
 
-With `--reltol` enabled, GRIT does not use the residual of the initial guess as its reference. Instead, it waits until each
-Ritz value stabilizes around a candidate eigenpair and then records that pair's current residual norm. The relative target
-is `reltol * reference residual`, combined with the absolute target from `--abstol`. The recorded reference remains fixed
-while the Ritz value stays stable. If the Ritz value becomes unstable, GRIT clears the reference and records a new one when
-the Ritz value stabilizes again. Before a reference exists, only `--abstol` applies.
+With `--reltol` enabled, GRIT does not use the residual of the initial guess as its reference. Instead, it waits until
+the selected Ritz values saturate around candidate eigenpairs and then records their current residual norms. The
+relative target is `reltol * reference residual`, combined with the absolute target from `--abstol`. If the Ritz values
+start progressing again, GRIT clears the references and records new ones when they saturate. Before a reference exists,
+only `--abstol` applies.
 
-The numerical Ritz-stability test starts after three history entries and uses the available rolling history, which retains
-up to five entries. For pair `i`, it compares
+The Ritz-saturation test starts after five history entries and checks every trailing history range down to the latest
+five entries. The regression uses cumulative matrix-vector products as its coordinate, so its slope measures Ritz-value
+drift per matvec. For pair `i`, the absolute drift-per-matvec threshold is
 
 ```text
-stddev(lambda_i) * norm(v_i) / norm(r_i)
+max(ritz_saturation_tolerance * abs(lambda_i), epsilon * max(abs(T_evals)))
 ```
 
-with `--ritz-stabilization-tolerance`. This option controls Ritz-value tests; it is not a residual-norm stability tolerance.
+The Ritz value is progressing when the absolute fitted slope per matvec exceeds this threshold. The default saturation
+tolerance is `1e-5`.
 
 ## AUTO Residual Correction
 
-`--residual-correction=auto` starts with cheap Olsen. After every outer iteration with at least three Ritz-history entries,
-AUTO fits a line to each Ritz value over the available rolling history. Let `b_i` be the fitted slope and `se_i` its standard
-error. Pair `i` is still moving only when both
+`--residual-correction=auto` starts with cheap Olsen. Once at least five Ritz-history entries are available, AUTO uses
+the same Ritz-saturation test as solver termination. Cheap Olsen continues while any unconverged pair is still
+progressing and switches to Jacobi-Davidson after `max(1, saturation_count_max / 2)` consecutive saturated iterations.
+The absolute slope makes this independent of the selected Ritz mode.
 
-```text
-abs(b_i) > 2 * se_i
-abs(b_i) * norm(v_i) / norm(r_i) > ritz_stabilization_tolerance
-```
-
-The first condition rejects undirected noise. The second rejects coherent motion that is too small to matter relative to the
-current residual. Cheap Olsen continues while any unconverged pair is still moving; otherwise AUTO switches to
-Jacobi-Davidson. The absolute slope makes this independent of the selected Ritz mode.
+Saturation counters continue across correction changes. If Jacobi-Davidson restores progress, the corresponding detector
+resets its counter normally.
 
 While JD is active, AUTO checks whether JD is still reducing each unconverged residual. For each Ritz pair, it fits a
-least-squares line to the retained history of `log10(norm(r_i))`, using only consecutive JD iterations and at most the
-configured history size. At least two JD history entries are required. A negative slope means that the residual is
-decreasing, so JD continues. A zero or positive slope for any unconverged pair starts a probe of
+least-squares line to the retained history of `log10(norm(r_i))`, using cumulative matrix-vector products from
+consecutive JD iterations and at most the configured history size. At least two JD history entries are required. A
+negative slope means that the residual is decreasing, so JD continues. A zero or positive slope for any unconverged pair
+starts a probe of
 `--auto-probe-length` consecutive cheap Olsen iterations.
 
-`--auto-max-probes` limits the probes performed while the Ritz values remain in the same region. Zero disables probes and
-`-1` allows unlimited probes. After a probe, AUTO applies the same slope test used for the initial switch. It returns to JD
-if no unconverged Ritz value is still moving. Otherwise, it continues with cheap Olsen and resets the probe count.
+`--auto-max-probes` limits the probes performed while the Ritz values remain in the same region. Zero disables probes
+and
+`-1` allows unlimited probes. After the minimum probe length, AUTO applies the same saturation test used for the initial
+switch. A saturated probe is extended until the AUTO switch count is reached; a progressing probe continues with cheap
+Olsen and resets the probe count.
 
-The AUTO controls and defaults are `--ritz-stabilization-tolerance=1e-3`, `--auto-probe-length=3`, and
+The AUTO controls and defaults are `--ritz-saturation-tolerance=1e-5`, `--auto-probe-length=5`, and
 `--auto-max-probes=1`.
 
 ## Warm Start

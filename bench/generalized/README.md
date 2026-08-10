@@ -85,33 +85,41 @@ GD+K also supports sweeps over residual correction and inner-solver controls:
 --residual-correction=[cheap-olsen,jacobi-davidson,auto]
 --inner-tol=[1e-1,1e-3]
 --inner-max-iters=[100,1000]
---ritz-stabilization-tolerance=1e-3
---auto-probe-length=3
+--ritz-saturation-tolerance=1e-5
+--auto-probe-length=5
 --auto-max-probes=1
 ```
 
-With `--reltol` enabled, GRIT does not use the residual of the initial guess as its reference. For each requested pair, it
-waits until the Ritz value stabilizes and then records the current residual norm. The relative target is
-`reltol * reference residual`, combined with the absolute target from `--abstol`. The reference remains fixed while the
-Ritz value stays stable and is cleared if the Ritz value becomes unstable. Before a reference exists, only `--abstol`
+With `--reltol` enabled, GRIT does not use the residual of the initial guess as its reference. It waits until the
+selected Ritz values saturate and then records their current residual norms. The relative target is
+`reltol * reference residual`, combined with the absolute target from `--abstol`. If the Ritz values start progressing
+again, GRIT clears the references and records new ones when they saturate. Before a reference exists, only `--abstol`
 applies.
 
-The numerical Ritz-stability test for the relative reference starts after three history entries. It compares
-`stddev(lambda_i) * norm(B * v_i) / norm(r_i)` with `--ritz-stabilization-tolerance`. The residual norm supplies the scale
-for the Ritz-value comparison; this option does not test residual-norm stability.
+The Ritz-saturation test starts after five history entries and checks every trailing history range down to the latest
+five entries. The regression uses cumulative matrix-vector products as its coordinate, so its slope measures Ritz-value
+drift per matvec. For pair `i`, the absolute drift-per-matvec threshold is
 
-AUTO uses a separate directional test over the same available rolling history. It fits a slope `b_i` and standard error
-`se_i` to each Ritz value. Pair `i` is still moving only when `abs(b_i) > 2 * se_i` and
-`abs(b_i) * norm(B * v_i) / norm(r_i) > ritz_stabilization_tolerance`. Cheap Olsen continues while any unconverged pair is
-still moving; otherwise AUTO switches to JD. This recognizes noisy plateaus without treating very slow drift as useful
-Cheap Olsen progress.
+```text
+max(ritz_saturation_tolerance * abs(lambda_i), epsilon * max(1, kappa(B)) * max(abs(T_evals)))
+```
 
-While JD is active, AUTO fits a least-squares line to each unconverged pair's retained history of `log10(norm(r_i))`. The
-fit uses only consecutive JD iterations, up to the configured history size, and requires at least two entries. JD continues
-while the slopes are negative. A zero or positive slope for any unconverged pair starts
-`--auto-probe-length` cheap Olsen iterations, subject to `--auto-max-probes`. After the probe, AUTO applies the same Ritz-slope
-test used for the initial switch. It returns to JD if no unconverged Ritz value is still moving. Otherwise, it continues
-with cheap Olsen and resets the probe count.
+Non-finite condition estimates fall back to one. The Ritz value is progressing when the absolute fitted slope per matvec
+exceeds this threshold. The default saturation tolerance is `1e-5`.
+
+AUTO uses this same Ritz-saturation test. Cheap Olsen continues while any unconverged pair is still progressing and
+switches to JD after `max(1, saturation_count_max / 2)` consecutive saturated iterations.
+
+Saturation counters continue across correction changes. If JD restores progress, the corresponding detector resets its
+counter normally.
+
+While JD is active, AUTO fits a least-squares line to each unconverged pair's retained history of `log10(norm(r_i))`.
+The fit uses cumulative matrix-vector products from consecutive JD iterations, up to the configured history size, and
+requires at least two entries. JD continues while the slopes are negative. A zero or positive slope for any unconverged
+pair starts
+`--auto-probe-length` cheap Olsen iterations, subject to `--auto-max-probes`. After the minimum probe length, AUTO
+applies the same Ritz-saturation test used for the initial switch. A saturated probe is extended until the AUTO switch
+count is reached; a progressing probe continues with cheap Olsen and resets the probe count.
 
 ## Warm Start
 
