@@ -120,8 +120,8 @@ TEST_CASE("owning result supports downstream eigenvector transforms") {
         auto view   = solver.get_result_view();
         auto result = solver.get_result();
 
-        Matrix basis = Matrix::Identity(result.eigVecs().rows(), result.eigVecs().rows());
-        basis(0, 0)  = -1.0;
+        Matrix basis     = Matrix::Identity(result.eigVecs().rows(), result.eigVecs().rows());
+        basis(0, 0)      = -1.0;
         result.eigVecs() = basis * result.eigVecs();
 
         REQUIRE(result.eigVal()(0) == Approx(view.eigVal()(0)));

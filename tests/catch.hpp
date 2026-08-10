@@ -3845,7 +3845,7 @@ namespace Catch {
 
     // end catch_capture_matchers.h
     #endif
-// start catch_generators.hpp
+    // start catch_generators.hpp
 
     // start catch_interfaces_generatortracker.h
 
@@ -7504,7 +7504,7 @@ namespace Catch {
 } // namespace Catch
 
     #endif // CATCH_CONFIG_ENABLE_BENCHMARKING
-// end catch_stats.cpp
+           // end catch_stats.cpp
     // start catch_approx.cpp
 
     #include <cmath>
@@ -10218,7 +10218,7 @@ namespace Catch {
 } // end namespace Catch
 
     #endif // CATCH_CONFIG_POSIX_SIGNALS
-// end catch_fatal_condition.cpp
+           // end catch_fatal_condition.cpp
     // start catch_generators.cpp
 
     #include <limits>
@@ -11144,7 +11144,7 @@ namespace Catch {
 } // end namespace Catch
 
     #endif // TWOBLUECUBES_CATCH_OUTPUT_REDIRECT_H
-  // end catch_output_redirect.h
+           // end catch_output_redirect.h
     #include <cstdio>
     #include <cstring>
     #include <fstream>

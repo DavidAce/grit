@@ -76,7 +76,7 @@ namespace bench_generalized {
             snapshot.max_matvecs                  = static_cast<int32_t>(opts.max_matvecs);
             snapshot.abstol                       = opts.abstol;
             snapshot.reltol                       = opts.reltol;
-            snapshot.ritz_stabilization_tolerance = opts.ritz_stabilization_tolerance;
+            snapshot.ritz_saturation_tolerance    = opts.ritz_saturation_tolerance;
             snapshot.quit_when_saturated          = static_cast<uint8_t>(opts.quit_when_saturated);
             snapshot.ritz                         = fixed_string<16>(std::string(grit::enum2sv(opts.ritz)), "ritz");
             snapshot.use_refined_rayleigh_ritz    = static_cast<uint8_t>(opts.use_refined_rayleigh_ritz);
@@ -113,8 +113,8 @@ namespace bench_generalized {
             snapshot.max_basis_blocks                 = static_cast<int32_t>(opts.ncv / opts.block_size);
             snapshot.inner_max_iters                  = static_cast<int32_t>(solver.config.inner_max_iters);
             snapshot.inner_tol                        = solver.config.inner_tol;
-            snapshot.auto_probe_length   = static_cast<int32_t>(opts.auto_probe_length);
-            snapshot.auto_max_probes     = static_cast<int32_t>(opts.auto_max_probes);
+            snapshot.auto_probe_length                = static_cast<int32_t>(opts.auto_probe_length);
+            snapshot.auto_max_probes                  = static_cast<int32_t>(opts.auto_max_probes);
             snapshot.residual_correction              = fixed_string<32>(residual_correction_name(opts.residual_correction), "residual_correction");
             snapshot.use_jd_b_only                    = static_cast<uint8_t>(opts.use_jd_b_only);
             snapshot.use_adaptive_inner_tolerance     = static_cast<uint8_t>(opts.use_adaptive_inner_tolerance);
@@ -144,10 +144,10 @@ namespace bench_generalized {
             snapshot.time_status_update               = view.time_status_update();
             snapshot.first_cheap_olsen_to_jd_outer_iter =
                 view.cheap_olsen_to_jd_switch_outer_iters().empty() ? int64_t{-1} : static_cast<int64_t>(view.cheap_olsen_to_jd_switch_outer_iters().front());
-            snapshot.auto_cheap_olsen_iters          = static_cast<int64_t>(view.auto_cheap_olsen_iters());
-            snapshot.auto_jd_outer_iters_since_probe = static_cast<int64_t>(view.auto_jd_outer_iters_since_probe());
-            snapshot.residual_correction_active      = fixed_string<32>(view.residual_correction_active_name(), "residual_correction_active");
-            snapshot.residual_correction_iteration   = fixed_string<32>(view.residual_correction_iteration_name(), "residual_correction_iteration");
+            snapshot.auto_cheap_olsen_iters               = static_cast<int64_t>(view.auto_cheap_olsen_iters());
+            snapshot.auto_jd_outer_iters_since_probe      = static_cast<int64_t>(view.auto_jd_outer_iters_since_probe());
+            snapshot.residual_correction_active           = fixed_string<32>(view.residual_correction_active_name(), "residual_correction_active");
+            snapshot.residual_correction_iteration        = fixed_string<32>(view.residual_correction_iteration_name(), "residual_correction_iteration");
             snapshot.num_cheap_olsen_to_jd_switches       = static_cast<int64_t>(view.cheap_olsen_to_jd_switch_outer_iters().size());
             snapshot.num_jd_to_cheap_olsen_switches       = static_cast<int64_t>(view.jd_to_cheap_olsen_switch_outer_iters().size());
             snapshot.cheap_olsen_to_jd_switch_outer_iters = to_i64_vector(view.cheap_olsen_to_jd_switch_outer_iters());
@@ -216,18 +216,18 @@ namespace bench_generalized {
             solver.config.max_matvecs                  = opts.max_matvecs;
             solver.config.abstol                       = opts.abstol;
             solver.config.reltol                       = opts.reltol;
-            solver.config.ritz_stabilization_tolerance = opts.ritz_stabilization_tolerance;
+            solver.config.ritz_saturation_tolerance    = opts.ritz_saturation_tolerance;
             solver.config.quit_when_saturated          = opts.quit_when_saturated;
             solver.config.log_level                    = opts.log_level;
 
             if constexpr(std::is_same_v<Solver, GdSolver>) {
-                solver.config.residual_correction_type      = opts.residual_correction;
-                solver.config.use_jd_b_only                 = opts.use_jd_b_only;
-                solver.config.use_adaptive_inner_tolerance  = opts.use_adaptive_inner_tolerance;
-                solver.config.inner_max_iters               = opts.inner_max_iters;
-                solver.config.inner_tol                     = opts.inner_tol;
-                solver.config.auto_probe_length   = opts.auto_probe_length;
-                solver.config.auto_max_probes     = opts.auto_max_probes;
+                solver.config.residual_correction_type     = opts.residual_correction;
+                solver.config.use_jd_b_only                = opts.use_jd_b_only;
+                solver.config.use_adaptive_inner_tolerance = opts.use_adaptive_inner_tolerance;
+                solver.config.inner_max_iters              = opts.inner_max_iters;
+                solver.config.inner_tol                    = opts.inner_tol;
+                solver.config.auto_probe_length            = opts.auto_probe_length;
+                solver.config.auto_max_probes              = opts.auto_max_probes;
             } else if constexpr(std::is_same_v<Solver, LanczosSolver>) {
                 solver.config.maxRetainBlocks = opts.maxRetainBlocks;
             }

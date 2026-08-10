@@ -149,10 +149,11 @@ namespace bench_standard {
         app.add_option("--reltol", opts.reltol, "Stabilized-reference residual reduction tolerance");
         app.add_option("--quit-when-saturated", opts.quit_when_saturated, "Stop after confirmed Ritz and residual saturation");
         auto *inner_tol_opt = app.add_option("--inner-tol", opts.inner_tol, "Jacobi-Davidson inner tolerance, or a comma list")->delimiter(',');
-        app.add_option("--ritz-stabilization-tolerance", opts.ritz_stabilization_tolerance, "Tolerance for residual-scaled Ritz-value tests")
+        app.add_option("--ritz-saturation-tolerance", opts.ritz_saturation_tolerance, "Relative Ritz-value drift threshold per matvec")
             ->check(CLI::PositiveNumber);
         auto *auto_probe_length_opt =
-            app.add_option("--auto-probe-length", opts.auto_probe_length, "Outer iterations using the method tested by each AUTO probe")->check(CLI::PositiveNumber);
+            app.add_option("--auto-probe-length", opts.auto_probe_length, "Minimum outer iterations using the method tested by each AUTO probe")
+                ->check(CLI::PositiveNumber);
         auto *auto_max_probes_opt =
             app.add_option("--auto-max-probes", opts.auto_max_probes, "Maximum AUTO probes while Ritz values remain stabilized; 0 disables and -1 allows unlimited probes");
         app.add_option("--seed", opts.seed, "Random seed for deterministic initial guess");
@@ -186,9 +187,9 @@ namespace bench_standard {
         if(opts.use_refined_rayleigh_ritz.empty()) throw std::runtime_error("--refined-rayleigh-ritz must not be empty");
         if(opts.use_adaptive_inner_tolerance.empty()) throw std::runtime_error("--use-adaptive-inner-tolerance must not be empty");
         if(opts.reltol < 0.0) throw std::runtime_error("--reltol must be non-negative");
-        if(!std::isfinite(opts.ritz_stabilization_tolerance) || opts.ritz_stabilization_tolerance <= 0.0)
-            throw std::runtime_error("--ritz-stabilization-tolerance must be finite and positive");
-        if(opts.auto_probe_length <= 0) throw std::runtime_error("--auto-probe-length must be positive");
+        if(!std::isfinite(opts.ritz_saturation_tolerance) || opts.ritz_saturation_tolerance <= 0.0)
+            throw std::runtime_error("--ritz-saturation-tolerance must be finite and positive");
+        if(opts.auto_probe_length < 5) throw std::runtime_error("--auto-probe-length must be at least 5");
         if(opts.auto_max_probes < -1) throw std::runtime_error("--auto-max-probes must be at least -1");
         validate_algo_specific_options(opts);
     }
@@ -236,7 +237,7 @@ namespace bench_standard {
                                             opts.reltol           = cli.reltol;
                                             opts.quit_when_saturated          = cli.quit_when_saturated;
                                             opts.inner_tol                    = inner_tol;
-                                            opts.ritz_stabilization_tolerance = cli.ritz_stabilization_tolerance;
+                                            opts.ritz_saturation_tolerance = cli.ritz_saturation_tolerance;
                                             opts.auto_probe_length             = cli.auto_probe_length;
                                             opts.auto_max_probes               = cli.auto_max_probes;
                                             opts.seed                         = cli.seed;

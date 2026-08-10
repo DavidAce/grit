@@ -159,14 +159,13 @@ namespace grit::form {
 
     template<typename Scalar, grit::Form form_>
     typename base<Scalar, form_>::RealScalar base<Scalar, form_>::get_rNorms_log10_change_per_matvec() {
-        if(status.rNormsAbsHistory.size() < 2ul) return RealScalar{0};
-        auto size = status.rNormsAbsHistory.size();
-        assert(size == status.matvecs_history.size());
-
-        auto rNorm_change = status.rNormsAbsHistory[size - 1].array() / status.rNormsAbsHistory[size - 2].array();
-        auto sum_matvecs  = status.matvecs_history[size - 1] + status.matvecs_history[size - 2];
-        if(sum_matvecs <= 0) return RealScalar{0};
-        return std::log10(rNorm_change.minCoeff()) / static_cast<RealScalar>(sum_matvecs);
+        if(status.history.size() < 2ul) return RealScalar{0};
+        const auto &prev          = status.history[status.history.size() - 2];
+        const auto &curr          = status.history.back();
+        auto        rnorm_change  = curr.rnorms.array() / prev.rnorms.array();
+        auto        delta_matvecs = curr.matvecs - prev.matvecs;
+        if(delta_matvecs <= 0) return RealScalar{0};
+        return std::log10(rnorm_change.minCoeff()) / static_cast<RealScalar>(delta_matvecs);
     }
 
     template<typename Scalar, grit::Form form_>
@@ -421,38 +420,28 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
-    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::get_slopes(const std::deque<VectorReal> &v, bool apply_log10, Eigen::Index last_n,
+    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::fit_slopes(const MatrixReal &values, const VectorReal &coordinates,
                                                                              VectorReal *slope_errors) {
-        if(v.empty()) {
-            if(slope_errors) slope_errors->resize(0);
-            return {};
-        }
-        auto rows = static_cast<Eigen::Index>(v.front().size());
-        auto cols = last_n < 0 ? static_cast<Eigen::Index>(v.size()) : std::min(last_n, static_cast<Eigen::Index>(v.size()));
+        auto rows = values.rows();
+        auto cols = values.cols();
+        if(coordinates.size() != cols) throw std::runtime_error("values and coordinates have unequal sizes");
         if(cols < 2) {
             if(slope_errors) *slope_errors = VectorReal::Constant(rows, std::numeric_limits<RealScalar>::quiet_NaN());
             return VectorReal::Constant(rows, std::numeric_limits<RealScalar>::quiet_NaN());
         }
 
-        MatrixReal matrix(rows, cols);
-        VectorReal x  = VectorReal::LinSpaced(cols, RealScalar{0}, static_cast<RealScalar>(cols - 1));
-        x.array()    -= x.mean();
-        auto offset   = static_cast<Eigen::Index>(v.size()) - cols;
-        for(Eigen::Index idx = 0; idx < cols; ++idx) {
-            const auto &history = v[static_cast<typename std::deque<VectorReal>::size_type>(offset + idx)];
-            if(history.size() < rows) throw std::runtime_error("history has unequal size vectors");
-            if(apply_log10)
-                matrix.col(idx) = history.topRows(rows).array().log10();
-            else
-                matrix.col(idx) = history.topRows(rows);
-        }
+        VectorReal x              = coordinates.array() - coordinates.mean();
         auto       x_squared_norm = x.squaredNorm();
-        VectorReal slopes         = matrix * x / x_squared_norm;
+        if(x_squared_norm <= RealScalar{0}) {
+            if(slope_errors) *slope_errors = VectorReal::Constant(rows, std::numeric_limits<RealScalar>::quiet_NaN());
+            return VectorReal::Constant(rows, std::numeric_limits<RealScalar>::quiet_NaN());
+        }
+        VectorReal slopes = values * x / x_squared_norm;
         if(slope_errors) {
             if(cols < 3) {
                 *slope_errors = VectorReal::Constant(rows, std::numeric_limits<RealScalar>::quiet_NaN());
             } else {
-                MatrixReal residuals  = matrix.colwise() - matrix.rowwise().mean();
+                MatrixReal residuals  = values.colwise() - values.rowwise().mean();
                 residuals.noalias()  -= slopes * x.transpose();
                 *slope_errors         = (residuals.rowwise().squaredNorm() / (static_cast<RealScalar>(cols - 2) * x_squared_norm)).array().sqrt();
             }
@@ -461,16 +450,64 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::get_ritz_slopes(Eigen::Index last_n) {
+        if(status.history.empty()) return {};
+        auto cols   = last_n < 0 ? static_cast<Eigen::Index>(status.history.size()) : std::min(last_n, static_cast<Eigen::Index>(status.history.size()));
+        auto rows   = status.history.back().eigvals.size();
+        auto offset = static_cast<Eigen::Index>(status.history.size()) - cols;
+
+        MatrixReal values(rows, cols);
+        VectorReal coordinates(cols);
+        for(Eigen::Index idx = 0; idx < cols; ++idx) {
+            const auto &sample = status.history[static_cast<typename std::deque<IterationSample>::size_type>(offset + idx)];
+            if(sample.eigvals.size() != rows) throw std::runtime_error("history has unequal Ritz-value sizes");
+            values.col(idx)  = sample.eigvals;
+            coordinates(idx) = static_cast<RealScalar>(sample.matvecs);
+        }
+        return fit_slopes(values, coordinates);
+    }
+
+    template<typename Scalar, grit::Form form_>
+    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::get_rnorm_slopes(Eigen::Index last_n, VectorReal *slope_errors) {
+        if(status.history.empty()) {
+            if(slope_errors) slope_errors->resize(0);
+            return {};
+        }
+        auto cols   = last_n < 0 ? static_cast<Eigen::Index>(status.history.size()) : std::min(last_n, static_cast<Eigen::Index>(status.history.size()));
+        auto rows   = status.history.back().rnorms.size();
+        auto offset = static_cast<Eigen::Index>(status.history.size()) - cols;
+
+        MatrixReal values(rows, cols);
+        VectorReal coordinates(cols);
+        for(Eigen::Index idx = 0; idx < cols; ++idx) {
+            const auto &sample = status.history[static_cast<typename std::deque<IterationSample>::size_type>(offset + idx)];
+            if(sample.rnorms.size() != rows) throw std::runtime_error("history has unequal residual-norm sizes");
+            values.col(idx)  = sample.rnorms.array().log10();
+            coordinates(idx) = static_cast<RealScalar>(sample.matvecs);
+        }
+        return fit_slopes(values, coordinates, slope_errors);
+    }
+
+    template<typename Scalar, grit::Form form_>
+    Eigen::Index base<Scalar, form_>::get_num_consecutive_correction_samples(ResidualCorrectionType correction) const {
+        Eigen::Index samples = 0;
+        for(auto iter = status.history.rbegin(); iter != status.history.rend() && iter->residual_correction == correction; ++iter) samples++;
+        return samples;
+    }
+
+    template<typename Scalar, grit::Form form_>
     bool base<Scalar, form_>::rNorms_have_saturated() {
-        const bool history_ready  = status.rNormsAbsHistory.size() >= 3;
+        if(status.history.empty()) return false;
+        auto       available      = static_cast<Eigen::Index>(status.history.size());
+        const bool history_ready  = available >= min_saturation_samples;
         const bool have_residuals = status.rNormsAbs.size() > 0;
         if(!history_ready || !have_residuals) return false;
 
         auto       rows    = std::min<Eigen::Index>(cfg().nev, status.rNormsAbs.size());
         VectorReal targets = rNormAbsTargets().topRows(rows);
-        for(Eigen::Index samples = static_cast<Eigen::Index>(status.rNormsAbsHistory.size()); samples >= 3; --samples) {
+        for(Eigen::Index samples = available; samples >= min_saturation_samples; --samples) {
             VectorReal errors;
-            VectorReal slopes    = get_slopes(status.rNormsAbsHistory, true, samples, &errors).topRows(rows);
+            VectorReal slopes    = get_rnorm_slopes(samples, &errors).topRows(rows);
             bool       saturated = false;
             for(Eigen::Index i = 0; i < rows; ++i) {
                 if(status.rNormsAbs(i) <= targets(i)) continue;
@@ -491,36 +528,63 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
-    bool base<Scalar, form_>::eigVals_have_saturated() {
-        const bool history_ready  = status.eigVals_history.size() >= 3;
+    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::get_ritz_drift_thresholds(Eigen::Index rows) const {
+        VectorReal thresholds = cfg().ritz_saturation_tolerance * status.eigVal.topRows(rows).cwiseAbs();
+
+        RealScalar spectrum_scale = thresholds.size() > 0 ? status.eigVal.topRows(rows).cwiseAbs().maxCoeff() : RealScalar{0};
+        if(T_evals.size() > 0) {
+            RealScalar projected_scale = T_evals.cwiseAbs().maxCoeff();
+            if(std::isfinite(projected_scale)) spectrum_scale = std::max(spectrum_scale, projected_scale);
+        }
+        if(!std::isfinite(spectrum_scale)) spectrum_scale = RealScalar{1};
+
+        RealScalar condition_scale = RealScalar{1};
+        if constexpr(form_ == grit::Form::GENERALIZED) {
+            if(std::isfinite(status.condition_b)) condition_scale = std::max(condition_scale, status.condition_b);
+        }
+        return thresholds.cwiseMax(VectorReal::Constant(rows, eps * condition_scale * spectrum_scale));
+    }
+
+    template<typename Scalar, grit::Form form_>
+    bool base<Scalar, form_>::eigVals_have_saturated(VectorReal *detected_slopes, Eigen::Index *detected_samples, VectorIdxT *saturated_pairs,
+                                                     Eigen::Index last_n) {
+        auto rows = std::min({cfg().nev, status.eigVal.size(), status.rNormsAbs.size()});
+        if(saturated_pairs) *saturated_pairs = VectorIdxT::Zero(rows);
+        if(status.history.empty()) return false;
+        auto available = last_n < 0 ? static_cast<Eigen::Index>(status.history.size()) : std::min(last_n, static_cast<Eigen::Index>(status.history.size()));
+        const bool history_ready  = available >= min_saturation_samples;
         const bool have_residuals = status.rNormsAbs.size() > 0;
         if(!history_ready || !have_residuals) return false;
 
-        auto       rows    = std::min({cfg().nev, status.eigVal.size(), status.rNormsAbs.size(), V.cols()});
-        VectorReal targets = rNormAbsTargets().topRows(rows);
-        for(Eigen::Index samples = static_cast<Eigen::Index>(status.eigVals_history.size()); samples >= 3; --samples) {
-            VectorReal errors;
-            VectorReal slopes    = get_slopes(status.eigVals_history, false, samples, &errors).topRows(rows);
-            bool       saturated = false;
+        VectorReal targets          = rNormAbsTargets().topRows(rows);
+        VectorReal drift_thresholds = get_ritz_drift_thresholds(rows);
+        VectorIdxT pair_saturation  = VectorIdxT::Zero(rows);
+        for(Eigen::Index samples = available; samples >= min_saturation_samples; --samples) {
+            VectorReal slopes           = get_ritz_slopes(samples).topRows(rows);
+            bool       have_unconverged = false;
+            bool       saturated        = true;
             for(Eigen::Index i = 0; i < rows; ++i) {
-                if(status.rNormsAbs(i) <= targets(i)) continue;
-
-                RealScalar metric_norm = V.col(i).norm();
-                if constexpr(form_ == grit::Form::GENERALIZED) metric_norm = BV.col(i).norm();
-                RealScalar scaled = std::abs(slopes(i)) * metric_norm / std::max(status.rNormsAbs(i), std::numeric_limits<RealScalar>::min());
-
-                const bool finite_fit         = std::isfinite(slopes(i)) && std::isfinite(errors(i)) && std::isfinite(scaled);
-                const bool significant_trend  = std::abs(slopes(i)) > RealScalar{2} * errors(i);
-                const bool significant_motion = scaled > cfg().ritz_stabilization_tolerance;
-                const bool progressing        = finite_fit && significant_trend && significant_motion;
-                if(progressing) {
-                    saturated = false;
-                    break;
+                if(status.rNormsAbs(i) <= targets(i)) {
+                    pair_saturation(i) = 1;
+                    continue;
                 }
-                saturated = true;
+
+                have_unconverged       = true;
+                const bool finite_fit  = std::isfinite(slopes(i)) && std::isfinite(drift_thresholds(i));
+                const bool progressing = finite_fit && std::abs(slopes(i)) > drift_thresholds(i);
+                if(progressing)
+                    saturated = false;
+                else
+                    pair_saturation(i) = 1;
             }
-            if(saturated) return true;
+            if(detected_slopes) *detected_slopes = slopes;
+            if(detected_samples) *detected_samples = samples;
+            if(have_unconverged && saturated) {
+                if(saturated_pairs) *saturated_pairs = pair_saturation;
+                return true;
+            }
         }
+        if(saturated_pairs) *saturated_pairs = pair_saturation;
         return false;
     }
 
@@ -546,10 +610,10 @@ namespace grit::form {
     std::string base<Scalar, form_>::get_direct_ritz_diagnostics() {
         Eigen::Index rows = std::min({cfg().nev, V.cols(), AV.cols(), BV.cols(), status.eigVal.size(), status.rNormsAbs.size(), Eigen::Index{3}});
         if(rows <= 0) return {};
-        MatrixType av_direct = MultA(V.leftCols(rows));
+        MatrixType av_direct = A.mult(V.leftCols(rows));
         MatrixType bv_direct;
         if constexpr(form_ == grit::Form::GENERALIZED)
-            bv_direct = MultB(V.leftCols(rows));
+            bv_direct = B->get().mult(V.leftCols(rows));
         else
             bv_direct = V.leftCols(rows);
         VectorReal rnorm_direct;
@@ -636,42 +700,32 @@ namespace grit::form {
 
         status.op_norm_estimate = get_op_norm_estimate();
 
-        status.rNormsAbsHistory.push_back(status.rNormsAbs.topRows(cfg().nev));
-        status.eigVals_history.push_back(status.eigVal.topRows(cfg().nev));
-        status.matvecs_history.push_back(status.num_matvecs + status.num_matvecs_inner);
-        while(status.rNormsAbsHistory.size() > status.max_history_size) status.rNormsAbsHistory.pop_front();
-        while(status.eigVals_history.size() > status.max_history_size) status.eigVals_history.pop_front();
-        while(status.matvecs_history.size() > status.max_history_size) status.matvecs_history.pop_front();
+        status.history.emplace_back(IterationSample{.outer_iter          = status.outer_iter,
+                                                    .matvecs             = status.num_matvecs_total,
+                                                    .time                = status.time_elapsed.get_time(),
+                                                    .residual_correction = residual_correction_type_internal,
+                                                    .eigvals             = status.eigVal.topRows(cfg().nev),
+                                                    .rnorms              = status.rNormsAbs.topRows(cfg().nev)});
+        while(status.history.size() > status.max_history_size) status.history.pop_front();
 
-        if(cfg().reltol > RealScalar{0}) {
-            Eigen::Index rows = std::min({cfg().nev, status.rNormsAbs.size(), status.absDiff.size(), V.cols()});
-            if constexpr(form_ == grit::Form::GENERALIZED) rows = std::min(rows, BV.cols());
-            if(status.rnorm_abs_reference.size() != rows) status.rnorm_abs_reference = VectorReal::Zero(rows);
-            VectorReal metric_norms(rows);
-            for(Eigen::Index i = 0; i < rows; ++i) {
-                if constexpr(form_ == grit::Form::GENERALIZED)
-                    metric_norms(i) = BV.col(i).norm();
-                else
-                    metric_norms(i) = V.col(i).norm();
-            }
-            if(status.eigVals_history.size() >= 3) {
-                VectorReal residual_scales = status.rNormsAbs.topRows(rows).cwiseMax(VectorReal::Constant(rows, std::numeric_limits<RealScalar>::min()));
-                VectorReal stabilization =
-                    get_standard_deviations(status.eigVals_history, false, -1).topRows(rows).cwiseProduct(metric_norms).cwiseQuotient(residual_scales);
-                for(Eigen::Index i = 0; i < rows; ++i) {
-                    if(stabilization(i) > cfg().ritz_stabilization_tolerance)
-                        status.rnorm_abs_reference(i) = RealScalar{0};
-                    else if(status.rnorm_abs_reference(i) <= RealScalar{0})
-                        status.rnorm_abs_reference(i) = status.rNormsAbs(i);
-                }
-            } else
-                status.rnorm_abs_reference.setZero();
-        }
-
-        if(eigVals_have_saturated())
+        VectorIdxT saturated_pairs;
+        const bool eigvals_saturated = eigVals_have_saturated(nullptr, nullptr, &saturated_pairs);
+        if(eigvals_saturated)
             status.saturation_count_eigVal++;
         else
             status.saturation_count_eigVal = 0;
+
+        if(cfg().reltol > RealScalar{0}) {
+            Eigen::Index rows = std::min(cfg().nev, status.rNormsAbs.size());
+            if(status.rnorm_abs_reference.size() != rows) status.rnorm_abs_reference = VectorReal::Zero(rows);
+            if(status.saturation_count_eigVal >= status.saturation_count_max) {
+                for(Eigen::Index i = 0; i < rows; ++i)
+                    if(status.rnorm_abs_reference(i) <= RealScalar{0}) status.rnorm_abs_reference(i) = status.rNormsAbs(i);
+            } else {
+                for(Eigen::Index i = 0; i < std::min(rows, saturated_pairs.size()); ++i)
+                    if(saturated_pairs(i) == 0) status.rnorm_abs_reference(i) = RealScalar{0};
+            }
+        }
 
         if(rNorms_have_saturated())
             status.saturation_count_rNorm++;
@@ -875,9 +929,7 @@ namespace grit::form {
         status.residual_below_gap      = false;
         status.saturation_count_eigVal = 0;
         status.saturation_count_rNorm  = 0;
-        status.rNormsAbsHistory.clear();
-        status.eigVals_history.clear();
-        status.matvecs_history.clear();
+        status.history.clear();
         auto token_elapsed = status.time_elapsed.tic_token();
         if(status.outer_iter == 0) {
             init();

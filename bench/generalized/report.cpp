@@ -44,10 +44,10 @@ namespace bench_generalized {
         std::println("  limits: max-iters {} | max-matvecs {} | abstol {} | reltol {:.4e} | rescaled rnorm tolerance: {} | quit when saturated: {}",
                      limit_text(opts.max_iters), limit_text(opts.max_matvecs), fmt::format("{}", opts.abstol), opts.reltol,
                      bool_text(opts.use_rescaled_rnorm_tolerance), bool_text(opts.quit_when_saturated));
-        std::println("  sweep axes: ncv {} | block-size {} | ritz {} | B inner product {}", fmt::format("{}", opts.ncv),
-                     fmt::format("{}", opts.block_size), opts.ritz, fmt::format("{}", opts.use_b_inner_product));
+        std::println("  sweep axes: ncv {} | block-size {} | ritz {} | B inner product {}", fmt::format("{}", opts.ncv), fmt::format("{}", opts.block_size),
+                     opts.ritz, fmt::format("{}", opts.use_b_inner_product));
         std::println("  sweep axes: abstol {}", fmt::format("{}", opts.abstol));
-        std::println("  ritz stabilization tolerance: {:.3e}", opts.ritz_stabilization_tolerance);
+        std::println("  ritz saturation tolerance per matvec: {:.3e}", opts.ritz_saturation_tolerance);
         if(opts.algo == Algo::gdplusk) {
             std::println("  sweep axes: residual correction {} | inner tol {} | inner max iterations {} | refined {} | JD B-only {} | adaptive {}",
                          opts.residual_correction, fmt::format("{}", opts.inner_tol), fmt::format("{}", opts.inner_max_iters),

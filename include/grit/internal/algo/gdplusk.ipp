@@ -79,10 +79,10 @@ namespace grit::algo {
             throw std::runtime_error("gdplusk config error: inner_tol must be in the interval (0, 1]");
         }
         if(config.inner_max_iters < 1) throw std::runtime_error("gdplusk config error: inner_max_iters must be at least 1");
-        if(!std::isfinite(config.ritz_stabilization_tolerance) || config.ritz_stabilization_tolerance <= RealScalar{0}) {
-            throw std::runtime_error("gdplusk config error: ritz_stabilization_tolerance must be finite and positive");
+        if(!std::isfinite(config.ritz_saturation_tolerance) || config.ritz_saturation_tolerance <= RealScalar{0}) {
+            throw std::runtime_error("gdplusk config error: ritz_saturation_tolerance must be finite and positive");
         }
-        if(config.auto_probe_length < 1) { throw std::runtime_error("gdplusk config error: auto_probe_length must be at least 1"); }
+        if(config.auto_probe_length < Base::min_saturation_samples) { throw std::runtime_error("gdplusk config error: auto_probe_length must be at least 5"); }
         if(config.auto_max_probes < -1) { throw std::runtime_error("gdplusk config error: auto_max_probes must be at least -1"); }
         if(this->has_initial_guess()) {
             if(this->initial_guess().rows() != this->N) throw std::runtime_error("gdplusk config error: initial guess row count must match the operator size");
@@ -108,11 +108,6 @@ namespace grit::algo {
         adjust_residual_correction_type();
         if(config.residual_correction_type == ResidualCorrectionType::AUTO)
             auto_residual_correction.outer_iteration_time_start = status.time_elapsed.get_time();
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::updateStatus() {
-        Base::updateStatus();
     }
 
     template<typename Scalar, grit::Form form_>
@@ -160,7 +155,7 @@ namespace grit::algo {
 
     template<typename Scalar, grit::Form form_>
     void gdplusk<Scalar, form_>::run_user_callback() {
-        if(status.outer_iter > 0) update_auto_residual_correction_state();
+        if(status.outer_iter > 0 && status.stopReason == StopReason::none) update_auto_residual_correction_state();
         if(config.user_callback) config.user_callback(*this);
     }
 

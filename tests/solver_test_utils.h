@@ -13,6 +13,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace grit_test {
@@ -31,6 +32,17 @@ namespace grit_test {
 #else
         return std::filesystem::path{"../../data"};
 #endif
+    }
+
+    template<typename Solver>
+    void add_iteration_sample(Solver &solver, Eigen::Index outer_iter, Eigen::Index matvecs, grit::ResidualCorrectionType correction,
+                              typename Solver::VectorReal eigvals, typename Solver::VectorReal rnorms) {
+        solver.status.history.emplace_back(typename Solver::IterationSample{.outer_iter          = outer_iter,
+                                                                            .matvecs             = matvecs,
+                                                                            .time                = 0.0,
+                                                                            .residual_correction = correction,
+                                                                            .eigvals             = std::move(eigvals),
+                                                                            .rnorms              = std::move(rnorms)});
     }
 
     template<typename Scalar>

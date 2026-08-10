@@ -58,8 +58,8 @@ namespace grit::algo {
         if(config.abstol <= RealScalar{0}) throw std::runtime_error("lanczos config error: abstol must be positive");
         if(config.reltol < RealScalar{0}) throw std::runtime_error("lanczos config error: reltol must be nonnegative");
         if(config.saturation_count_max < 1) throw std::runtime_error("lanczos config error: saturation_count_max must be positive");
-        if(!std::isfinite(config.ritz_stabilization_tolerance) || config.ritz_stabilization_tolerance <= RealScalar{0}) {
-            throw std::runtime_error("lanczos config error: ritz_stabilization_tolerance must be finite and positive");
+        if(!std::isfinite(config.ritz_saturation_tolerance) || config.ritz_saturation_tolerance <= RealScalar{0}) {
+            throw std::runtime_error("lanczos config error: ritz_saturation_tolerance must be finite and positive");
         }
         if(this->has_initial_guess()) {
             if(this->initial_guess().rows() != this->N) throw std::runtime_error("lanczos config error: initial guess row count must match the operator size");
@@ -78,9 +78,7 @@ namespace grit::algo {
         status.residual_below_gap      = false;
         status.saturation_count_eigVal = 0;
         status.saturation_count_rNorm  = 0;
-        status.rNormsAbsHistory.clear();
-        status.eigVals_history.clear();
-        status.matvecs_history.clear();
+        status.history.clear();
         status.time_orthogonalize.reset();
         status.time_orthonormalize.reset();
         status.time_orth_project.reset();
@@ -93,6 +91,7 @@ namespace grit::algo {
         status.time_restart.reset();
 
         status.saturation_count_max = this->cfg().saturation_count_max;
+        status.max_history_size     = static_cast<size_t>(std::max<Eigen::Index>(12, 2 * this->cfg().ncv / this->cfg().block_size + 1));
 
         if(status.outer_iter == 0) {
             status.rNormsAbs.setOnes(this->cfg().nev);

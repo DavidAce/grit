@@ -6,6 +6,7 @@
 #include <Eigen/Eigenvalues>
 #include <format>
 #include <grit/grit.h>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <unistd.h>
@@ -677,7 +678,7 @@ TEST_CASE("generalized gdplusk with B as A squared targets A smallest magnitude 
     REQUIRE(std::abs(1.0 / view.eigVal()(0) - exact_A.eigenvalues()(0)) < 1e-10);
 }
 
-TEST_CASE("generalized auto Ritz progress compares the Bv perturbation with the residual") {
+TEST_CASE("generalized AUTO uses the Ritz saturation criterion") {
     using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorReal = grit::form::base<double>::VectorReal;
     using Correction = grit::ResidualCorrectionType;
@@ -696,22 +697,50 @@ TEST_CASE("generalized auto Ritz progress compares the Bv perturbation with the 
     solver.V                                          = Matrix::Identity(4, 1);
     solver.BV                                         = B_matrix * solver.V;
     solver.status.eigVal                              = VectorReal::Constant(1, 0.2);
+    solver.T_evals                                    = solver.status.eigVal;
     solver.status.rNormsAbs                           = VectorReal::Ones(1);
-    solver.status.eigVals_history                     = {VectorReal::Constant(1, 0.198), VectorReal::Constant(1, 0.199), VectorReal::Constant(1, 0.2),
-                                                         VectorReal::Constant(1, 0.201), VectorReal::Constant(1, 0.202)};
     solver.auto_residual_correction.cheap_olsen_iters = 4;
+    for(Eigen::Index i = 0; i < 5; ++i)
+        grit_test::add_iteration_sample(solver, i, i + 1, Correction::CHEAP_OLSEN, VectorReal::Constant(1, 0.198 + 0.001 * i), VectorReal::Ones(1));
 
-    SECTION("motion above the residual-scaled tolerance remains in cheap Olsen mode") {
-        solver.config.ritz_stabilization_tolerance = 9e-3;
+    SECTION("drift above the threshold remains in cheap Olsen mode") {
+        solver.config.ritz_saturation_tolerance = 4e-3;
         solver.update_auto_residual_correction_state();
         REQUIRE(solver.auto_residual_correction.active == Correction::CHEAP_OLSEN);
     }
 
-    SECTION("motion below the residual-scaled tolerance starts JD") {
-        solver.config.ritz_stabilization_tolerance = 11e-3;
+    SECTION("drift below the threshold starts JD") {
+        solver.config.ritz_saturation_tolerance = 6e-3;
+        solver.status.saturation_count_eigVal   = solver.status.saturation_count_max;
         solver.update_auto_residual_correction_state();
         REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
     }
+}
+
+TEST_CASE("generalized Ritz saturation accounts for the projected B condition") {
+    using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorReal = grit::form::base<double>::VectorReal;
+
+    Matrix identity = Matrix::Identity(4, 4);
+    auto   A        = grit::matvec<double>(identity.rows(), [&](auto const &X) { return identity * X; });
+    auto   B        = grit::matvec<double>(identity.rows(), [&](auto const &X) { return identity * X; });
+
+    grit::generalized::gdplusk<double> solver(A, B);
+    solver.config.nev                       = 1;
+    solver.config.abstol                    = 1e-12;
+    solver.config.ritz_saturation_tolerance = std::numeric_limits<double>::epsilon();
+    solver.status.eigVal                    = VectorReal::Constant(1, 2.0);
+    solver.status.rNormsAbs                 = VectorReal::Ones(1);
+    solver.T_evals                          = VectorReal::Constant(1, 100.0);
+    for(Eigen::Index i = 0; i < 5; ++i)
+        grit_test::add_iteration_sample(solver, i, i + 1, grit::ResidualCorrectionType::JACOBI_DAVIDSON, VectorReal::Constant(1, 1.96 + 0.01 * i),
+                                        VectorReal::Ones(1));
+
+    solver.status.condition_b = 1.0;
+    REQUIRE_FALSE(solver.eigVals_have_saturated());
+
+    solver.status.condition_b = 1e12;
+    REQUIRE(solver.eigVals_have_saturated());
 }
 
 TEST_CASE("generalized condition numbers do not depend on the solver inner product") {

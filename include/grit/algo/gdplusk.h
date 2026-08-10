@@ -70,7 +70,8 @@ namespace grit::algo {
         using Base::get_refined_ritz_eigenvectors_gen;
         using Base::get_refined_ritz_eigenvectors_std;
         using Base::get_residuals;
-        using Base::get_slopes;
+        using Base::get_ritz_slopes;
+        using Base::get_rnorm_slopes;
         using Base::get_standard_deviations;
         using Base::log;
         using Base::normTol;
@@ -87,7 +88,7 @@ namespace grit::algo {
             Eigen::Index                maxPrevBlocks                    = 1;     /*!< Number of previous active Ritz blocks kept between outer iterations. */
             RealScalar                  inner_tol                        = RealScalar{0.1f}; /*!< Initial tolerance for inner correction solves. */
             Eigen::Index                inner_max_iters                  = 1000;             /*!< Maximum inner iterations in each inner correction solve. */
-            Eigen::Index                auto_probe_length                = 3; /*!< Outer iterations using the method tested by each AUTO probe. */
+            Eigen::Index                auto_probe_length                = 5; /*!< Minimum outer iterations using the method tested by each AUTO probe. */
             Eigen::Index                auto_max_probes = 1; /*!< Maximum AUTO probes while the Ritz values remain stabilized; -1 allows unlimited probes. */
             std::function<void(const gdplusk<Scalar, form_> &)> user_callback;                 /*!< Callback called after each outer iteration. */
             Eigen::Index                                        max_extra_ritz_history    = 1; /*!< Extra Ritz history retained for progress checks. */
@@ -130,7 +131,6 @@ namespace grit::algo {
         static std::string_view       ResidualCorrectionToString(ResidualCorrectionType rct);
         static ResidualCorrectionType StringToResidualCorrection(std::string_view rct);
         void                          preamble() final;
-        void                          updateStatus() final;
         void                          extractRitzVectors() final;
         void                          run_user_callback() final;
 

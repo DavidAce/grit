@@ -67,7 +67,7 @@ TEST_CASE("residual tolerance uses the larger floor") {
     REQUIRE(solver.rNormAbsTarget(0) == Approx(2.0e-4));
 }
 
-TEST_CASE("relative residual references follow Ritz stabilization independently") {
+TEST_CASE("relative residual references use Ritz saturation") {
     using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorReal = Eigen::Vector<double, Eigen::Dynamic>;
 
@@ -75,29 +75,39 @@ TEST_CASE("relative residual references follow Ritz stabilization independently"
     auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
 
     grit::standard::gdplusk<double> solver(A);
-    solver.config.nev                          = 2;
-    solver.config.abstol                       = 1e-12;
-    solver.config.reltol                       = 1e-1;
-    solver.config.ritz_stabilization_tolerance = 1e-2;
-    solver.V                                   = Matrix::Identity(4, 2);
-    solver.status.optIdx                       = {0, 1};
-    solver.status.eigVal                       = (VectorReal(2) << 1.0, 1.0).finished();
-    solver.status.rNormsAbs                    = VectorReal::Ones(2);
-    solver.status.rnorm_abs_reference          = VectorReal::Zero(2);
+    solver.config.nev                       = 2;
+    solver.config.abstol                    = 1e-12;
+    solver.config.reltol                    = 1e-1;
+    solver.config.ritz_saturation_tolerance = 1e-3;
+    solver.V                                = Matrix::Identity(4, 2);
+    solver.status.optIdx                    = {0, 1};
+    solver.status.eigVal                    = (VectorReal(2) << 1.0, 1.0).finished();
+    solver.status.rNormsAbs                 = VectorReal::Ones(2);
+    solver.status.rnorm_abs_reference       = VectorReal::Zero(2);
+    solver.status.num_matvecs               = 1;
 
-    for(Eigen::Index iter = 0; iter < 3; ++iter) {
-        solver.T_evals         = (VectorReal(2) << 1.0, 2.0 + static_cast<double>(iter)).finished();
+    for(Eigen::Index iter = 0; iter < 5; ++iter) {
+        solver.T_evals          = (VectorReal(2) << 1.0, 2.0 + static_cast<double>(iter)).finished();
         solver.status.rNormsAbs = (VectorReal(2) << 0.5, 1.0).finished();
         solver.Base::updateStatus();
     }
 
-    REQUIRE(solver.status.rnorm_abs_reference(0) == Approx(0.5));
+    REQUIRE(solver.status.rnorm_abs_reference(0) == Approx(0.0));
     REQUIRE(solver.status.rnorm_abs_reference(1) == Approx(0.0));
+
+    for(Eigen::Index iter = 0; iter < 9; ++iter) {
+        solver.T_evals = (VectorReal(2) << 1.0, 7.0).finished();
+        solver.Base::updateStatus();
+    }
+
+    REQUIRE(solver.status.rnorm_abs_reference(0) == Approx(0.5));
+    REQUIRE(solver.status.rnorm_abs_reference(1) == Approx(1.0));
 
     solver.T_evals = (VectorReal(2) << 1.1, 7.0).finished();
     solver.Base::updateStatus();
 
     REQUIRE(solver.status.rnorm_abs_reference(0) == Approx(0.0));
+    REQUIRE(solver.status.rnorm_abs_reference(1) == Approx(1.0));
 }
 
 int main(int argc, char **argv) {

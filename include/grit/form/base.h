@@ -75,13 +75,13 @@ namespace grit::form {
             bool                      use_rescaled_rnorm_tolerance            = false; /*!< Rescale abstol by the current operator norm estimate. */
             Ritz                      ritz                                    = Ritz::SR;    /*!< Which Ritz values to target. */
             RealScalar                abstol                                  = eps * 10000; /*!< Absolute residual tolerance floor. */
-            RealScalar                reltol                       = 0; /*!< Residual reduction from the stabilized Ritz reference; zero disables it. */
-            RealScalar                ritz_stabilization_tolerance = RealScalar{1e-3f}; /*!< Tolerance for residual-scaled Ritz-value tests. */
-            Eigen::Index              max_iters                    = 100l;              /*!< Maximum outer iterations; negative means unlimited. */
-            Eigen::Index              max_matvecs                  = -1l;               /*!< Maximum total matrix-vector products; negative means unlimited. */
-            bool                      quit_when_saturated          = true;               /*!< Stop after Ritz values and residuals remain saturated. */
-            Eigen::Index              saturation_count_max        = 5;                  /*!< Consecutive saturated outer iterations required before stopping. */
-            spdlog::level::level_enum log_level                    = spdlog::level::warn; /*!< Solver log level. */
+            RealScalar                reltol                    = 0; /*!< Residual reduction from the saturated Ritz reference; zero disables it. */
+            RealScalar                ritz_saturation_tolerance = RealScalar{1e-5f};   /*!< Relative Ritz-value drift threshold per matrix-vector product. */
+            Eigen::Index              max_iters                 = 100l;                /*!< Maximum outer iterations; negative means unlimited. */
+            Eigen::Index              max_matvecs               = -1l;                 /*!< Maximum total matrix-vector products; negative means unlimited. */
+            bool                      quit_when_saturated       = true;                /*!< Stop after Ritz values and residuals remain saturated. */
+            Eigen::Index              saturation_count_max      = 5;                   /*!< Consecutive saturated outer iterations required before stopping. */
+            spdlog::level::level_enum log_level                 = spdlog::level::warn; /*!< Solver log level. */
         };
 
         /*! Orthogonalization diagnostics for l2 and B-metric blocks. */
@@ -143,99 +143,106 @@ namespace grit::form {
                                           const Eigen::Ref<const MatrixType> &B_Y);
         };
 
+        /*! History recorded after one completed outer iteration. */
+        struct IterationSample {
+            Eigen::Index           outer_iter          = 0;                            /*!< Outer iteration coordinate. */
+            Eigen::Index           matvecs             = 0;                            /*!< Cumulative matrix-vector products. */
+            double                 time                = 0.0;                          /*!< Cumulative solver wall time in seconds. */
+            ResidualCorrectionType residual_correction = ResidualCorrectionType::NONE; /*!< Residual correction used for this sample. */
+            VectorReal             eigvals;                                            /*!< Selected Ritz values. */
+            VectorReal             rnorms;                                             /*!< Selected absolute residual norms. */
+        };
+
         /*! Solver output, counters, timers, and stopping diagnostics. */
         struct Status {
-            VectorReal                eigVal;                                                          /*!< Current selected Ritz values. */
-            VectorReal                oldVal;                                                          /*!< Ritz values from the previous status update. */
-            VectorReal                absDiff;                                                         /*!< Absolute Ritz-value changes. */
-            VectorReal                relDiff;                                                         /*!< Relative Ritz-value changes. */
-            RealScalar                initVal          = std::numeric_limits<RealScalar>::quiet_NaN(); /*!< Initial Ritz value used for progress checks. */
-            RealScalar                condition_a = RealScalar{1}; /*!< Euclidean condition estimate of A on the search subspace. */
-            RealScalar                condition_b = RealScalar{1}; /*!< Euclidean condition estimate of B on the search subspace. */
-            RealScalar                op_norm_estimate = RealScalar{1};                                /*!< Current operator norm estimate. */
-            RealScalar                gap              = std::numeric_limits<RealScalar>::infinity();  /*!< Current Ritz gap estimate. */
-            std::vector<Eigen::Index> optIdx;                                   /*!< Indices of selected Ritz values in the projected problem. */
-            Eigen::Index              outer_iter                           = 0; /*!< Outer iteration count. */
-            Eigen::Index              num_outer_iters_last_restart         = 0; /*!< Outer iteration count at the last restart. */
-            Eigen::Index              num_inner_iters                      = 0; /*!< Inner correction iterations in the last outer iteration. */
-            Eigen::Index              num_inner_iters_prev                 = 0; /*!< Inner correction iterations in the previous outer iteration. */
-            Eigen::Index              num_inner_iters_total                = 0; /*!< Total inner correction iterations. */
-            Eigen::Index              num_matvecs_inner                    = 0; /*!< A and B matrix-vector products in the last inner solve. */
-            Eigen::Index              num_matvecs_inner_total              = 0; /*!< Total inner A and B matrix-vector products. */
-            Eigen::Index              num_matvecs_a                        = 0; /*!< A matrix-vector products in the last outer iteration. */
-            Eigen::Index              num_matvecs_b                        = 0; /*!< B matrix-vector products in the last outer iteration. */
-            Eigen::Index              num_matvecs_a_inner                  = 0; /*!< A matrix-vector products in the last inner solve. */
-            Eigen::Index              num_matvecs_b_inner                  = 0; /*!< B matrix-vector products in the last inner solve. */
-            Eigen::Index              num_matvecs_a_total                  = 0; /*!< Total A matrix-vector products. */
-            Eigen::Index              num_matvecs_b_total                  = 0; /*!< Total B matrix-vector products. */
-            Eigen::Index              num_operator_inner                   = 0; /*!< Projected correction-operator applications in the last inner solve. */
-            Eigen::Index              num_operator_inner_total             = 0; /*!< Total projected correction-operator applications. */
-            Eigen::Index              num_matvecs                          = 0; /*!< Matrix-vector products in the last outer iteration. */
-            Eigen::Index              num_matvecs_total                    = 0; /*!< Total matrix-vector products. */
-            Eigen::Index              num_precond                          = 0; /*!< Preconditioner applications in the last outer iteration. */
-            Eigen::Index              num_precond_inner                    = 0; /*!< Projected preconditioner applications in the last inner solve. */
-            Eigen::Index              num_precond_inner_total              = 0; /*!< Total projected inner preconditioner applications. */
-            Eigen::Index              num_precond_total                    = 0; /*!< Total preconditioner applications. */
-            Eigen::Index              num_preconditioner_updates           = 0; /*!< Preconditioner updates in the last outer iteration. */
-            Eigen::Index              num_preconditioner_updates_inner     = 0; /*!< Preconditioner updates for the last inner correction. */
-            Eigen::Index              num_preconditioner_updates_total     = 0; /*!< Total preconditioner updates. */
-            Eigen::Index              num_preconditioner_apply_inner       = 0; /*!< User preconditioner callback applications in the last inner solve. */
-            Eigen::Index              num_preconditioner_apply_inner_total = 0; /*!< Total user preconditioner callback applications in inner solves. */
-            Eigen::Index              num_preconditioner_apply_total       = 0; /*!< Total user preconditioner callback applications. */
-            tid::ur                   time_elapsed;                             /*!< Total solver wall timer. */
-            tid::ur                   time_solve_inner;                         /*!< Complete inner linear-solve wall time. */
-            tid::ur                   time_matvecs;                             /*!< Outer A and B matrix-vector product time. */
-            tid::ur                   time_matvecs_a;                           /*!< Outer A matrix-vector callback time. */
-            tid::ur                   time_matvecs_b;                           /*!< Outer B matrix-vector callback time. */
-            tid::ur                   time_matvecs_a_inner;                     /*!< Inner A matrix-vector callback time. */
-            tid::ur                   time_matvecs_b_inner;                     /*!< Inner B matrix-vector callback time. */
-            tid::ur                   time_precond;                             /*!< Outer preconditioner callback time. */
-            tid::ur                   time_preconditioner_inner;                /*!< Inner projected-preconditioner time, including projectors. */
-            tid::ur                   time_preconditioner_update;               /*!< Outer preconditioner-update callback time. */
-            tid::ur                   time_preconditioner_update_inner;         /*!< Inner preconditioner-update callback time. */
-            tid::ur                   time_preconditioner_apply_inner;          /*!< Inner user preconditioner callback time, excluding projectors. */
-            tid::ur                   time_operator_inner;                /*!< Projected correction-operator time, including projectors and A/B callbacks. */
-            tid::ur                   time_project_left_inner;            /*!< Inner left-projector time. */
-            tid::ur                   time_project_right_inner;           /*!< Inner right-projector time. */
-            tid::ur                   time_residual_correction;           /*!< Residual-correction construction time. */
-            tid::ur                   time_build;                         /*!< Search-space build time, including correction and orthogonalization. */
-            tid::ur                   time_orthogonalize;                 /*!< Timer for orthogonalization. */
-            tid::ur                   time_orthonormalize;                /*!< Timer for orthonormalization. */
-            tid::ur                   time_orth_project;                  /*!< Timer for orthogonalization projections. */
-            tid::ur                   time_orth_factor;                   /*!< Timer for orthonormalization factorizations. */
-            tid::ur                   time_orth_update;                   /*!< Timer for orthogonalization updates. */
-            tid::ur                   time_orth_refresh;                  /*!< Timer for refreshing operator products. */
-            tid::ur                   time_orth_mask;                     /*!< Timer for masking dependent vectors. */
-            tid::ur                   time_diagonalize;                   /*!< Timer for projected-problem diagonalization. */
-            tid::ur                   time_extract_ritz;                  /*!< Timer for Ritz extraction. */
-            tid::ur                   time_restart;                       /*!< Timer for search-space restarts. */
-            tid::ur                   time_status_update;                 /*!< Timer for convergence and status updates. */
-            RealScalar                inner_error_last   = RealScalar{0}; /*!< Last inner correction residual. */
-            RealScalar                inner_tol_last     = RealScalar{0}; /*!< Last inner correction tolerance. */
-            bool                      residual_converged = false;         /*!< Whether selected residuals satisfy the active tolerance. */
-            bool                      residual_below_gap = false;         /*!< Whether selected residuals are below the Ritz gap criterion. */
-            VectorReal                rNormsAbs;                          /*!< Current selected absolute residual norms. */
-            VectorReal                rnorm_abs_reference;                /*!< Residual norms recorded when the selected Ritz values stabilize. */
-            std::deque<VectorReal>    rNormsAbsHistory;                   /*!< Recent absolute residual-norm history. */
-            std::deque<VectorReal>    eigVals_history;                    /*!< Recent Ritz-value history. */
-            std::deque<Eigen::Index>  matvecs_history;                    /*!< Recent matrix-vector count history. */
-            size_t                    max_history_size        = 12;       /*!< Maximum stored history length. */
-            Eigen::Index              saturation_count_eigVal = 0;        /*!< Consecutive eigenvalue saturation count. */
-            Eigen::Index              saturation_count_rNorm  = 0;        /*!< Consecutive residual saturation count. */
-            Eigen::Index              saturation_count_max    = 5;        /*!< Saturation count required before stopping. */
-            std::vector<std::string>  stopMessage             = {};       /*!< Human-readable stop messages. */
-            StopReason                stopReason              = StopReason::none; /*!< Solver stop reason. */
-            Ritz                      ritz_internal           = Ritz::NONE;       /*!< Effective Ritz selector used internally. */
+            VectorReal                  eigVal;                                                          /*!< Current selected Ritz values. */
+            VectorReal                  oldVal;                                                          /*!< Ritz values from the previous status update. */
+            VectorReal                  absDiff;                                                         /*!< Absolute Ritz-value changes. */
+            VectorReal                  relDiff;                                                         /*!< Relative Ritz-value changes. */
+            RealScalar                  initVal          = std::numeric_limits<RealScalar>::quiet_NaN(); /*!< Initial Ritz value used for progress checks. */
+            RealScalar                  condition_a      = RealScalar{1}; /*!< Euclidean condition estimate of A on the search subspace. */
+            RealScalar                  condition_b      = RealScalar{1}; /*!< Euclidean condition estimate of B on the search subspace. */
+            RealScalar                  op_norm_estimate = RealScalar{1}; /*!< Current operator norm estimate. */
+            RealScalar                  gap              = std::numeric_limits<RealScalar>::infinity(); /*!< Current Ritz gap estimate. */
+            std::vector<Eigen::Index>   optIdx;                                   /*!< Indices of selected Ritz values in the projected problem. */
+            Eigen::Index                outer_iter                           = 0; /*!< Outer iteration count. */
+            Eigen::Index                num_outer_iters_last_restart         = 0; /*!< Outer iteration count at the last restart. */
+            Eigen::Index                num_inner_iters                      = 0; /*!< Inner correction iterations in the last outer iteration. */
+            Eigen::Index                num_inner_iters_prev                 = 0; /*!< Inner correction iterations in the previous outer iteration. */
+            Eigen::Index                num_inner_iters_total                = 0; /*!< Total inner correction iterations. */
+            Eigen::Index                num_matvecs_inner                    = 0; /*!< A and B matrix-vector products in the last inner solve. */
+            Eigen::Index                num_matvecs_inner_total              = 0; /*!< Total inner A and B matrix-vector products. */
+            Eigen::Index                num_matvecs_a                        = 0; /*!< A matrix-vector products in the last outer iteration. */
+            Eigen::Index                num_matvecs_b                        = 0; /*!< B matrix-vector products in the last outer iteration. */
+            Eigen::Index                num_matvecs_a_inner                  = 0; /*!< A matrix-vector products in the last inner solve. */
+            Eigen::Index                num_matvecs_b_inner                  = 0; /*!< B matrix-vector products in the last inner solve. */
+            Eigen::Index                num_matvecs_a_total                  = 0; /*!< Total A matrix-vector products. */
+            Eigen::Index                num_matvecs_b_total                  = 0; /*!< Total B matrix-vector products. */
+            Eigen::Index                num_operator_inner                   = 0; /*!< Projected correction-operator applications in the last inner solve. */
+            Eigen::Index                num_operator_inner_total             = 0; /*!< Total projected correction-operator applications. */
+            Eigen::Index                num_matvecs                          = 0; /*!< Matrix-vector products in the last outer iteration. */
+            Eigen::Index                num_matvecs_total                    = 0; /*!< Total matrix-vector products. */
+            Eigen::Index                num_precond                          = 0; /*!< Preconditioner applications in the last outer iteration. */
+            Eigen::Index                num_precond_inner                    = 0; /*!< Projected preconditioner applications in the last inner solve. */
+            Eigen::Index                num_precond_inner_total              = 0; /*!< Total projected inner preconditioner applications. */
+            Eigen::Index                num_precond_total                    = 0; /*!< Total preconditioner applications. */
+            Eigen::Index                num_preconditioner_updates           = 0; /*!< Preconditioner updates in the last outer iteration. */
+            Eigen::Index                num_preconditioner_updates_inner     = 0; /*!< Preconditioner updates for the last inner correction. */
+            Eigen::Index                num_preconditioner_updates_total     = 0; /*!< Total preconditioner updates. */
+            Eigen::Index                num_preconditioner_apply_inner       = 0; /*!< User preconditioner callback applications in the last inner solve. */
+            Eigen::Index                num_preconditioner_apply_inner_total = 0; /*!< Total user preconditioner callback applications in inner solves. */
+            Eigen::Index                num_preconditioner_apply_total       = 0; /*!< Total user preconditioner callback applications. */
+            tid::ur                     time_elapsed;                             /*!< Total solver wall timer. */
+            tid::ur                     time_solve_inner;                         /*!< Complete inner linear-solve wall time. */
+            tid::ur                     time_matvecs;                             /*!< Outer A and B matrix-vector product time. */
+            tid::ur                     time_matvecs_a;                           /*!< Outer A matrix-vector callback time. */
+            tid::ur                     time_matvecs_b;                           /*!< Outer B matrix-vector callback time. */
+            tid::ur                     time_matvecs_a_inner;                     /*!< Inner A matrix-vector callback time. */
+            tid::ur                     time_matvecs_b_inner;                     /*!< Inner B matrix-vector callback time. */
+            tid::ur                     time_precond;                             /*!< Outer preconditioner callback time. */
+            tid::ur                     time_preconditioner_inner;                /*!< Inner projected-preconditioner time, including projectors. */
+            tid::ur                     time_preconditioner_update;               /*!< Outer preconditioner-update callback time. */
+            tid::ur                     time_preconditioner_update_inner;         /*!< Inner preconditioner-update callback time. */
+            tid::ur                     time_preconditioner_apply_inner;          /*!< Inner user preconditioner callback time, excluding projectors. */
+            tid::ur                     time_operator_inner;                /*!< Projected correction-operator time, including projectors and A/B callbacks. */
+            tid::ur                     time_project_left_inner;            /*!< Inner left-projector time. */
+            tid::ur                     time_project_right_inner;           /*!< Inner right-projector time. */
+            tid::ur                     time_residual_correction;           /*!< Residual-correction construction time. */
+            tid::ur                     time_build;                         /*!< Search-space build time, including correction and orthogonalization. */
+            tid::ur                     time_orthogonalize;                 /*!< Timer for orthogonalization. */
+            tid::ur                     time_orthonormalize;                /*!< Timer for orthonormalization. */
+            tid::ur                     time_orth_project;                  /*!< Timer for orthogonalization projections. */
+            tid::ur                     time_orth_factor;                   /*!< Timer for orthonormalization factorizations. */
+            tid::ur                     time_orth_update;                   /*!< Timer for orthogonalization updates. */
+            tid::ur                     time_orth_refresh;                  /*!< Timer for refreshing operator products. */
+            tid::ur                     time_orth_mask;                     /*!< Timer for masking dependent vectors. */
+            tid::ur                     time_diagonalize;                   /*!< Timer for projected-problem diagonalization. */
+            tid::ur                     time_extract_ritz;                  /*!< Timer for Ritz extraction. */
+            tid::ur                     time_restart;                       /*!< Timer for search-space restarts. */
+            tid::ur                     time_status_update;                 /*!< Timer for convergence and status updates. */
+            RealScalar                  inner_error_last   = RealScalar{0}; /*!< Last inner correction residual. */
+            RealScalar                  inner_tol_last     = RealScalar{0}; /*!< Last inner correction tolerance. */
+            bool                        residual_converged = false;         /*!< Whether selected residuals satisfy the active tolerance. */
+            bool                        residual_below_gap = false;         /*!< Whether selected residuals are below the Ritz gap criterion. */
+            VectorReal                  rNormsAbs;                          /*!< Current selected absolute residual norms. */
+            VectorReal                  rnorm_abs_reference;                /*!< Residual norms recorded when the selected Ritz values stabilize. */
+            std::deque<IterationSample> history;                            /*!< Recent completed outer-iteration samples. */
+            size_t                      max_history_size        = 12;       /*!< Maximum stored history length. */
+            Eigen::Index                saturation_count_eigVal = 0;        /*!< Consecutive eigenvalue saturation count. */
+            Eigen::Index                saturation_count_rNorm  = 0;        /*!< Consecutive residual saturation count. */
+            Eigen::Index                saturation_count_max    = 5;        /*!< Saturation count required before stopping. */
+            std::vector<std::string>    stopMessage             = {};       /*!< Human-readable stop messages. */
+            StopReason                  stopReason              = StopReason::none; /*!< Solver stop reason. */
+            Ritz                        ritz_internal           = Ritz::NONE;       /*!< Effective Ritz selector used internally. */
         };
 
         /*! State used by AUTO residual correction. */
         struct AutoResidualCorrectionState {
-            ResidualCorrectionType active            = ResidualCorrectionType::CHEAP_OLSEN; /*!< Correction currently preferred by AUTO. */
-            ResidualCorrectionType iteration_method  = ResidualCorrectionType::CHEAP_OLSEN; /*!< Correction used in the current outer iteration. */
-            Eigen::Index           cheap_olsen_iters = 0;                                   /*!< Consecutive cheap Olsen outer iterations. */
-            Eigen::Index jd_outer_iters_since_probe  = 0;   /*!< Number of outer iterations using JD corrections since the last cheap Olsen correction. */
-            Eigen::Index probes_started              = 0;   /*!< AUTO probes started in the current stabilized Ritz basin. */
-            double       outer_iteration_time_start  = 0.0; /*!< Wall-time marker for the current outer iteration. */
+            ResidualCorrectionType    active                     = ResidualCorrectionType::CHEAP_OLSEN; /*!< Correction currently preferred by AUTO. */
+            ResidualCorrectionType    iteration_method           = ResidualCorrectionType::CHEAP_OLSEN; /*!< Correction used in the current outer iteration. */
+            Eigen::Index              cheap_olsen_iters          = 0;                                   /*!< Consecutive cheap Olsen outer iterations. */
+            Eigen::Index              probes_started             = 0;       /*!< AUTO probes started in the current stabilized Ritz basin. */
+            double                    outer_iteration_time_start = 0.0;     /*!< Wall-time marker for the current outer iteration. */
             std::vector<Eigen::Index> cheap_olsen_to_jd_switch_outer_iters; /*!< Outer iterations switching from cheap Olsen to Jacobi-Davidson. */
             std::vector<Eigen::Index> jd_to_cheap_olsen_switch_outer_iters; /*!< Outer iterations switching from Jacobi-Davidson to cheap Olsen. */
         };
@@ -246,9 +253,10 @@ namespace grit::form {
         static ResidualCorrectionType StringToResidualCorrection(std::string_view rct);
 
         protected:
-        BaseConfig           default_cfg = {};
-        BaseConfig          *cfg_ptr     = &default_cfg;
-        Logger::LoggerHandle log;
+        BaseConfig                    default_cfg = {};
+        BaseConfig                   *cfg_ptr     = &default_cfg;
+        Logger::LoggerHandle          log;
+        static constexpr Eigen::Index min_saturation_samples = 5;
 
         Eigen::Index qBlocks = 0;
 
@@ -256,6 +264,7 @@ namespace grit::form {
         [[nodiscard]] BaseConfig       &cfg();
         [[nodiscard]] const BaseConfig &cfg() const;
         [[nodiscard]] const MatrixType &initial_guess() const;
+        VectorReal                      fit_slopes(const MatrixReal &values, const VectorReal &coordinates, VectorReal *slope_errors = nullptr);
 
         public:
         virtual ~base() = default;
@@ -653,18 +662,33 @@ namespace grit::form {
          */
         VectorReal get_standard_deviations(const std::deque<VectorReal> &v, bool apply_log10, Eigen::Index last_n = -1);
         /*!
-         * Least-squares slopes over recent history.
-         * @param v History values.
-         * @param apply_log10 Apply log10 before fitting.
+         * Least-squares Ritz-value slopes over recent history.
+         * @param last_n Number of trailing entries to use; negative uses the complete history.
+         * @return Ritz-value slopes per matrix-vector product, or NaNs when fewer than two entries are selected.
+         */
+        VectorReal get_ritz_slopes(Eigen::Index last_n = -1);
+        /*!
+         * Least-squares log-residual slopes over recent history.
          * @param last_n Number of trailing entries to use; negative uses the complete history.
          * @param slope_errors Optional standard errors of the fitted slopes; NaNs when fewer than three entries are selected.
-         * @return Slopes per selected Ritz pair, or NaNs when fewer than two entries are selected.
+         * @return Log-residual slopes per matrix-vector product, or NaNs when fewer than two entries are selected.
          */
-        VectorReal get_slopes(const std::deque<VectorReal> &v, bool apply_log10, Eigen::Index last_n = -1, VectorReal *slope_errors = nullptr);
+        VectorReal get_rnorm_slopes(Eigen::Index last_n = -1, VectorReal *slope_errors = nullptr);
+        /*! Number of trailing samples produced by the requested residual correction. */
+        Eigen::Index get_num_consecutive_correction_samples(ResidualCorrectionType correction) const;
+        /*! Absolute drift-per-matvec thresholds for the selected Ritz values. */
+        VectorReal get_ritz_drift_thresholds(Eigen::Index rows) const;
         /*! Whether residual norms have saturated by the configured criterion. */
         bool rNorms_have_saturated();
-        /*! Whether Ritz values have saturated by the configured criterion. */
-        bool eigVals_have_saturated();
+        /*!
+         * Whether Ritz values have saturated by the configured criterion.
+         * @param slopes Optional slopes from the suffix that determined the result.
+         * @param samples Optional length of the suffix that determined the result.
+         * @param saturated_pairs Optional per-pair saturation flags over the inspected suffixes.
+         * @param last_n Maximum number of trailing entries to inspect; negative uses the complete history.
+         */
+        bool eigVals_have_saturated(VectorReal *slopes = nullptr, Eigen::Index *samples = nullptr, VectorIdxT *saturated_pairs = nullptr,
+                                    Eigen::Index last_n = -1);
         /*!
          * l2-orthogonalize Y against X and refresh A Y when requested.
          * @param X Existing basis block.

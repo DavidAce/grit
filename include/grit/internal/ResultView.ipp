@@ -34,9 +34,8 @@ namespace grit {
 
     template<typename Scalar_>
     typename ResultView<Scalar_>::MatrixView ResultView<Scalar_>::eigVecs() const {
-        return internal::visit_solver_source(source, [](const auto &src) -> MatrixView {
-            return MatrixView(src.V.leftCols(std::min(src.status.eigVal.size(), src.V.cols())));
-        });
+        return internal::visit_solver_source(
+            source, [](const auto &src) -> MatrixView { return MatrixView(src.V.leftCols(std::min(src.status.eigVal.size(), src.V.cols()))); });
     }
 
     template<typename Scalar_>
@@ -387,7 +386,8 @@ namespace grit {
 
     template<typename Scalar_>
     Eigen::Index ResultView<Scalar_>::auto_jd_outer_iters_since_probe() const {
-        return internal::visit_solver_source(source, [](const auto &src) { return src.auto_residual_correction.jd_outer_iters_since_probe; });
+        return internal::visit_solver_source(
+            source, [](const auto &src) { return src.get_num_consecutive_correction_samples(grit::ResidualCorrectionType::JACOBI_DAVIDSON); });
     }
 
     template<typename Scalar_>

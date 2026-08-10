@@ -62,7 +62,7 @@ namespace bench_generalized {
             insert_field(h5type, "max_matvecs", &Row::max_matvecs);
             insert_field(h5type, "abstol", &Row::abstol);
             insert_field(h5type, "reltol", &Row::reltol);
-            insert_field(h5type, "ritz_stabilization_tolerance", &Row::ritz_stabilization_tolerance);
+            insert_field(h5type, "ritz_saturation_tolerance", &Row::ritz_saturation_tolerance);
             insert_field(h5type, "quit_when_saturated", &Row::quit_when_saturated);
             insert_field(h5type, "ritz", &Row::ritz);
             insert_field(h5type, "use_refined_rayleigh_ritz", &Row::use_refined_rayleigh_ritz);
@@ -277,7 +277,7 @@ namespace bench_generalized {
             file.writeAttribute(static_cast<bool>(snapshot.use_refined_rayleigh_ritz), group_path(algo), "use_refined_rayleigh_ritz");
             file.writeAttribute(static_cast<bool>(snapshot.use_b_inner_product), group_path(algo), "use_b_inner_product");
             file.writeAttribute(snapshot.abstol, group_path(algo), "abstol");
-            file.writeAttribute(snapshot.ritz_stabilization_tolerance, group_path(algo), "ritz_stabilization_tolerance");
+            file.writeAttribute(snapshot.ritz_saturation_tolerance, group_path(algo), "ritz_saturation_tolerance");
             file.writeAttribute(static_cast<bool>(snapshot.quit_when_saturated), group_path(algo), "quit_when_saturated");
             if constexpr(std::is_same_v<Result, GdpluskSolveResult>) {
                 file.writeAttribute(snapshot.max_basis_blocks, group_path(algo), "max_basis_blocks");
