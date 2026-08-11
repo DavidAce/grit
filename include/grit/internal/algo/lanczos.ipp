@@ -8,7 +8,6 @@ namespace grit::algo {
     template<typename Scalar, grit::Form form_>
     lanczos<Scalar, form_>::lanczos(Matvec<Scalar> &A) requires(form_ == grit::Form::STANDARD)
         : Base(MatrixType{}, A) {
-        this->bind_config(config);
         config.nev        = 1;
         config.block_size = 1;
         config.ncv        = std::min<Eigen::Index>(16, std::max<Eigen::Index>(1, this->N));
@@ -17,89 +16,30 @@ namespace grit::algo {
     template<typename Scalar, grit::Form form_>
     lanczos<Scalar, form_>::lanczos(Matvec<Scalar> &A, Matvec<Scalar> &B) requires(form_ == grit::Form::GENERALIZED)
         : Base(MatrixType{}, A, B) {
-        this->bind_config(config);
         config.nev        = 1;
         config.block_size = 1;
         config.ncv        = std::min<Eigen::Index>(16, std::max<Eigen::Index>(1, this->N));
     }
 
-    template<typename Scalar, grit::Form form_>
-    void lanczos<Scalar, form_>::assert_operator_config() const requires(form_ == grit::Form::STANDARD)
-    {
-        if(this->A.get_size() <= 0) throw std::runtime_error("lanczos requires operator A with positive size");
-        if(config.use_b_inner_product) throw std::runtime_error("use_b_inner_product requires a generalized problem");
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void lanczos<Scalar, form_>::assert_operator_config() const requires(form_ == grit::Form::GENERALIZED)
-    {
-        if(this->A.get_size() <= 0) throw std::runtime_error("lanczos requires operator A with positive size");
-        auto &B = this->B->get();
-        if(B.get_size() <= 0) throw std::runtime_error("lanczos requires operator B with positive size");
-        if(this->A.get_size() != B.get_size()) throw std::runtime_error("lanczos requires operators A and B to have matching sizes");
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void lanczos<Scalar, form_>::assert_config() const {
-        assert_operator_config();
-
-        if(config.nev < 1) throw std::runtime_error("lanczos config error: nev must be at least 1");
-        if(config.block_size < 1) throw std::runtime_error("lanczos config error: block_size must be at least 1");
+    template<typename Scalar, grit::Form form_> void lanczos<Scalar, form_>::assert_config() const {
+        this->assert_base_config();
         if(config.nev > config.block_size) throw std::runtime_error("lanczos config error: nev must not exceed block_size");
-        if(config.ncv < config.nev) throw std::runtime_error("lanczos config error: ncv must be at least nev");
-        if(config.ncv > this->N) throw std::runtime_error("lanczos config error: ncv must not exceed the operator size");
-        if(config.block_size > config.ncv) throw std::runtime_error("lanczos config error: block_size must not exceed ncv");
-        if(config.ncv % config.block_size != 0) throw std::runtime_error("lanczos config error: ncv must be divisible by block_size");
         if(config.maxRetainBlocks < 1) throw std::runtime_error("lanczos config error: maxRetainBlocks must be at least 1");
         if(config.maxRetainBlocks > config.ncv / config.block_size)
             throw std::runtime_error("lanczos config error: maxRetainBlocks must not exceed ncv / block_size");
-        if(config.max_iters == 0) throw std::runtime_error("lanczos config error: max_iters must be positive or negative for unlimited");
-        if(config.max_matvecs == 0) throw std::runtime_error("lanczos config error: max_matvecs must be positive or negative for unlimited");
-        if(config.abstol <= RealScalar{0}) throw std::runtime_error("lanczos config error: abstol must be positive");
-        if(config.reltol < RealScalar{0}) throw std::runtime_error("lanczos config error: reltol must be nonnegative");
-        if(config.saturation_count_max < 1) throw std::runtime_error("lanczos config error: saturation_count_max must be positive");
-        if(!std::isfinite(config.ritz_saturation_tolerance) || config.ritz_saturation_tolerance <= RealScalar{0}) {
-            throw std::runtime_error("lanczos config error: ritz_saturation_tolerance must be finite and positive");
-        }
-        if(this->has_initial_guess()) {
-            if(this->initial_guess().rows() != this->N) throw std::runtime_error("lanczos config error: initial guess row count must match the operator size");
-            if(this->initial_guess().cols() < 1) throw std::runtime_error("lanczos config error: initial guess must have at least one column");
-        }
     }
 
-    template<typename Scalar, grit::Form form_>
-    void lanczos<Scalar, form_>::run() {
+    template<typename Scalar, grit::Form form_> void lanczos<Scalar, form_>::run() {
         assert_config();
 
         this->setLogger(config.log_level, std::string("grit|") + std::string(this->form_name()));
-        status.stopReason = StopReason::none;
-        status.stopMessage.clear();
-        status.residual_converged      = false;
-        status.residual_below_gap      = false;
-        status.saturation_count_eigVal = 0;
-        status.saturation_count_rNorm  = 0;
-        status.history.clear();
-        status.time_orthogonalize.reset();
-        status.time_orthonormalize.reset();
-        status.time_orth_project.reset();
-        status.time_orth_factor.reset();
-        status.time_orth_update.reset();
-        status.time_orth_refresh.reset();
-        status.time_orth_mask.reset();
-        status.time_diagonalize.reset();
-        status.time_extract_ritz.reset();
-        status.time_restart.reset();
-
-        status.saturation_count_max = this->cfg().saturation_count_max;
-        status.max_history_size     = static_cast<size_t>(std::max<Eigen::Index>(12, 2 * this->cfg().ncv / this->cfg().block_size + 1));
+        this->reset_run_status();
+        auto token_elapsed = status.time_elapsed.tic_token();
 
         if(status.outer_iter == 0) {
             status.rNormsAbs.setOnes(this->cfg().nev);
             status.rnorm_abs_reference.setZero(this->cfg().nev);
             status.eigVal.setOnes(this->cfg().nev);
-            status.oldVal.setOnes(this->cfg().nev);
-            status.absDiff.setOnes(this->cfg().nev);
-            status.relDiff.setOnes(this->cfg().nev);
 
             Eigen::ColPivHouseholderQR<MatrixType> cpqr;
             for(long i = 0; i < 2; ++i) {
@@ -132,37 +72,13 @@ namespace grit::algo {
         }
 
         while(true) {
-            this->preamble();
-            build();
-            this->diagonalizeT();
-            extractRitzVectors();
-            updateStatus();
-            this->printStatus();
-            run_user_callback();
-            status.outer_iter++;
+            this->do_outer_iteration();
             if(status.stopReason != StopReason::none) break;
         }
+        this->printFinal();
     }
 
-    template<typename Scalar, grit::Form form_>
-    void lanczos<Scalar, form_>::write_Q_next_B_DGKS(Eigen::Index i) {
-        for(int rep = 0; rep < 2; ++rep) {
-            MatrixType QjW;
-            for(Eigen::Index j = i; j >= 0; --j) {
-                auto Qj      = Q.middleCols(j * this->cfg().block_size, this->cfg().block_size);
-                QjW          = Qj.adjoint() * W;
-                W.noalias() -= Qj * QjW;
-            }
-        }
-
-        hhqr.compute(W);
-        Q.middleCols((i + 1) * this->cfg().block_size, this->cfg().block_size) =
-            hhqr.householderQ().setLength(W.cols()) * MatrixType::Identity(N, this->cfg().block_size);
-        B_block = hhqr.matrixQR().topLeftCorner(this->cfg().block_size, this->cfg().block_size).template triangularView<Eigen::Upper>();
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void lanczos<Scalar, form_>::build() {
+    template<typename Scalar, grit::Form form_> void lanczos<Scalar, form_>::build() {
         const Eigen::Index b = this->cfg().block_size;
         const Eigen::Index m = this->cfg().ncv / this->cfg().block_size;
 
@@ -195,8 +111,8 @@ namespace grit::algo {
                 T1            = (T1 + T1.adjoint()) * Base::half;
                 T2            = (T2 + T2.adjoint()) * Base::half;
 
-                auto [W, Winv] = get_bm_normalizer_for_the_projected_pencil(T2);
-                cols_ks        = std::clamp(std::min(config.maxRetainBlocks * this->cfg().block_size, W.cols()), this->cfg().block_size, W.cols());
+                auto W  = get_bm_normalizer_for_the_projected_pencil(T2);
+                cols_ks = std::clamp(std::min(config.maxRetainBlocks * this->cfg().block_size, W.cols()), this->cfg().block_size, W.cols());
 
                 MatrixType WT1W = W.adjoint() * T1 * W;
                 MatrixType WT2W = W.adjoint() * T2 * W;
@@ -275,8 +191,6 @@ namespace grit::algo {
         if(Q.cols() >= 2 * b) Q_prev = Q.middleCols(Q.cols() - 2 * b, b);
         A_block.resize(b, b);
         B_block.resize(b, b);
-        T.setZero(std::min(N, m * b), std::min(N, m * b));
-
         for(Eigen::Index i = 0; Q.cols() + b <= std::min(N, m * b); ++i) {
             auto Q_cur = Q.rightCols(b);
             W          = MultA(Q_cur);
@@ -337,12 +251,9 @@ namespace grit::algo {
             AQ.rightCols(b) = AW.leftCols(b);
             BQ.rightCols(b) = BW.leftCols(b);
         }
-
-        qBlocks = Q.cols() / b;
     }
 
-    template<typename Scalar, grit::Form form_>
-    void lanczos<Scalar, form_>::extractRitzVectors() {
+    template<typename Scalar, grit::Form form_> void lanczos<Scalar, form_>::extractRitzVectors() {
         if(status.stopReason != StopReason::none) return;
         if(T_evals.size() < this->cfg().block_size || T_evecs.cols() == 0) {
             status.stopReason |= StopReason::subspace_exhausted;
@@ -395,8 +306,7 @@ namespace grit::algo {
         if(status.rnorm_abs_reference.size() != rows) status.rnorm_abs_reference = VectorReal::Zero(rows);
     }
 
-    template<typename Scalar, grit::Form form_>
-    void lanczos<Scalar, form_>::updateStatus() {
+    template<typename Scalar, grit::Form form_> void lanczos<Scalar, form_>::updateStatus() {
         if(T_evals.size() < this->cfg().block_size) return;
         if(T_evals.size() < this->cfg().nev || status.optIdx.size() < static_cast<size_t>(this->cfg().nev) || status.rNormsAbs.size() < this->cfg().nev) {
             status.stopReason |= StopReason::subspace_exhausted;
@@ -410,8 +320,7 @@ namespace grit::algo {
         }
     }
 
-    template<typename Scalar, grit::Form form_>
-    void lanczos<Scalar, form_>::run_user_callback() {
+    template<typename Scalar, grit::Form form_> void lanczos<Scalar, form_>::run_user_callback() {
         if(config.user_callback) config.user_callback(*this);
     }
 }

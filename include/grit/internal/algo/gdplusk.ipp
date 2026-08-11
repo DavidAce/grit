@@ -11,7 +11,6 @@ namespace grit::algo {
     template<typename Scalar, grit::Form form_>
     gdplusk<Scalar, form_>::gdplusk(Matvec<Scalar> &A) requires(form_ == grit::Form::STANDARD)
         : Base(MatrixType{}, A) {
-        this->bind_config(config);
         config.nev        = 1;
         config.block_size = 1;
         config.ncv        = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
@@ -20,39 +19,16 @@ namespace grit::algo {
     template<typename Scalar, grit::Form form_>
     gdplusk<Scalar, form_>::gdplusk(Matvec<Scalar> &A, Matvec<Scalar> &B) requires(form_ == grit::Form::GENERALIZED)
         : Base(MatrixType{}, A, B) {
-        this->bind_config(config);
         config.nev        = 1;
         config.block_size = 1;
         config.ncv        = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
     }
 
-    template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::assert_operator_config() const requires(form_ == grit::Form::STANDARD)
-    {
-        if(this->A.get_size() <= 0) throw std::runtime_error("gdplusk requires operator A with positive size");
-        if(config.use_b_inner_product) throw std::runtime_error("use_b_inner_product requires a generalized problem");
-        if(config.use_jd_b_only) throw std::runtime_error("use_jd_b_only requires a generalized problem");
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::assert_operator_config() const requires(form_ == grit::Form::GENERALIZED)
-    {
-        if(this->A.get_size() <= 0) throw std::runtime_error("gdplusk requires operator A with positive size");
-        auto &B = this->B->get();
-        if(B.get_size() <= 0) throw std::runtime_error("gdplusk requires operator B with positive size");
-        if(this->A.get_size() != B.get_size()) throw std::runtime_error("gdplusk requires operators A and B to have matching sizes");
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::assert_config() const {
-        assert_operator_config();
-
-        if(config.nev < 1) throw std::runtime_error("gdplusk config error: nev must be at least 1");
-        if(config.block_size < 1) throw std::runtime_error("gdplusk config error: block_size must be at least 1");
-        if(config.ncv < config.nev) throw std::runtime_error("gdplusk config error: ncv must be at least nev");
-        if(config.ncv > this->N) throw std::runtime_error("gdplusk config error: ncv must not exceed the operator size");
-        if(config.block_size > config.ncv) throw std::runtime_error("gdplusk config error: block_size must not exceed ncv");
-        if(config.ncv % config.block_size != 0) throw std::runtime_error("gdplusk config error: ncv must be divisible by block_size");
+    template<typename Scalar, grit::Form form_> void gdplusk<Scalar, form_>::assert_config() const {
+        this->assert_base_config();
+        if constexpr(form_ == grit::Form::STANDARD) {
+            if(config.use_jd_b_only) throw std::runtime_error("use_jd_b_only requires a generalized problem");
+        }
         const auto max_basis_blocks = config.ncv / config.block_size;
         if(config.maxRetainBlocks < 1) throw std::runtime_error("gdplusk config error: maxRetainBlocks must be at least 1");
         if(config.maxRetainBlocks > max_basis_blocks) {
@@ -62,47 +38,23 @@ namespace grit::algo {
         if(config.maxPrevBlocks > max_basis_blocks) {
             throw std::runtime_error("gdplusk config error: maxPrevBlocks must not exceed the number of basis blocks");
         }
-        if(config.max_extra_ritz_history < 0) throw std::runtime_error("gdplusk config error: max_extra_ritz_history must be nonnegative");
-        if(config.max_extra_ritz_history > max_basis_blocks) {
-            throw std::runtime_error("gdplusk config error: max_extra_ritz_history must not exceed the number of basis blocks");
-        }
-        if(config.max_ritz_residual_history < 0) throw std::runtime_error("gdplusk config error: max_ritz_residual_history must be nonnegative");
-        if(config.max_ritz_residual_history > max_basis_blocks) {
-            throw std::runtime_error("gdplusk config error: max_ritz_residual_history must not exceed the number of basis blocks");
-        }
-        if(config.max_iters == 0) throw std::runtime_error("gdplusk config error: max_iters must be positive or negative for unlimited");
-        if(config.max_matvecs == 0) throw std::runtime_error("gdplusk config error: max_matvecs must be positive or negative for unlimited");
-        if(config.abstol <= RealScalar{0}) throw std::runtime_error("gdplusk config error: abstol must be positive");
-        if(config.reltol < RealScalar{0}) throw std::runtime_error("gdplusk config error: reltol must be nonnegative");
-        if(config.saturation_count_max < 1) throw std::runtime_error("gdplusk config error: saturation_count_max must be positive");
         if(config.inner_tol <= RealScalar{0} || config.inner_tol > RealScalar{1}) {
             throw std::runtime_error("gdplusk config error: inner_tol must be in the interval (0, 1]");
         }
         if(config.inner_max_iters < 1) throw std::runtime_error("gdplusk config error: inner_max_iters must be at least 1");
-        if(!std::isfinite(config.ritz_saturation_tolerance) || config.ritz_saturation_tolerance <= RealScalar{0}) {
-            throw std::runtime_error("gdplusk config error: ritz_saturation_tolerance must be finite and positive");
-        }
         if(config.auto_probe_length < Base::min_saturation_samples) { throw std::runtime_error("gdplusk config error: auto_probe_length must be at least 5"); }
         if(config.auto_max_probes < -1) { throw std::runtime_error("gdplusk config error: auto_max_probes must be at least -1"); }
-        if(this->has_initial_guess()) {
-            if(this->initial_guess().rows() != this->N) throw std::runtime_error("gdplusk config error: initial guess row count must match the operator size");
-            if(this->initial_guess().cols() < 1) throw std::runtime_error("gdplusk config error: initial guess must have at least one column");
-        }
     }
 
-    template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::run() {
+    template<typename Scalar, grit::Form form_> void gdplusk<Scalar, form_>::run() {
         assert_config();
 
         this->setLogger(config.log_level, std::string("grit|") + std::string(this->form_name()));
         this->current_inner_tol = config.inner_tol;
-        max_mBlocks             = config.max_extra_ritz_history;
-        max_sBlocks             = config.max_ritz_residual_history;
         Base::run();
     }
 
-    template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::preamble() {
+    template<typename Scalar, grit::Form form_> void gdplusk<Scalar, form_>::preamble() {
         Base::preamble();
         adjust_inner_tolerance(S);
         adjust_residual_correction_type();
@@ -110,8 +62,7 @@ namespace grit::algo {
             auto_residual_correction.outer_iteration_time_start = status.time_elapsed.get_time();
     }
 
-    template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::extractRitzVectors() {
+    template<typename Scalar, grit::Form form_> void gdplusk<Scalar, form_>::extractRitzVectors() {
         if(status.stopReason != StopReason::none) return;
         if(T_evals.size() < this->cfg().block_size) return;
 
@@ -153,39 +104,12 @@ namespace grit::algo {
         if(status.rnorm_abs_reference.size() != rows) status.rnorm_abs_reference = VectorReal::Zero(rows);
     }
 
-    template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::run_user_callback() {
+    template<typename Scalar, grit::Form form_> void gdplusk<Scalar, form_>::run_user_callback() {
         if(status.outer_iter > 0 && status.stopReason == StopReason::none) update_auto_residual_correction_state();
         if(config.user_callback) config.user_callback(*this);
     }
 
-    template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::shift_blocks_right(Eigen::Ref<MatrixType> matrix, Eigen::Index offset_old, Eigen::Index offset_new, Eigen::Index extent) {
-        if(extent <= 0 || offset_old == offset_new) return;
-        matrix.middleCols(offset_new * this->cfg().block_size, extent * this->cfg().block_size) =
-            matrix.middleCols(offset_old * this->cfg().block_size, extent * this->cfg().block_size);
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::roll_blocks_left(Eigen::Ref<MatrixType> matrix, Eigen::Index offset, Eigen::Index extent) {
-        if(extent <= 1) return;
-        matrix.middleCols(offset * this->cfg().block_size, (extent - 1) * this->cfg().block_size) =
-            matrix.middleCols((offset + 1) * this->cfg().block_size, (extent - 1) * this->cfg().block_size);
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::selective_orthonormalize(const Eigen::Ref<const MatrixType> X, Eigen::Ref<MatrixType> Y, RealScalar breakdownTol,
-                                                          VectorIdxT &mask) {
-        for(Eigen::Index j = 0; j < Y.cols(); ++j) {
-            if(X.cols() > 0) Y.col(j).noalias() -= X * (X.adjoint() * Y.col(j));
-            auto norm = Y.col(j).norm();
-            mask(j)   = norm > breakdownTol ? 1 : 0;
-            if(mask(j)) Y.col(j) /= norm;
-        }
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::make_new_Q_block() {
+    template<typename Scalar, grit::Form form_> void gdplusk<Scalar, form_>::make_new_Q_block() {
         if(S.cols() == 0) return;
         Q_new = get_sBlock(S);
 
@@ -221,8 +145,7 @@ namespace grit::algo {
         }
     }
 
-    template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::build() {
+    template<typename Scalar, grit::Form form_> void gdplusk<Scalar, form_>::build() {
         auto t_build      = status.time_build.tic_token();
         bool had_residual = S.cols() > 0;
         make_new_Q_block();
@@ -258,8 +181,8 @@ namespace grit::algo {
                 T1            = (T1 + T1.adjoint()) * Base::half;
                 T2            = (T2 + T2.adjoint()) * Base::half;
 
-                auto [W, Winv] = get_bm_normalizer_for_the_projected_pencil(T2);
-                cols_ks        = std::clamp(std::min(config.maxRetainBlocks * this->cfg().block_size, W.cols()), this->cfg().block_size, W.cols());
+                auto W  = get_bm_normalizer_for_the_projected_pencil(T2);
+                cols_ks = std::clamp(std::min(config.maxRetainBlocks * this->cfg().block_size, W.cols()), this->cfg().block_size, W.cols());
 
                 MatrixType WT1W = W.adjoint() * T1 * W;
                 MatrixType WT2W = W.adjoint() * T2 * W;
@@ -408,6 +331,5 @@ namespace grit::algo {
                 BQ = Q;
             }
         }
-        qBlocks = Q.cols() / std::max<Eigen::Index>(1, this->cfg().block_size);
     }
 }

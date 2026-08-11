@@ -35,8 +35,7 @@ namespace grit::form {
         return std::clamp(std::max(RealScalar{1}, multiplier_raw), RealScalar{1}, multiplier_max);
     }
 
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::OrthMeta::analyze_l2_orthonormality(const Eigen::Ref<const MatrixType> &Y) {
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::OrthMeta::analyze_l2_orthonormality(const Eigen::Ref<const MatrixType> &Y) {
         if(Y.cols() == 0) return;
         MatrixType I = MatrixType::Identity(Y.cols(), Y.cols());
         Gram         = Y.adjoint() * Y;
@@ -261,8 +260,7 @@ namespace grit::form {
                                                  location.function_name(), orthError, finalTol));
     }
 
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::compress_cols(MatrixType &X, const VectorIdxT &mask) {
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::compress_cols(MatrixType &X, const VectorIdxT &mask) {
         assert(mask.size() == X.cols() && "Mask size must match number of columns in X.");
         if(mask.sum() == X.cols()) return;
 
@@ -566,8 +564,7 @@ namespace grit::form {
         assert_bm_orthogonal(X, BX, Y, BY, m);
     }
 
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::block_l2_orthonormalize(MatrixType &Y, MatrixType &AY, OrthMeta &m) {
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::block_l2_orthonormalize(MatrixType &Y, MatrixType &AY, OrthMeta &m) {
         auto token_orthonormalize = status.time_orthonormalize.tic_token();
         if(Y.cols() == 0) {
             AY.resizeLike(Y);
@@ -582,7 +579,6 @@ namespace grit::form {
 
         auto handle_masked_columns = [&]() {
             if(m.mask.sum() == Y.cols()) return;
-            VectorReal norms = (Y.adjoint() * Y).diagonal().cwiseAbs();
             switch(m.maskPolicy) {
                 case MaskPolicy::COMPRESS:
                     if(log && log->should_log(spdlog::level::debug))
@@ -598,7 +594,6 @@ namespace grit::form {
                     }
                     break;
             }
-            (void) norms;
         };
 
         for(Eigen::Index j = 0; j < Y.cols(); ++j) {
@@ -648,8 +643,7 @@ namespace grit::form {
         assert_l2_orthonormal(Y, m);
     }
 
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::block_l2_orthonormalize(MatrixType &Y, MatrixType &AY, MatrixType &BY, OrthMeta &m) {
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::block_l2_orthonormalize(MatrixType &Y, MatrixType &AY, MatrixType &BY, OrthMeta &m) {
         assert(!cfg().use_b_inner_product);
         block_l2_orthonormalize(Y, AY, m);
         if(Y.cols() == 0) {
@@ -665,8 +659,7 @@ namespace grit::form {
         }
     }
 
-    template<typename LScalar>
-    struct BmEigOrthoStepMeta {
+    template<typename LScalar> struct BmEigOrthoStepMeta {
         using RealLScalar = decltype(std::real(std::declval<LScalar>()));
         using MatrixLType = Eigen::Matrix<LScalar, Eigen::Dynamic, Eigen::Dynamic>;
         using VectorLReal = Eigen::Matrix<RealLScalar, Eigen::Dynamic, 1>;

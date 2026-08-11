@@ -12,97 +12,70 @@ namespace grit::settings {
 }
 
 namespace grit::form {
-    template<typename Scalar, grit::Form form_>
-    std::string_view base<Scalar, form_>::ResidualCorrectionToString(ResidualCorrectionType rct) {
-        switch(rct) {
-            case ResidualCorrectionType::NONE: return "NONE";
-            case ResidualCorrectionType::CHEAP_OLSEN: return "CHEAP_OLSEN";
-            case ResidualCorrectionType::FULL_OLSEN: return "FULL_OLSEN";
-            case ResidualCorrectionType::JACOBI_DAVIDSON: return "JACOBI_DAVIDSON";
-            case ResidualCorrectionType::AUTO: return "AUTO";
-        }
-        return "NONE";
-    }
-
-    template<typename Scalar, grit::Form form_>
-    typename base<Scalar, form_>::ResidualCorrectionType base<Scalar, form_>::StringToResidualCorrection(std::string_view rct) {
-        if(rct == "NONE") return ResidualCorrectionType::NONE;
-        if(rct == "CHEAP_OLSEN") return ResidualCorrectionType::CHEAP_OLSEN;
-        if(rct == "FULL_OLSEN") return ResidualCorrectionType::FULL_OLSEN;
-        if(rct == "JACOBI_DAVIDSON") return ResidualCorrectionType::JACOBI_DAVIDSON;
-        if(rct == "AUTO") return ResidualCorrectionType::AUTO;
-        return ResidualCorrectionType::NONE;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::bind_config(BaseConfig &config) {
-        cfg_ptr = &config;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    typename base<Scalar, form_>::BaseConfig &base<Scalar, form_>::cfg() {
-        return *cfg_ptr;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    const typename base<Scalar, form_>::BaseConfig &base<Scalar, form_>::cfg() const {
-        return *cfg_ptr;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::setLogger(spdlog::level::level_enum level, const std::string &name) {
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::setLogger(spdlog::level::level_enum level, const std::string &name) {
         log = Logger::getLogger(name.empty() ? "grit" : name);
         log->set_level(level);
     }
 
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::set_initial_guess(MatrixType guess) {
-        V = std::move(guess);
-    }
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::set_initial_guess(MatrixType guess) { V = std::move(guess); }
 
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::clear_initial_guess() {
-        V.resize(0, 0);
-    }
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::clear_initial_guess() { V.resize(0, 0); }
 
-    template<typename Scalar, grit::Form form_>
-    bool base<Scalar, form_>::has_initial_guess() const {
-        return V.size() > 0;
-    }
+    template<typename Scalar, grit::Form form_> bool base<Scalar, form_>::has_initial_guess() const { return V.size() > 0; }
 
-    template<typename Scalar, grit::Form form_>
-    const typename base<Scalar, form_>::MatrixType &base<Scalar, form_>::initial_guess() const {
-        return V;
-    }
+    template<typename Scalar, grit::Form form_> const typename base<Scalar, form_>::MatrixType &base<Scalar, form_>::initial_guess() const { return V; }
 
     template<typename Scalar, grit::Form form_>
     base<Scalar, form_>::base(const MatrixType &V, Matvec<Scalar> &A) requires(form_ == grit::Form::STANDARD)
         : A(A), V(V) {
-        setLogger(cfg().log_level, "grit");
-        N    = A.get_size();
-        size = A.get_size();
-        status.rNormsAbs.setOnes(cfg().nev);
-        status.eigVal.setOnes(cfg().nev);
-        status.oldVal.setOnes(cfg().nev);
-        status.absDiff.setOnes(cfg().nev);
-        status.relDiff.setOnes(cfg().nev);
+        N = A.get_size();
     }
 
     template<typename Scalar, grit::Form form_>
     base<Scalar, form_>::base(const MatrixType &V, Matvec<Scalar> &A, Matvec<Scalar> &B) requires(form_ == grit::Form::GENERALIZED)
         : A(A), B(B), V(V) {
-        setLogger(cfg().log_level, "grit");
-        N    = A.get_size();
-        size = A.get_size();
-        status.rNormsAbs.setOnes(cfg().nev);
-        status.eigVal.setOnes(cfg().nev);
-        status.oldVal.setOnes(cfg().nev);
-        status.absDiff.setOnes(cfg().nev);
-        status.relDiff.setOnes(cfg().nev);
+        N = A.get_size();
     }
 
     template<typename Scalar, grit::Form form_>
-    std::string_view base<Scalar, form_>::form_name() const {
+    void base<Scalar, form_>::assert_operator_config() const requires(form_ == grit::Form::STANDARD)
+    {
+        if(A.get_size() <= 0) throw std::runtime_error("solver requires operator A with positive size");
+        if(cfg().use_b_inner_product) throw std::runtime_error("use_b_inner_product requires a generalized problem");
+    }
+
+    template<typename Scalar, grit::Form form_>
+    void base<Scalar, form_>::assert_operator_config() const requires(form_ == grit::Form::GENERALIZED)
+    {
+        if(A.get_size() <= 0) throw std::runtime_error("solver requires operator A with positive size");
+        auto &B_op = B->get();
+        if(B_op.get_size() <= 0) throw std::runtime_error("solver requires operator B with positive size");
+        if(A.get_size() != B_op.get_size()) throw std::runtime_error("solver requires operators A and B to have matching sizes");
+    }
+
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::assert_base_config() const {
+        assert_operator_config();
+        if(cfg().nev < 1) throw std::runtime_error("solver config error: nev must be at least 1");
+        if(cfg().block_size < 1) throw std::runtime_error("solver config error: block_size must be at least 1");
+        if(cfg().ncv < cfg().nev) throw std::runtime_error("solver config error: ncv must be at least nev");
+        if(cfg().ncv > N) throw std::runtime_error("solver config error: ncv must not exceed the operator size");
+        if(cfg().block_size > cfg().ncv) throw std::runtime_error("solver config error: block_size must not exceed ncv");
+        if(cfg().ncv % cfg().block_size != 0) throw std::runtime_error("solver config error: ncv must be divisible by block_size");
+        if(cfg().max_iters == 0) throw std::runtime_error("solver config error: max_iters must be positive or negative for unlimited");
+        if(cfg().max_matvecs == 0) throw std::runtime_error("solver config error: max_matvecs must be positive or negative for unlimited");
+        if(cfg().abstol <= RealScalar{0}) throw std::runtime_error("solver config error: abstol must be positive");
+        if(cfg().reltol < RealScalar{0}) throw std::runtime_error("solver config error: reltol must be nonnegative");
+        if(cfg().saturation_count_max < 1) throw std::runtime_error("solver config error: saturation_count_max must be positive");
+        if(!std::isfinite(cfg().ritz_saturation_tolerance) || cfg().ritz_saturation_tolerance <= RealScalar{0}) {
+            throw std::runtime_error("solver config error: ritz_saturation_tolerance must be finite and positive");
+        }
+        if(has_initial_guess()) {
+            if(initial_guess().rows() != N) throw std::runtime_error("solver config error: initial guess row count must match the operator size");
+            if(initial_guess().cols() < 1) throw std::runtime_error("solver config error: initial guess must have at least one column");
+        }
+    }
+
+    template<typename Scalar, grit::Form form_> std::string_view base<Scalar, form_>::form_name() const {
         if constexpr(form_ == grit::Form::GENERALIZED)
             return "GENERALIZED";
         else
@@ -122,8 +95,7 @@ namespace grit::form {
         return rNormAbsTargets()(n);
     }
 
-    template<typename Scalar, grit::Form form_>
-    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::rNormAbsTargets() const {
+    template<typename Scalar, grit::Form form_> typename base<Scalar, form_>::VectorReal base<Scalar, form_>::rNormAbsTargets() const {
         VectorReal rNormAbsTargets = VectorReal::Constant(cfg().nev, cfg().abstol);
         if(cfg().use_rescaled_rnorm_tolerance) rNormAbsTargets = rNormAbsTargets.cwiseProduct(rNormScales());
 
@@ -134,31 +106,27 @@ namespace grit::form {
         return rNormAbsTargets;
     }
 
-    template<typename Scalar, grit::Form form_>
-    typename base<Scalar, form_>::RealScalar base<Scalar, form_>::rNormScale(Eigen::Index n) const {
+    template<typename Scalar, grit::Form form_> typename base<Scalar, form_>::RealScalar base<Scalar, form_>::rNormScale(Eigen::Index n) const {
         auto op_norm = get_op_norm_estimate(status.eigVal.size() > n ? std::optional<RealScalar>{status.eigVal(n)} : std::nullopt);
         auto v_norm  = V.cols() > n ? V.col(n).norm() : RealScalar{1};
         if(!std::isfinite(v_norm) || v_norm <= RealScalar{0}) v_norm = RealScalar{1};
         return std::max(op_norm * v_norm, std::numeric_limits<RealScalar>::min());
     }
 
-    template<typename Scalar, grit::Form form_>
-    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::rNormScales() const {
+    template<typename Scalar, grit::Form form_> typename base<Scalar, form_>::VectorReal base<Scalar, form_>::rNormScales() const {
         const auto nev = cfg().nev;
         VectorReal scales(nev);
         for(Eigen::Index n = 0; n < nev; ++n) scales(n) = rNormScale(n);
         return scales;
     }
 
-    template<typename Scalar, grit::Form form_>
-    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::rNormsRel(const VectorReal &rNormsAbs) const {
+    template<typename Scalar, grit::Form form_> typename base<Scalar, form_>::VectorReal base<Scalar, form_>::rNormsRel(const VectorReal &rNormsAbs) const {
         auto rows = std::min<Eigen::Index>(cfg().nev, rNormsAbs.size());
         if(rows <= 0) return {};
         return rNormsAbs.topRows(rows).cwiseQuotient(rNormScales().topRows(rows));
     }
 
-    template<typename Scalar, grit::Form form_>
-    typename base<Scalar, form_>::RealScalar base<Scalar, form_>::get_rNorms_log10_change_per_matvec() {
+    template<typename Scalar, grit::Form form_> typename base<Scalar, form_>::RealScalar base<Scalar, form_>::get_rNorms_log10_change_per_matvec() {
         if(status.history.size() < 2ul) return RealScalar{0};
         const auto &prev          = status.history[status.history.size() - 2];
         const auto &curr          = status.history.back();
@@ -189,8 +157,7 @@ namespace grit::form {
         }
     }
 
-    template<typename Scalar, grit::Form form_>
-    typename base<Scalar, form_>::MatrixType base<Scalar, form_>::MultA(const Eigen::Ref<const MatrixType> &X) {
+    template<typename Scalar, grit::Form form_> typename base<Scalar, form_>::MatrixType base<Scalar, form_>::MultA(const Eigen::Ref<const MatrixType> &X) {
         auto t_matvecs_a      = status.time_matvecs_a.tic_token();
         auto t_matvecs        = status.time_matvecs.tic_token();
         status.num_matvecs_a += X.cols();
@@ -246,8 +213,7 @@ namespace grit::form {
         return Y;
     }
 
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::diagonalizeT() {
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::diagonalizeT() {
         auto token_diagonalize = status.time_diagonalize.tic_token();
         T1                     = Q.adjoint() * AQ;
         T1                     = (T1 + T1.adjoint()) * half;
@@ -267,11 +233,8 @@ namespace grit::form {
         }
     }
 
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::init() {
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::init() {
         assert(N == A.get_size() && "A must have same dimension");
-        status.saturation_count_max = cfg().saturation_count_max;
-        status.max_history_size     = static_cast<size_t>(std::max<Eigen::Index>(12, 2 * cfg().ncv / cfg().block_size + 1));
         Eigen::ColPivHouseholderQR<MatrixType> cpqr;
 
         // Step 0: Construct and orthonormalize the initial block V.
@@ -343,10 +306,10 @@ namespace grit::form {
                 status.eigVal = Y.topRows(cfg().nev); // Make sure we only take nev values here. In general, nev <= block_size
             } else {
                 block_orthonormalize();
-                Q  = V;
-                AQ = AV;
-                T  = Q.adjoint() * AQ;
-                T  = RealScalar{0.5f} * (T.adjoint() + T); // Symmetrize
+                Q            = V;
+                AQ           = AV;
+                MatrixType T = Q.adjoint() * AQ;
+                T            = RealScalar{0.5f} * (T.adjoint() + T); // Symmetrize
                 Eigen::SelfAdjointEigenSolver<MatrixType> es(T);
                 T_evecs       = es.eigenvectors();
                 T_evals       = es.eigenvalues();
@@ -375,8 +338,7 @@ namespace grit::form {
         assert_allFinite(V);
     }
 
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::preamble() {
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::preamble() {
         status.num_inner_iters_prev             = status.num_inner_iters;
         status.num_matvecs                      = 0;
         status.num_precond                      = 0;
@@ -449,8 +411,7 @@ namespace grit::form {
         return slopes;
     }
 
-    template<typename Scalar, grit::Form form_>
-    typename base<Scalar, form_>::VectorReal base<Scalar, form_>::get_ritz_slopes(Eigen::Index last_n) {
+    template<typename Scalar, grit::Form form_> typename base<Scalar, form_>::VectorReal base<Scalar, form_>::get_ritz_slopes(Eigen::Index last_n) {
         if(status.history.empty()) return {};
         auto cols   = last_n < 0 ? static_cast<Eigen::Index>(status.history.size()) : std::min(last_n, static_cast<Eigen::Index>(status.history.size()));
         auto rows   = status.history.back().eigvals.size();
@@ -495,8 +456,7 @@ namespace grit::form {
         return samples;
     }
 
-    template<typename Scalar, grit::Form form_>
-    bool base<Scalar, form_>::rNorms_have_saturated() {
+    template<typename Scalar, grit::Form form_> bool base<Scalar, form_>::rNorms_have_saturated() {
         if(status.history.empty()) return false;
         auto       available      = static_cast<Eigen::Index>(status.history.size());
         const bool history_ready  = available >= min_saturation_samples;
@@ -588,8 +548,7 @@ namespace grit::form {
         return false;
     }
 
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::refresh_direct_ritz_residuals() {
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::refresh_direct_ritz_residuals() {
         Eigen::Index rows = std::min({cfg().nev, V.cols(), AV.cols(), BV.cols(), S.cols(), status.eigVal.size(), status.rNormsAbs.size()});
         if(rows <= 0) return;
         MatrixType av_direct = MultA(V.leftCols(rows));
@@ -606,8 +565,7 @@ namespace grit::form {
         status.rNormsAbs.topRows(rows) = rnorm_direct;
     }
 
-    template<typename Scalar, grit::Form form_>
-    std::string base<Scalar, form_>::get_direct_ritz_diagnostics() {
+    template<typename Scalar, grit::Form form_> std::string base<Scalar, form_>::get_direct_ritz_diagnostics() {
         Eigen::Index rows = std::min({cfg().nev, V.cols(), AV.cols(), BV.cols(), status.eigVal.size(), status.rNormsAbs.size(), Eigen::Index{3}});
         if(rows <= 0) return {};
         MatrixType av_direct = A.mult(V.leftCols(rows));
@@ -639,8 +597,7 @@ namespace grit::form {
         }
     }
 
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::update_condition_numbers() {
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::update_condition_numbers() {
         status.condition_a = std::numeric_limits<RealScalar>::infinity();
         status.condition_b = form_ == grit::Form::STANDARD ? RealScalar{1} : std::numeric_limits<RealScalar>::infinity();
         if(Q.cols() == 0 || Q.rows() < Q.cols() || AQ.size() != Q.size()) return;
@@ -668,18 +625,11 @@ namespace grit::form {
         }
     }
 
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::updateStatus() {
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::updateStatus() {
         auto t_status_update = status.time_status_update.tic_token();
 
         // Eigenvalues are sorted in ascending order.
-        status.oldVal  = status.eigVal.topRows(cfg().nev);
-        status.eigVal  = T_evals(status.optIdx).topRows(cfg().nev);
-        status.absDiff = (status.eigVal - status.oldVal).cwiseAbs();
-
-        VectorReal denom = (RealScalar{0.5} * (status.eigVal + status.oldVal).array().abs()).matrix();
-        denom            = denom.cwiseMax(VectorReal::Constant(denom.size(), std::numeric_limits<RealScalar>::min()));
-        status.relDiff   = status.absDiff.cwiseQuotient(denom);
+        status.eigVal = T_evals(status.optIdx).topRows(cfg().nev);
 
         VectorReal targets            = rNormAbsTargets();
         bool       verify_convergence = (status.rNormsAbs.topRows(cfg().nev).array() < targets.array()).all();
@@ -710,10 +660,12 @@ namespace grit::form {
 
         VectorIdxT saturated_pairs;
         const bool eigvals_saturated = eigVals_have_saturated(nullptr, nullptr, &saturated_pairs);
-        if(eigvals_saturated)
+        if(eigvals_saturated) {
             status.saturation_count_eigVal++;
-        else
-            status.saturation_count_eigVal = 0;
+        } else {
+            status.saturation_count_eigVal          = 0;
+            auto_residual_correction.probes_started = 0;
+        }
 
         if(cfg().reltol > RealScalar{0}) {
             Eigen::Index rows = std::min(cfg().nev, status.rNormsAbs.size());
@@ -769,8 +721,7 @@ namespace grit::form {
         }
     }
 
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::printStatus() {
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::printStatus() {
         if(!log || !log->should_log(spdlog::level::info) || status.eigVal.size() == 0 || status.rNormsAbs.size() == 0) return;
 
         std::string rCorrMsg;
@@ -829,8 +780,7 @@ namespace grit::form {
         if(status.outer_iter == status.num_outer_iters_last_restart && log->should_log(spdlog::level::debug)) log->debug(get_direct_ritz_diagnostics());
     }
 
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::printFinal() {
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::printFinal() {
         if(!log || status.eigVal.size() == 0 || status.rNormsAbs.size() == 0) return;
 
         const Eigen::Index nev      = std::min(cfg().nev, std::min(status.eigVal.size(), status.rNormsAbs.size()));
@@ -871,8 +821,7 @@ namespace grit::form {
         }
     }
 
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::restart_status_time_laps() {
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::restart_status_time_laps() {
         status.time_elapsed.restart_time_lap();
         status.time_solve_inner.restart_time_lap();
         status.time_matvecs.restart_time_lap();
@@ -903,13 +852,9 @@ namespace grit::form {
         status.time_status_update.restart_time_lap();
     }
 
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::run_user_callback() {
-        return;
-    }
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::run_user_callback() { return; }
 
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::do_outer_iteration() {
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::do_outer_iteration() {
         restart_status_time_laps();
         preamble();
         build();
@@ -921,15 +866,20 @@ namespace grit::form {
         status.outer_iter++;
     }
 
-    template<typename Scalar, grit::Form form_>
-    void base<Scalar, form_>::run() {
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::reset_run_status() {
         status.stopReason = StopReason::none;
         status.stopMessage.clear();
         status.residual_converged      = false;
         status.residual_below_gap      = false;
         status.saturation_count_eigVal = 0;
         status.saturation_count_rNorm  = 0;
+        status.saturation_count_max    = cfg().saturation_count_max;
+        status.max_history_size        = static_cast<size_t>(std::max<Eigen::Index>(12, 2 * cfg().ncv / cfg().block_size + 1));
         status.history.clear();
+    }
+
+    template<typename Scalar, grit::Form form_> void base<Scalar, form_>::run() {
+        reset_run_status();
         auto token_elapsed = status.time_elapsed.tic_token();
         if(status.outer_iter == 0) {
             init();

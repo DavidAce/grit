@@ -10,8 +10,7 @@
 
 namespace grit::algo {
     /*! Generalized Davidson plus Krylov correction solver. */
-    template<typename Scalar_, grit::Form form_>
-    class gdplusk : public form::base<Scalar_, form_> {
+    template<typename Scalar_, grit::Form form_> class gdplusk : public form::base<Scalar_, form_> {
         public:
         using Base                   = form::base<Scalar_, form_>;            /*!< Base form for the selected problem type. */
         using Scalar                 = typename Base::Scalar;                 /*!< Scalar type of vectors and operators. */
@@ -44,7 +43,6 @@ namespace grit::algo {
         using Base::MultP;
         using Base::N;
         using Base::orthonormalize_Z;
-        using Base::qBlocks;
         using Base::residual_correction_type_internal;
         using Base::rNormScales;
         using Base::rNormsRel;
@@ -62,7 +60,6 @@ namespace grit::algo {
         using Base::block_bm_orthonormalize_eig;
         using Base::block_l2_orthogonalize;
         using Base::block_l2_orthonormalize;
-        using Base::cfg;
         using Base::eps;
         using Base::get_bm_normalizer_for_the_projected_pencil;
         using Base::get_op_norm_estimate;
@@ -78,21 +75,18 @@ namespace grit::algo {
 
         /*! Configuration for GD+K. */
         struct Config : BaseConfig {
-            static constexpr RealScalar eps                              = std::numeric_limits<RealScalar>::epsilon(); /*!< Machine epsilon. */
-            ResidualCorrectionType      residual_correction_type         = ResidualCorrectionType::NONE; /*!< Correction used to expand the search space. */
-            bool                        use_adaptive_inner_tolerance     = false; /*!< Tighten the inner correction tolerance as residuals improve. */
-            bool                        use_jd_b_only                    = false; /*!< Use only B in the generalized Jacobi-Davidson projector. */
-            bool                        use_krylov_schur_gdplusk_restart = false; /*!< Use Krylov-Schur style restart for GD+K. */
-            bool                        inject_randomness                = false; /*!< Randomize dependent correction vectors. */
-            Eigen::Index                maxRetainBlocks                  = 1;     /*!< Number of Ritz blocks kept during restart compression. */
-            Eigen::Index                maxPrevBlocks                    = 1;     /*!< Number of previous active Ritz blocks kept between outer iterations. */
-            RealScalar                  inner_tol                        = RealScalar{0.1f}; /*!< Initial tolerance for inner correction solves. */
-            Eigen::Index                inner_max_iters                  = 1000;             /*!< Maximum inner iterations in each inner correction solve. */
-            Eigen::Index                auto_probe_length                = 5; /*!< Minimum outer iterations using the method tested by each AUTO probe. */
-            Eigen::Index                auto_max_probes = 1; /*!< Maximum AUTO probes while the Ritz values remain stabilized; -1 allows unlimited probes. */
-            std::function<void(const gdplusk<Scalar, form_> &)> user_callback;                 /*!< Callback called after each outer iteration. */
-            Eigen::Index                                        max_extra_ritz_history    = 1; /*!< Extra Ritz history retained for progress checks. */
-            Eigen::Index                                        max_ritz_residual_history = 1; /*!< Ritz residual history retained for progress checks. */
+            ResidualCorrectionType residual_correction_type         = ResidualCorrectionType::NONE; /*!< Correction used to expand the search space. */
+            bool                   use_adaptive_inner_tolerance     = false; /*!< Tighten the inner correction tolerance as residuals improve. */
+            bool                   use_jd_b_only                    = false; /*!< Use only B in the generalized Jacobi-Davidson projector. */
+            bool                   use_krylov_schur_gdplusk_restart = false; /*!< Use Krylov-Schur style restart for GD+K. */
+            bool                   inject_randomness                = false; /*!< Randomize dependent correction vectors. */
+            Eigen::Index           maxRetainBlocks                  = 1;     /*!< Number of Ritz blocks kept during restart compression. */
+            Eigen::Index           maxPrevBlocks                    = 1;     /*!< Number of previous active Ritz blocks kept between outer iterations. */
+            RealScalar             inner_tol                        = RealScalar{0.1f}; /*!< Initial tolerance for inner correction solves. */
+            Eigen::Index           inner_max_iters                  = 1000;             /*!< Maximum inner iterations in each inner correction solve. */
+            Eigen::Index           auto_probe_length                = 5; /*!< Minimum outer iterations using the method tested by each AUTO probe. */
+            Eigen::Index           auto_max_probes = 1; /*!< Maximum AUTO probes while the Ritz values remain stabilized; -1 allows unlimited probes. */
+            std::function<void(const gdplusk<Scalar, form_> &)> user_callback; /*!< Callback called after each outer iteration. */
         };
 
         Config config; /*!< User-facing GD+K configuration. */
@@ -112,27 +106,14 @@ namespace grit::algo {
         void run();
 
         private:
-        Eigen::Index max_mBlocks       = 1;
-        Eigen::Index max_sBlocks       = 1;
-        RealScalar   current_inner_tol = RealScalar{0.1f};
-        Eigen::Index vBlocks           = 0;
-        Eigen::Index mBlocks           = 0;
-        Eigen::Index sBlocks           = 0;
-        Eigen::Index kBlocks           = 0;
-        MatrixType   Q_new, AQ_new, BQ_new;
-        MatrixType   G;
-        void         shift_blocks_right(Eigen::Ref<MatrixType> matrix, Eigen::Index offset_old, Eigen::Index offset_new, Eigen::Index extent);
-        void         roll_blocks_left(Eigen::Ref<MatrixType> matrix, Eigen::Index offset, Eigen::Index extent);
-        void         selective_orthonormalize(const Eigen::Ref<const MatrixType> X, Eigen::Ref<MatrixType> Y, RealScalar breakdownTol, VectorIdxT &mask);
-        void         make_new_Q_block();
-        void         assert_config() const;
-        void         assert_operator_config() const requires(form_ == grit::Form::STANDARD);
-        void         assert_operator_config() const requires(form_ == grit::Form::GENERALIZED);
-        static std::string_view       ResidualCorrectionToString(ResidualCorrectionType rct);
-        static ResidualCorrectionType StringToResidualCorrection(std::string_view rct);
-        void                          preamble() final;
-        void                          extractRitzVectors() final;
-        void                          run_user_callback() final;
+        RealScalar                      current_inner_tol = RealScalar{0.1f};
+        MatrixType                      Q_new, AQ_new, BQ_new;
+        void                            make_new_Q_block();
+        [[nodiscard]] const BaseConfig &cfg() const final { return config; }
+        void                            assert_config() const;
+        void                            preamble() final;
+        void                            extractRitzVectors() final;
+        void                            run_user_callback() final;
 
         public:
         /*!

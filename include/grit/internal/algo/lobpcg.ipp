@@ -8,153 +8,32 @@ namespace grit::algo {
     template<typename Scalar, grit::Form form_>
     lobpcg<Scalar, form_>::lobpcg(Matvec<Scalar> &A) requires(form_ == grit::Form::STANDARD)
         : Base(MatrixType{}, A) {
-        this->bind_config(config);
-        config.nev                       = 1;
-        config.block_size                = 1;
-        config.ncv                       = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
-        config.max_extra_ritz_history    = 1;
-        config.max_ritz_residual_history = 1;
+        config.nev        = 1;
+        config.block_size = 1;
+        config.ncv        = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
     }
 
     template<typename Scalar, grit::Form form_>
     lobpcg<Scalar, form_>::lobpcg(Matvec<Scalar> &A, Matvec<Scalar> &B) requires(form_ == grit::Form::GENERALIZED)
         : Base(MatrixType{}, A, B) {
-        this->bind_config(config);
-        config.nev                       = 1;
-        config.block_size                = 1;
-        config.ncv                       = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
-        config.max_extra_ritz_history    = 1;
-        config.max_ritz_residual_history = 1;
+        config.nev        = 1;
+        config.block_size = 1;
+        config.ncv        = std::min<Eigen::Index>(8, std::max<Eigen::Index>(1, this->N));
     }
 
-    template<typename Scalar, grit::Form form_>
-    void lobpcg<Scalar, form_>::assert_operator_config() const requires(form_ == grit::Form::STANDARD)
-    {
-        if(this->A.get_size() <= 0) throw std::runtime_error("lobpcg requires operator A with positive size");
-        if(config.use_b_inner_product) throw std::runtime_error("use_b_inner_product requires a generalized problem");
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void lobpcg<Scalar, form_>::assert_operator_config() const requires(form_ == grit::Form::GENERALIZED)
-    {
-        if(this->A.get_size() <= 0) throw std::runtime_error("lobpcg requires operator A with positive size");
-        auto &B = this->B->get();
-        if(B.get_size() <= 0) throw std::runtime_error("lobpcg requires operator B with positive size");
-        if(this->A.get_size() != B.get_size()) throw std::runtime_error("lobpcg requires operators A and B to have matching sizes");
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void lobpcg<Scalar, form_>::assert_config() const {
-        assert_operator_config();
-
-        if(config.nev < 1) throw std::runtime_error("lobpcg config error: nev must be at least 1");
-        if(config.block_size < 1) throw std::runtime_error("lobpcg config error: block_size must be at least 1");
+    template<typename Scalar, grit::Form form_> void lobpcg<Scalar, form_>::assert_config() const {
+        this->assert_base_config();
         if(config.nev > config.block_size) throw std::runtime_error("lobpcg config error: nev must not exceed block_size");
-        if(config.ncv < config.nev) throw std::runtime_error("lobpcg config error: ncv must be at least nev");
-        if(config.ncv > this->N) throw std::runtime_error("lobpcg config error: ncv must not exceed the operator size");
-        if(config.block_size > config.ncv) throw std::runtime_error("lobpcg config error: block_size must not exceed ncv");
-        if(config.ncv % config.block_size != 0) throw std::runtime_error("lobpcg config error: ncv must be divisible by block_size");
-        if(config.max_extra_ritz_history < 0) throw std::runtime_error("lobpcg config error: max_extra_ritz_history must be nonnegative");
-        if(config.max_ritz_residual_history < 0) throw std::runtime_error("lobpcg config error: max_ritz_residual_history must be nonnegative");
-        if(config.max_iters == 0) throw std::runtime_error("lobpcg config error: max_iters must be positive or negative for unlimited");
-        if(config.max_matvecs == 0) throw std::runtime_error("lobpcg config error: max_matvecs must be positive or negative for unlimited");
-        if(config.abstol <= RealScalar{0}) throw std::runtime_error("lobpcg config error: abstol must be positive");
-        if(config.reltol < RealScalar{0}) throw std::runtime_error("lobpcg config error: reltol must be nonnegative");
-        if(config.saturation_count_max < 1) throw std::runtime_error("lobpcg config error: saturation_count_max must be positive");
-        if(!std::isfinite(config.ritz_saturation_tolerance) || config.ritz_saturation_tolerance <= RealScalar{0}) {
-            throw std::runtime_error("lobpcg config error: ritz_saturation_tolerance must be finite and positive");
-        }
-        if(this->has_initial_guess()) {
-            if(this->initial_guess().rows() != this->N) throw std::runtime_error("lobpcg config error: initial guess row count must match the operator size");
-            if(this->initial_guess().cols() < 1) throw std::runtime_error("lobpcg config error: initial guess must have at least one column");
-        }
     }
 
-    template<typename Scalar, grit::Form form_>
-    void lobpcg<Scalar, form_>::run() {
+    template<typename Scalar, grit::Form form_> void lobpcg<Scalar, form_>::run() {
         assert_config();
 
         this->setLogger(config.log_level, std::string("grit|") + std::string(this->form_name()));
         Base::run();
     }
 
-    template<typename Scalar, grit::Form form_>
-    void lobpcg<Scalar, form_>::shift_blocks_right(Eigen::Ref<MatrixType> matrix, Eigen::Index offset_old, Eigen::Index offset_new, Eigen::Index extent) {
-        if(extent <= 0 || offset_old == offset_new) return;
-        const auto b          = this->cfg().block_size;
-        const auto max_blocks = matrix.cols() / b;
-        extent                = std::min({extent, max_blocks - offset_old, max_blocks - offset_new});
-        if(extent <= 0) return;
-        auto from = matrix.middleCols(offset_old * b, extent * b);
-        auto to   = matrix.middleCols(offset_new * b, extent * b);
-        to        = from.eval();
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void lobpcg<Scalar, form_>::roll_blocks_left(Eigen::Ref<MatrixType> matrix, Eigen::Index offset, Eigen::Index extent) {
-        const auto b          = this->cfg().block_size;
-        const auto max_blocks = matrix.cols() / b;
-        extent                = std::min(extent, max_blocks - offset);
-        if(extent <= 1) return;
-        for(Eigen::Index k = extent - 1; k > 0; --k) {
-            auto K0 = matrix.middleCols((offset + k + 0) * b, b);
-            auto K1 = matrix.middleCols((offset + k - 1) * b, b);
-            K0      = K1;
-        }
-    }
-
-    template<typename Scalar, grit::Form form_>
-    std::pair<typename lobpcg<Scalar, form_>::VectorIdxT, typename lobpcg<Scalar, form_>::VectorIdxT> lobpcg<Scalar, form_>::selective_orthonormalize() {
-        using Index    = Eigen::Index;
-        Index n_blocks = Q.cols() / this->cfg().block_size;
-
-        if constexpr(form_ == grit::Form::GENERALIZED) {
-            if(this->cfg().use_b_inner_product) return {VectorIdxT::Ones(n_blocks), VectorIdxT::Zero(n_blocks)};
-        }
-
-        MatrixType Gram = Q.adjoint() * Q;
-
-        std::vector<Index> needs_reortho;
-        for(Index blk = 0; blk < n_blocks; ++blk) {
-            Index col_start = blk * this->cfg().block_size;
-            bool  bad       = false;
-            for(Index prev_blk = 0; prev_blk < blk; ++prev_blk) {
-                Index prev_col_start = prev_blk * this->cfg().block_size;
-                auto  G_block        = Gram.block(prev_col_start, col_start, this->cfg().block_size, this->cfg().block_size);
-                if(G_block.cwiseAbs().maxCoeff() > this->orthTol) {
-                    bad = true;
-                    break;
-                }
-            }
-            if(!bad) {
-                auto       G_diag = Gram.block(col_start, col_start, this->cfg().block_size, this->cfg().block_size);
-                MatrixType I      = MatrixType::Identity(this->cfg().block_size, this->cfg().block_size);
-                if((G_diag - I).cwiseAbs().maxCoeff() > this->normTol) bad = true;
-            }
-            if(bad) needs_reortho.push_back(blk);
-        }
-
-        VectorIdxT active_block_mask = VectorIdxT::Ones(n_blocks);
-        VectorIdxT change_block_mask = VectorIdxT::Zero(n_blocks);
-        for(Index blk : needs_reortho) {
-            Index col_start = blk * this->cfg().block_size;
-            auto  Qk        = Q.middleCols(col_start, this->cfg().block_size);
-            for(Index prev_blk = 0; prev_blk < blk; ++prev_blk) {
-                Index      prev_col_start  = prev_blk * this->cfg().block_size;
-                auto       Qj              = Q.middleCols(prev_col_start, this->cfg().block_size);
-                MatrixType proj            = Qj.adjoint() * Qk;
-                Qk                        -= Qj * proj;
-            }
-            active_block_mask(blk) = Qk.norm() > this->normTol;
-            change_block_mask(blk) = 1;
-            Eigen::HouseholderQR<MatrixType> qk_hhqr(Qk);
-            Qk = qk_hhqr.householderQ().setLength(Qk.cols()) * MatrixType::Identity(Q.rows(), this->cfg().block_size);
-        }
-        return {active_block_mask, change_block_mask};
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void lobpcg<Scalar, form_>::build() {
+    template<typename Scalar, grit::Form form_> void lobpcg<Scalar, form_>::build() {
         const Eigen::Index b = this->cfg().block_size;
         const Eigen::Index N = this->N;
 
@@ -276,14 +155,11 @@ namespace grit::algo {
             AQ.conservativeResize(Eigen::NoChange, full_cols);
             BQ.conservativeResize(Eigen::NoChange, full_cols);
         }
-        qBlocks = Q.cols() / b;
-        if(qBlocks < 1) throw std::runtime_error("lobpcg build error: basis lost all complete blocks");
+        if(Q.cols() < b) throw std::runtime_error("lobpcg build error: basis lost all complete blocks");
         this->update_condition_numbers();
     }
 
-    template<typename Scalar, grit::Form form_>
-    void lobpcg<Scalar, form_>::extractRitzVectors() {
-        V_prev = V;
+    template<typename Scalar, grit::Form form_> void lobpcg<Scalar, form_>::extractRitzVectors() {
         if(status.stopReason != StopReason::none) return;
         if(T_evals.size() < cfg().block_size) return;
 
@@ -316,8 +192,7 @@ namespace grit::algo {
         Base::extractRitzVectors();
     }
 
-    template<typename Scalar, grit::Form form_>
-    void lobpcg<Scalar, form_>::run_user_callback() {
+    template<typename Scalar, grit::Form form_> void lobpcg<Scalar, form_>::run_user_callback() {
         if(config.user_callback) config.user_callback(*this);
     }
 }

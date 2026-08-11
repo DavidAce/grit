@@ -26,17 +26,14 @@
 #include <vector>
 
 namespace grit {
-    template<typename Scalar>
-    class Result;
+    template<typename Scalar> class Result;
 
-    template<typename Scalar>
-    class ResultView;
+    template<typename Scalar> class ResultView;
 }
 
 namespace grit::form {
     /*! Shared state and operations for standard and generalized eigensolver forms. */
-    template<typename Scalar_, grit::Form form_ = grit::Form::STANDARD>
-    class base {
+    template<typename Scalar_, grit::Form form_ = grit::Form::STANDARD> class base {
         public:
         using Scalar     = Scalar_;                                                   /*!< Scalar type of vectors and operators. */
         using RealScalar = decltype(std::real(std::declval<Scalar>()));               /*!< Real scalar type used for Ritz values and norms. */
@@ -155,11 +152,7 @@ namespace grit::form {
 
         /*! Solver output, counters, timers, and stopping diagnostics. */
         struct Status {
-            VectorReal                  eigVal;                                                          /*!< Current selected Ritz values. */
-            VectorReal                  oldVal;                                                          /*!< Ritz values from the previous status update. */
-            VectorReal                  absDiff;                                                         /*!< Absolute Ritz-value changes. */
-            VectorReal                  relDiff;                                                         /*!< Relative Ritz-value changes. */
-            RealScalar                  initVal          = std::numeric_limits<RealScalar>::quiet_NaN(); /*!< Initial Ritz value used for progress checks. */
+            VectorReal                  eigVal;                           /*!< Current selected Ritz values. */
             RealScalar                  condition_a      = RealScalar{1}; /*!< Euclidean condition estimate of A on the search subspace. */
             RealScalar                  condition_b      = RealScalar{1}; /*!< Euclidean condition estimate of B on the search subspace. */
             RealScalar                  op_norm_estimate = RealScalar{1}; /*!< Current operator norm estimate. */
@@ -247,24 +240,17 @@ namespace grit::form {
             std::vector<Eigen::Index> jd_to_cheap_olsen_switch_outer_iters; /*!< Outer iterations switching from Jacobi-Davidson to cheap Olsen. */
         };
 
-        /*! Convert a residual correction selector to text. */
-        static std::string_view ResidualCorrectionToString(ResidualCorrectionType rct);
-        /*! Convert text to a residual correction selector. */
-        static ResidualCorrectionType StringToResidualCorrection(std::string_view rct);
-
         protected:
-        BaseConfig                    default_cfg = {};
-        BaseConfig                   *cfg_ptr     = &default_cfg;
         Logger::LoggerHandle          log;
         static constexpr Eigen::Index min_saturation_samples = 5;
 
-        Eigen::Index qBlocks = 0;
-
-        void                            bind_config(BaseConfig &cfg);
-        [[nodiscard]] BaseConfig       &cfg();
-        [[nodiscard]] const BaseConfig &cfg() const;
-        [[nodiscard]] const MatrixType &initial_guess() const;
-        VectorReal                      fit_slopes(const MatrixReal &values, const VectorReal &coordinates, VectorReal *slope_errors = nullptr);
+        [[nodiscard]] virtual const BaseConfig &cfg() const = 0;
+        [[nodiscard]] const MatrixType         &initial_guess() const;
+        void                                    assert_base_config() const;
+        void                                    assert_operator_config() const requires(form_ == grit::Form::STANDARD);
+        void                                    assert_operator_config() const requires(form_ == grit::Form::GENERALIZED);
+        void                                    reset_run_status();
+        VectorReal                              fit_slopes(const MatrixReal &values, const VectorReal &coordinates, VectorReal *slope_errors = nullptr);
 
         public:
         virtual ~base() = default;
@@ -303,39 +289,27 @@ namespace grit::form {
          */
         base(const MatrixType &V, Matvec<Scalar> &A, Matvec<Scalar> &B) requires(form_ == grit::Form::GENERALIZED);
 
-        Status                 status = {};                               /*!< Current solver status and diagnostics. */
-        Eigen::Index           N;                                         /*!< Operator dimension. */
-        Eigen::Index           size;                                      /*!< Alias for the operator dimension. */
-        bool                   dev_append_extra_blocks_to_basis  = false; /*!< Development option to retain extra candidate blocks. */
-        bool                   dev_skipjcb                       = false; /*!< Development option to skip Jacobi-Davidson correction blocks. */
-        int                    chebyshev_filter_degree           = 0;     /*!< Degree of the optional Chebyshev filter. */
+        Status                 status = {};                                                      /*!< Current solver status and diagnostics. */
+        Eigen::Index           N;                                                                /*!< Operator dimension. */
         ResidualCorrectionType residual_correction_type_internal = ResidualCorrectionType::NONE; /*!< Effective residual correction used internally. */
         Matvec<Scalar>        &A;                                                                /*!< Matrix-free operator A. */
-        std::optional<std::reference_wrapper<Matvec<Scalar>>> B = std::nullopt;   /*!< Optional matrix-free operator B for generalized problems. */
-        MatrixType                                            T;                  /*!< Projected matrix for standard problems. */
-        MatrixType                                            Aproj, Bproj, W, Q; /*!< Projected matrices, residual block, and search basis. */
-        MatrixType                                            AQ, BQ;             /*!< Operator products A Q and B Q. */
-        MatrixType                                            V;                  /*!< Selected Ritz vectors. */
-        MatrixType                                            AV;                 /*!< Products A V for selected Ritz vectors. */
-        MatrixType                                            BV;                 /*!< Products B V for selected Ritz vectors. */
-        MatrixType                                            V_prev;             /*!< Selected Ritz vectors from the previous outer iteration. */
-        MatrixType                                            K, K_prev;          /*!< Krylov or correction blocks. */
-        MatrixType                                            S, S1, S2;          /*!< Residual and correction blocks. */
-        MatrixType                                            D;                  /*!< Search directions or diagonal block. */
-        MatrixType                                            M, AM, BM;          /*!< Auxiliary basis block and operator products. */
-        VectorReal                                            T_evals;            /*!< Ritz values of the projected problem. */
-        MatrixType                                            T1, T2, T_evecs;    /*!< Generalized projected pencil and Ritz vectors. */
-        Eigen::HouseholderQR<MatrixType>                      hhqr;               /*!< Householder QR workspace. */
+        std::optional<std::reference_wrapper<Matvec<Scalar>>> B = std::nullopt; /*!< Optional matrix-free operator B for generalized problems. */
+        MatrixType                                            W, Q;             /*!< Workspace and search basis. */
+        MatrixType                                            AQ, BQ;           /*!< Operator products A Q and B Q. */
+        MatrixType                                            V;                /*!< Selected Ritz vectors. */
+        MatrixType                                            AV;               /*!< Products A V for selected Ritz vectors. */
+        MatrixType                                            BV;               /*!< Products B V for selected Ritz vectors. */
+        MatrixType                                            K, K_prev;        /*!< Krylov or correction blocks. */
+        MatrixType                                            S;                /*!< Residual block. */
+        MatrixType                                            D;                /*!< Search directions or diagonal block. */
+        VectorReal                                            T_evals;          /*!< Ritz values of the projected problem. */
+        MatrixType                                            T1, T2, T_evecs;  /*!< Generalized projected pencil and Ritz vectors. */
+        Eigen::HouseholderQR<MatrixType>                      hhqr;             /*!< Householder QR workspace. */
 
-        RealScalar                  skewTol         = std::sqrt(eps) * 10000;                     /*!< Tolerance for skew-Hermitian Gram diagnostics. */
-        RealScalar                  normTol         = eps * 10;                                   /*!< Tolerance for detecting small vector norms. */
-        RealScalar                  orthTol         = eps * 100;                                  /*!< Tolerance for orthogonality checks. */
-        RealScalar                  quotTolB        = RealScalar{1e-10f};                         /*!< Tolerance for small B-Rayleigh quotient denominators. */
-        RealScalar                  rnormRelDiffTol = std::numeric_limits<RealScalar>::epsilon(); /*!< Relative residual-change tolerance. */
-        RealScalar                  absDiffTol      = std::numeric_limits<RealScalar>::epsilon() * 10000; /*!< Absolute Ritz-value change tolerance. */
-        RealScalar                  relDiffTol      = std::numeric_limits<RealScalar>::epsilon() * 10000; /*!< Relative Ritz-value change tolerance. */
-        std::string                 tag;                                                                  /*!< Short solver tag used in log messages. */
-        AutoResidualCorrectionState auto_residual_correction;                                             /*!< AUTO residual correction state. */
+        RealScalar                  normTol  = eps * 10;           /*!< Tolerance for detecting small vector norms. */
+        RealScalar                  orthTol  = eps * 100;          /*!< Tolerance for orthogonality checks. */
+        RealScalar                  quotTolB = RealScalar{1e-10f}; /*!< Tolerance for small B-Rayleigh quotient denominators. */
+        AutoResidualCorrectionState auto_residual_correction;      /*!< AUTO residual correction state. */
 
         /*! Return the problem form name. */
         std::string_view form_name() const;
@@ -439,8 +413,7 @@ namespace grit::form {
          * @param comp Ordering predicate.
          * @return Selected indices.
          */
-        template<typename Comp>
-        std::vector<Eigen::Index> getIndices(const VectorReal &v, const Eigen::Index offset, const Eigen::Index num, Comp comp) const {
+        template<typename Comp> std::vector<Eigen::Index> getIndices(const VectorReal &v, const Eigen::Index offset, const Eigen::Index num, Comp comp) const {
             std::vector<Eigen::Index> idx(static_cast<size_t>(v.size()));
             Eigen::Index              numSort = std::min<Eigen::Index>(offset + num, v.size());
             std::iota(idx.begin(), idx.end(), 0);
@@ -532,9 +505,9 @@ namespace grit::form {
         /*!
          * Compute a B-metric normalizer for the projected generalized pencil.
          * @param T2 Projected B matrix.
-         * @return Normalizer and normalized metric matrix.
+         * @return Projected B-metric normalizer.
          */
-        std::pair<MatrixType, MatrixType> get_bm_normalizer_for_the_projected_pencil(const MatrixType &T2);
+        MatrixType get_bm_normalizer_for_the_projected_pencil(const MatrixType &T2);
         /*!
          * Pick the better projected vector between Rayleigh-Ritz and refined candidates.
          * @param Z_rr Rayleigh-Ritz projected vectors.
