@@ -4,30 +4,7 @@
 #include "grit/internal/precondition/JacobiDavidsonOperator.h"
 
 namespace grit::algo {
-    template<typename Scalar, grit::Form form_>
-    std::string_view gdplusk<Scalar, form_>::ResidualCorrectionToString(ResidualCorrectionType rct) {
-        switch(rct) {
-            case ResidualCorrectionType::NONE: return "NONE";
-            case ResidualCorrectionType::CHEAP_OLSEN: return "CHEAP_OLSEN";
-            case ResidualCorrectionType::FULL_OLSEN: return "FULL_OLSEN";
-            case ResidualCorrectionType::JACOBI_DAVIDSON: return "JACOBI_DAVIDSON";
-            case ResidualCorrectionType::AUTO: return "AUTO";
-        }
-        return "NONE";
-    }
-
-    template<typename Scalar, grit::Form form_>
-    typename gdplusk<Scalar, form_>::ResidualCorrectionType gdplusk<Scalar, form_>::StringToResidualCorrection(std::string_view rct) {
-        if(rct == "NONE") return ResidualCorrectionType::NONE;
-        if(rct == "CHEAP_OLSEN") return ResidualCorrectionType::CHEAP_OLSEN;
-        if(rct == "FULL_OLSEN") return ResidualCorrectionType::FULL_OLSEN;
-        if(rct == "JACOBI_DAVIDSON") return ResidualCorrectionType::JACOBI_DAVIDSON;
-        if(rct == "AUTO") return ResidualCorrectionType::AUTO;
-        return ResidualCorrectionType::NONE;
-    }
-
-    template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::adjust_residual_correction_type() {
+    template<typename Scalar, grit::Form form_> void gdplusk<Scalar, form_>::adjust_residual_correction_type() {
         residual_correction_type_internal = config.residual_correction_type;
         if(residual_correction_type_internal == ResidualCorrectionType::AUTO) {
             auto         samples    = this->get_num_consecutive_correction_samples(ResidualCorrectionType::JACOBI_DAVIDSON);
@@ -59,8 +36,7 @@ namespace grit::algo {
         }
     }
 
-    template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::adjust_inner_tolerance([[maybe_unused]] const Eigen::Ref<const MatrixType> &S) {
+    template<typename Scalar, grit::Form form_> void gdplusk<Scalar, form_>::adjust_inner_tolerance([[maybe_unused]] const Eigen::Ref<const MatrixType> &S) {
         if(!config.use_adaptive_inner_tolerance) return;
         if(status.num_inner_iters_prev == 0) return;
 
@@ -108,8 +84,7 @@ namespace grit::algo {
         current_inner_tol = std::clamp(next_tol, inner_tol_min, inner_tol_max);
     }
 
-    template<typename Scalar, grit::Form form_>
-    void gdplusk<Scalar, form_>::update_auto_residual_correction_state() {
+    template<typename Scalar, grit::Form form_> void gdplusk<Scalar, form_>::update_auto_residual_correction_state() {
         if(config.residual_correction_type != ResidualCorrectionType::AUTO) return;
 
         auto rows = std::min({cfg().nev, status.eigVal.size(), status.rNormsAbs.size()});
@@ -196,8 +171,8 @@ namespace grit::algo {
         if(log) {
             log->info("AUTO switch: {} -> {} | Ritz slope/mv {::.3e} threshold/mv={::.3e} sat={}/{} stop={} suffix={} tol={:.3e} | "
                       "it={} mv={}|{}{} t={:.1e}|{:.1e}s",
-                      ResidualCorrectionToString(ResidualCorrectionType::CHEAP_OLSEN), ResidualCorrectionToString(ResidualCorrectionType::JACOBI_DAVIDSON),
-                      ritz_slopes, drift_thresholds, status.saturation_count_eigVal, saturation_count_switch, status.saturation_count_max, ritz_suffix_samples,
+                      enum2sv(ResidualCorrectionType::CHEAP_OLSEN), enum2sv(ResidualCorrectionType::JACOBI_DAVIDSON), ritz_slopes, drift_thresholds,
+                      status.saturation_count_eigVal, saturation_count_switch, status.saturation_count_max, ritz_suffix_samples,
                       config.ritz_saturation_tolerance, status.outer_iter, num_matvecs_iter, status.num_matvecs_total, pcMsg, outer_iteration_time,
                       status.time_elapsed.get_time());
         }
@@ -262,13 +237,6 @@ namespace grit::algo {
         assert(V.rows() == S.rows());
         assert(V.cols() == S.cols());
         assert(!this->cfg().use_b_inner_product);
-
-        auto MatrixOp = [this](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
-            if constexpr(form_ == grit::Form::GENERALIZED)
-                return MultB_inner(X);
-            else
-                return MultA_inner(X);
-        };
 
         auto ProjectOpL = [this, &V](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
             auto                    t_project_left = status.time_project_left_inner.tic_token();
@@ -346,7 +314,7 @@ namespace grit::algo {
                     }
                 };
 
-                auto JDop = internal::precondition::JacobiDavidsonOperator<Scalar>(rhs.rows(), ResidualOp, ProjectOpL, ProjectOpR, MatrixOp);
+                auto JDop = internal::precondition::JacobiDavidsonOperator<Scalar>(rhs.rows(), ResidualOp, ProjectOpL, ProjectOpR);
 
                 d.noalias() = internal::precondition::JacobiDavidsonSolver(JDop, rhs, cfg);
                 d.noalias() = ProjectOpR_tmp(d);
@@ -440,8 +408,6 @@ namespace grit::algo {
                     }
                 };
 
-                auto MatrixOp = [this](const Eigen::Ref<const MatrixType> &X) -> MatrixType { return MultB_inner(X); };
-
                 auto ResidualOp = [this, th](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> HX) -> void {
                     HX.resize(X.rows(), X.cols());
                     if(config.use_jd_b_only) {
@@ -451,7 +417,7 @@ namespace grit::algo {
                     }
                 };
 
-                auto JDop = internal::precondition::JacobiDavidsonOperator<Scalar>(rhs.rows(), ResidualOp, ProjectOpL, ProjectOpR, MatrixOp);
+                auto JDop = internal::precondition::JacobiDavidsonOperator<Scalar>(rhs.rows(), ResidualOp, ProjectOpL, ProjectOpR);
 
                 d.noalias() = internal::precondition::JacobiDavidsonSolver(JDop, rhs, cfg);
                 d.noalias() = ProjectOpR_tmp(d);
@@ -471,8 +437,7 @@ namespace grit::algo {
         return D;
     }
 
-    template<typename Scalar, grit::Form form_>
-    typename gdplusk<Scalar, form_>::MatrixType gdplusk<Scalar, form_>::get_sBlock(const MatrixType &S_in) {
+    template<typename Scalar, grit::Form form_> typename gdplusk<Scalar, form_>::MatrixType gdplusk<Scalar, form_>::get_sBlock(const MatrixType &S_in) {
         auto       t_residual_correction = status.time_residual_correction.tic_token();
         MatrixType S                     = S_in;
         assert(S.allFinite());

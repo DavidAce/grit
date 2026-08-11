@@ -103,6 +103,18 @@ namespace grit {
         return "NONE";
     }
 
+    /*! Return the short name of a residual correction selector. */
+    inline std::string_view enum2sv(ResidualCorrectionType correction) {
+        switch(correction) {
+            case ResidualCorrectionType::NONE: return "NONE";
+            case ResidualCorrectionType::CHEAP_OLSEN: return "CHEAP_OLSEN";
+            case ResidualCorrectionType::FULL_OLSEN: return "FULL_OLSEN";
+            case ResidualCorrectionType::JACOBI_DAVIDSON: return "JACOBI_DAVIDSON";
+            case ResidualCorrectionType::AUTO: return "AUTO";
+        }
+        return "NONE";
+    }
+
     /*!
      * Return the short name of a single stop reason.
      * @param reason Stop reason.

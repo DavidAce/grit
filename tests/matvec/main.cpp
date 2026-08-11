@@ -4,8 +4,7 @@
 #include <grit/grit.h>
 
 namespace {
-    template<typename VecA, typename VecB>
-    void require_close(const VecA &a, const VecB &b, double abstol) {
+    template<typename VecA, typename VecB> void require_close(const VecA &a, const VecB &b, double abstol) {
         REQUIRE(a.size() == b.size());
         for(Eigen::Index i = 0; i < a.size(); ++i) REQUIRE(std::abs(a(i) - b(i)) < abstol);
     }
@@ -55,6 +54,31 @@ TEST_CASE("preconditioner callbacks are invoked") {
     REQUIRE(A.t_precond_update->get_tic_count() == 1);
     REQUIRE(A.t_precond->get_tic_count() == 1);
     require_close(x, y, 1e-12);
+}
+
+TEST_CASE("matvec reset clears counters and timers") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    auto A = grit::matvec<double>(3, [](const auto &X) { return Matrix(X); });
+    A.set_preconditioner_update([](double) {});
+    A.set_preconditioner_apply([](const auto &x, auto y, double) { y = x; });
+
+    Matrix X = Matrix::Identity(3, 1);
+    A.mult(X);
+    A.preconditioner_update(0.0);
+    grit::Matvec<double>::VectorType y(3);
+    A.preconditioner_apply(X.col(0), y, 0.0);
+    A.reset();
+
+    REQUIRE(A.num_mv == 0);
+    REQUIRE(A.num_pc == 0);
+    REQUIRE(A.num_pc_update == 0);
+    REQUIRE(A.t_mult->get_tic_count() == 0);
+    REQUIRE(A.t_precond->get_tic_count() == 0);
+    REQUIRE(A.t_precond_update->get_tic_count() == 0);
+    REQUIRE(A.t_mult->get_time() == Approx(0.0));
+    REQUIRE(A.t_precond->get_time() == Approx(0.0));
+    REQUIRE(A.t_precond_update->get_time() == Approx(0.0));
 }
 
 TEST_CASE("timer accumulated laps follow measured intervals") {

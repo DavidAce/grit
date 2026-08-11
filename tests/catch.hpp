@@ -3845,7 +3845,7 @@ namespace Catch {
 
     // end catch_capture_matchers.h
     #endif
-    // start catch_generators.hpp
+// start catch_generators.hpp
 
     // start catch_interfaces_generatortracker.h
 
@@ -7505,7 +7505,7 @@ namespace Catch {
 
     #endif // CATCH_CONFIG_ENABLE_BENCHMARKING
            // end catch_stats.cpp
-    // start catch_approx.cpp
+// start catch_approx.cpp
 
     #include <cmath>
     #include <limits>
@@ -10219,7 +10219,7 @@ namespace Catch {
 
     #endif // CATCH_CONFIG_POSIX_SIGNALS
            // end catch_fatal_condition.cpp
-    // start catch_generators.cpp
+// start catch_generators.cpp
 
     #include <limits>
     #include <set>

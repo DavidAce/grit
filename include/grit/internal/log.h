@@ -3,7 +3,7 @@
 #include <memory>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
-#include <stdexcept>
+#include <string>
 
 namespace grit::Logger {
     using LoggerHandle = std::shared_ptr<spdlog::logger>;
@@ -16,13 +16,4 @@ namespace grit::Logger {
         }
         return logger;
     }
-
-    inline void setLevel(LoggerHandle &logger, spdlog::level::level_enum level) {
-        if(!logger) logger = getLogger("grit");
-        logger->set_level(level);
-    }
-}
-
-namespace grit {
-    inline Logger::LoggerHandle log = Logger::getLogger("grit");
 }

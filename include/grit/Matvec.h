@@ -17,8 +17,7 @@ namespace grit {
     inline constexpr ptr_t ptr{};
 
     /*! Matrix-free linear operator with optional preconditioner callbacks. */
-    template<typename Scalar_>
-    class Matvec {
+    template<typename Scalar_> class Matvec {
         public:
         using Scalar                   = Scalar_;                                               /*!< Scalar type of the operator. */
         using RealScalar               = decltype(std::real(std::declval<Scalar>()));           /*!< Real scalar type used for norms and Ritz values. */
@@ -71,9 +70,9 @@ namespace grit {
         void set_size(Eigen::Index size_);
 
         /*! Number of operator rows. */
-        [[nodiscard]] int rows() const;
+        [[nodiscard]] Eigen::Index rows() const;
         /*! Number of operator columns. */
-        [[nodiscard]] int cols() const;
+        [[nodiscard]] Eigen::Index cols() const;
         /*! Square operator size. */
         [[nodiscard]] Eigen::Index get_size() const;
         /*! Operator norm estimate, or a fallback if none was supplied. */
@@ -129,8 +128,7 @@ namespace grit {
      * @param callback Callback returning A X for a block X.
      * @return Matrix-free operator wrapper.
      */
-    template<typename Scalar>
-    Matvec<Scalar> matvec(Eigen::Index size, typename Matvec<Scalar>::MultFunc callback);
+    template<typename Scalar> Matvec<Scalar> matvec(Eigen::Index size, typename Matvec<Scalar>::MultFunc callback);
 
     /*!
      * Make a matrix-free operator from a pointer-based matrix-vector callback.
@@ -138,6 +136,5 @@ namespace grit {
      * @param callback Callback writing A X to the output pointer.
      * @return Matrix-free operator wrapper.
      */
-    template<typename Scalar>
-    Matvec<Scalar> matvec(Eigen::Index size, ptr_t, typename Matvec<Scalar>::PtrMultFunc callback);
+    template<typename Scalar> Matvec<Scalar> matvec(Eigen::Index size, ptr_t, typename Matvec<Scalar>::PtrMultFunc callback);
 }

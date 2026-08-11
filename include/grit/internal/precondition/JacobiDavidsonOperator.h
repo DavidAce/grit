@@ -14,11 +14,9 @@
 #include <variant>
 
 namespace grit::internal::precondition {
-    template<typename Scalar_>
-    class JacobiDavidsonOperator;
+    template<typename Scalar_> class JacobiDavidsonOperator;
 
-    template<typename T>
-    using DenseMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
+    template<typename T> using DenseMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 }
 
 namespace Eigen::internal {
@@ -28,8 +26,7 @@ namespace Eigen::internal {
 }
 
 namespace grit::internal::precondition {
-    template<typename Scalar_>
-    class JacobiDavidsonOperator : public Eigen::EigenBase<JacobiDavidsonOperator<Scalar_>> {
+    template<typename Scalar_> class JacobiDavidsonOperator : public Eigen::EigenBase<JacobiDavidsonOperator<Scalar_>> {
         public:
         using Scalar     = Scalar_;
         using RealScalar = decltype(std::real(std::declval<Scalar>()));
@@ -52,29 +49,16 @@ namespace grit::internal::precondition {
         std::function<void(const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y)> ResidualOp;
         std::function<void(const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y)> ProjectOpL;
         std::function<void(const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y)> ProjectOpR;
-        std::function<MatrixType(const Eigen::Ref<const MatrixType> &)>                      MatrixOp;
 
         void _check_template_params() {};
         JacobiDavidsonOperator() = default;
         JacobiDavidsonOperator(Eigen::Index size_, std::function<void(const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y)> ResidualOp_,
                                std::function<void(const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y)> ProjectOpL_,
-                               std::function<void(const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y)> ProjectOpR_,
-                               std::function<MatrixType(const Eigen::Ref<const MatrixType> &)>                      MatrixOp_)
-            : size(size_), ResidualOp(std::move(ResidualOp_)), ProjectOpL(std::move(ProjectOpL_)), ProjectOpR(std::move(ProjectOpR_)),
-              MatrixOp(std::move(MatrixOp_)) {}
+                               std::function<void(const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y)> ProjectOpR_)
+            : size(size_), ResidualOp(std::move(ResidualOp_)), ProjectOpL(std::move(ProjectOpL_)), ProjectOpR(std::move(ProjectOpR_)) {}
 
-        template<typename Rhs>
-        Eigen::Product<JacobiDavidsonOperator, Rhs, Eigen::AliasFreeProduct> operator*(const Eigen::MatrixBase<Rhs> &x) const {
+        template<typename Rhs> Eigen::Product<JacobiDavidsonOperator, Rhs, Eigen::AliasFreeProduct> operator*(const Eigen::MatrixBase<Rhs> &x) const {
             auto result = Eigen::Product<JacobiDavidsonOperator, Rhs, Eigen::AliasFreeProduct>(*this, x.derived());
-            return result;
-        }
-        template<typename Rhs>
-        Eigen::Product<JacobiDavidsonOperator, Rhs, Eigen::AliasFreeProduct> gemm(const Eigen::MatrixBase<Rhs> &x) {
-            auto t_start  = std::chrono::steady_clock::now();
-            auto result   = MatrixOp(x);
-            auto t_end    = std::chrono::steady_clock::now();
-            m_optimer    += std::chrono::duration<double>(t_end - t_start).count();
-            m_opcounter++;
             return result;
         }
         [[nodiscard]] Eigen::Index rows() const { return size; };
@@ -83,10 +67,8 @@ namespace grit::internal::precondition {
         double                     elapsed_time() const { return m_optimer; }
     };
 
-    template<typename T>
-    struct is_std_complex : std::false_type {};
-    template<typename T>
-    struct is_std_complex<std::complex<T>> : std::true_type {};
+    template<typename T> struct is_std_complex : std::false_type {};
+    template<typename T> struct is_std_complex<std::complex<T>> : std::true_type {};
 }
 
 namespace Eigen::internal {

@@ -10,17 +10,14 @@
 #include <vector>
 
 namespace grit::form {
-    template<typename Scalar, grit::Form form>
-    class base;
+    template<typename Scalar, grit::Form form> class base;
 }
 
 namespace grit {
-    template<typename Scalar>
-    class Result;
+    template<typename Scalar> class Result;
 
     /*! Non-owning read-only view of eigenpairs, residuals, counters, and timings from a solver. */
-    template<typename Scalar_>
-    class ResultView {
+    template<typename Scalar_> class ResultView {
         public:
         using Scalar     = Scalar_;                                               /*!< Scalar type of the solver. */
         using RealScalar = decltype(std::real(std::declval<Scalar>()));           /*!< Real scalar type used for Ritz values and norms. */
@@ -29,13 +26,12 @@ namespace grit {
         using MatrixView = Eigen::Ref<const MatrixType>;                          /*!< Non-owning dense matrix view. */
         using VectorView = Eigen::Ref<const VectorReal>;                          /*!< Non-owning real vector view. */
 
-        ResultView() = default;
+        ResultView() = delete;
         /*!
          * View the current state of a standard or generalized solver form.
          * @param source_ Solver form to view.
          */
-        template<grit::Form form>
-        explicit ResultView(const form::base<Scalar, form> &source_);
+        template<grit::Form form> explicit ResultView(const form::base<Scalar, form> &source_);
 
         /*! Selected Ritz values. */
         [[nodiscard]] const VectorReal &eigVal() const;
@@ -185,6 +181,6 @@ namespace grit {
         [[nodiscard]] Result<Scalar> to_result() const;
 
         private:
-        std::variant<const form::base<Scalar, grit::Form::STANDARD> *, const form::base<Scalar, grit::Form::GENERALIZED> *> source = nullptr;
+        std::variant<const form::base<Scalar, grit::Form::STANDARD> *, const form::base<Scalar, grit::Form::GENERALIZED> *> source;
     };
 }
