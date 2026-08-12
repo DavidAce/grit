@@ -585,12 +585,12 @@ TEST_CASE("standard auto residual correction requires five Ritz entries and igno
     solver.update_auto_residual_correction_state();
     REQUIRE(solver.auto_residual_correction.active == Correction::CHEAP_OLSEN);
 
-    const auto saturation_count_switch    = std::max<Eigen::Index>(1, solver.status.saturation_count_max / 2);
-    solver.status.saturation_count_eigVal = saturation_count_switch - 1;
+    const auto saturation_count_switch = std::max<Eigen::Index>(1, solver.status.saturation_count_max / 2);
+    solver.status.ritzvl_saturated_for = grit::form::base<double>::VectorIdxT::Constant(solver.config.nev, saturation_count_switch - 1);
     solver.update_auto_residual_correction_state();
     REQUIRE(solver.auto_residual_correction.active == Correction::CHEAP_OLSEN);
 
-    solver.status.saturation_count_eigVal = saturation_count_switch;
+    solver.status.ritzvl_saturated_for = grit::form::base<double>::VectorIdxT::Constant(solver.config.nev, saturation_count_switch);
     solver.update_auto_residual_correction_state();
     REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
     REQUIRE(solver.auto_residual_correction.cheap_olsen_to_jd_switch_outer_iters.size() == 1);
@@ -628,7 +628,7 @@ TEST_CASE("standard auto residual correction separates directed Ritz progress fr
         for(Eigen::Index i = 0; i < 5; ++i)
             grit_test::add_iteration_sample(solver, i, i + 1, Correction::CHEAP_OLSEN, VectorReal::Constant(1, i % 2 == 0 ? 4.0 : 6.0),
                                             VectorReal::Constant(1, i % 2 == 0 ? 1e-1 : 1e-3));
-        solver.status.saturation_count_eigVal = solver.status.saturation_count_max;
+        solver.status.ritzvl_saturated_for = grit::form::base<double>::VectorIdxT::Constant(solver.config.nev, solver.status.saturation_count_max);
         solver.update_auto_residual_correction_state();
         REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
     }
@@ -669,7 +669,7 @@ TEST_CASE("standard auto residual correction evaluates every unconverged Ritz sl
     solver.status.history.clear();
     for(Eigen::Index i = 0; i < 5; ++i)
         grit_test::add_iteration_sample(solver, i, i + 1, Correction::CHEAP_OLSEN, (VectorReal(2) << 1.0, 2.0).finished(), VectorReal::Ones(2));
-    solver.status.saturation_count_eigVal = solver.status.saturation_count_max;
+    solver.status.ritzvl_saturated_for = grit::form::base<double>::VectorIdxT::Constant(solver.config.nev, solver.status.saturation_count_max);
     solver.update_auto_residual_correction_state();
     REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
 }
@@ -696,7 +696,12 @@ TEST_CASE("standard auto residual correction ignores converged Ritz slots in sta
         grit_test::add_iteration_sample(solver, i, i + 1, Correction::CHEAP_OLSEN, (VectorReal(2) << i + 1.0, 2.0).finished(),
                                         (VectorReal(2) << 1e-8, 1.0).finished());
 
-    solver.status.saturation_count_eigVal = solver.status.saturation_count_max;
+    auto [have_saturated, saturated_pairs] = solver.eigVals_have_saturated();
+    REQUIRE(have_saturated);
+    REQUIRE(saturated_pairs(0) == 0);
+    REQUIRE(saturated_pairs(1) == 1);
+
+    solver.status.ritzvl_saturated_for = grit::form::base<double>::VectorIdxT::Constant(solver.config.nev, solver.status.saturation_count_max);
     solver.update_auto_residual_correction_state();
 
     REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
@@ -736,7 +741,7 @@ TEST_CASE("standard auto residual correction probe keeps Olsen when the rolling 
     solver.status.history.clear();
     for(Eigen::Index i = 0; i < 5; ++i)
         grit_test::add_iteration_sample(solver, i, i + 1, Correction::CHEAP_OLSEN, VectorReal::Constant(1, 3.0), VectorReal::Ones(1));
-    solver.status.saturation_count_eigVal = solver.status.saturation_count_max;
+    solver.status.ritzvl_saturated_for = grit::form::base<double>::VectorIdxT::Constant(solver.config.nev, solver.status.saturation_count_max);
     solver.update_auto_residual_correction_state();
     REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
     REQUIRE(solver.auto_residual_correction.probes_started == 0);
@@ -767,7 +772,7 @@ TEST_CASE("standard auto residual correction probe returns to JD on a noisy Ritz
     solver.status.rNormsAbs                          = VectorReal::Ones(1);
     solver.auto_residual_correction.active           = Correction::JACOBI_DAVIDSON;
     solver.auto_residual_correction.iteration_method = Correction::CHEAP_OLSEN;
-    solver.status.saturation_count_eigVal            = solver.status.saturation_count_max;
+    solver.status.ritzvl_saturated_for               = grit::form::base<double>::VectorIdxT::Constant(solver.config.nev, solver.status.saturation_count_max);
     for(Eigen::Index i = 0; i < solver.config.auto_probe_length; ++i) {
         grit_test::add_iteration_sample(solver, i, i + 1, Correction::CHEAP_OLSEN, VectorReal::Constant(1, i % 2 == 0 ? 1.0 : 3.0), VectorReal::Ones(1));
         solver.update_auto_residual_correction_state();
@@ -848,23 +853,23 @@ TEST_CASE("standard saturation distinguishes noisy floors from directed progress
     for(Eigen::Index i = 0; i < 4; ++i)
         grit_test::add_iteration_sample(solver, i, i + 1, Correction::JACOBI_DAVIDSON, VectorReal::Constant(1, 1.0 + (i % 2 == 0 ? -1e-8 : 1e-8)),
                                         VectorReal::Constant(1, i % 2 == 0 ? 1.0 : 1.2));
-    REQUIRE_FALSE(solver.rNorms_have_saturated());
-    REQUIRE_FALSE(solver.eigVals_have_saturated());
+    REQUIRE_FALSE(solver.rNorms_have_saturated().first);
+    REQUIRE_FALSE(solver.eigVals_have_saturated().first);
 
     for(Eigen::Index i = 4; i < 12; ++i)
         grit_test::add_iteration_sample(solver, i, i + 1, Correction::JACOBI_DAVIDSON, VectorReal::Constant(1, 1.0 + (i % 2 == 0 ? -1e-8 : 1e-8)),
                                         VectorReal::Constant(1, i % 2 == 0 ? 1.0 : 1.2));
-    REQUIRE(solver.rNorms_have_saturated());
-    REQUIRE(solver.eigVals_have_saturated());
+    REQUIRE(solver.rNorms_have_saturated().first);
+    REQUIRE(solver.eigVals_have_saturated().first);
 
     for(Eigen::Index i = 8; i < 12; ++i) solver.status.history[static_cast<std::size_t>(i)].residual_correction = Correction::CHEAP_OLSEN;
-    REQUIRE(solver.rNorms_have_saturated());
-    REQUIRE(solver.eigVals_have_saturated());
+    REQUIRE(solver.rNorms_have_saturated().first);
+    REQUIRE(solver.eigVals_have_saturated().first);
 
     solver.status.history.clear();
     for(Eigen::Index i = 0; i < 12; ++i)
         grit_test::add_iteration_sample(solver, i, i + 1, Correction::JACOBI_DAVIDSON, VectorReal::Ones(1), VectorReal::Constant(1, std::pow(0.5, i)));
-    REQUIRE_FALSE(solver.rNorms_have_saturated());
+    REQUIRE_FALSE(solver.rNorms_have_saturated().first);
 
     solver.status.history.clear();
     solver.status.eigVal         = VectorReal::Constant(1, -837.1286564372557);
@@ -874,7 +879,7 @@ TEST_CASE("standard saturation distinguishes noisy floors from directed progress
     for(Eigen::Index i = 0; i < static_cast<Eigen::Index>(ritz_values.size()); ++i)
         grit_test::add_iteration_sample(solver, i, i + 1, Correction::JACOBI_DAVIDSON, VectorReal::Constant(1, ritz_values[static_cast<std::size_t>(i)]),
                                         VectorReal::Ones(1));
-    REQUIRE_FALSE(solver.eigVals_have_saturated());
+    REQUIRE_FALSE(solver.eigVals_have_saturated().first);
 
     solver.status.history.clear();
     for(Eigen::Index i = 0; i < 7; ++i)
@@ -883,8 +888,43 @@ TEST_CASE("standard saturation distinguishes noisy floors from directed progress
     for(Eigen::Index i = 0; i < 5; ++i)
         grit_test::add_iteration_sample(solver, i + 7, i + 8, Correction::JACOBI_DAVIDSON, VectorReal::Constant(1, 1.7 + (i % 2 == 0 ? -1e-8 : 1e-8)),
                                         VectorReal::Constant(1, i % 2 == 0 ? 0.016 : 0.018));
-    REQUIRE(solver.rNorms_have_saturated());
-    REQUIRE(solver.eigVals_have_saturated());
+    REQUIRE(solver.rNorms_have_saturated().first);
+    REQUIRE(solver.eigVals_have_saturated().first);
+}
+
+TEST_CASE("standard saturation counters track Ritz pairs independently") {
+    using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorReal = grit::form::base<double>::VectorReal;
+    using Correction = grit::ResidualCorrectionType;
+
+    Matrix A_matrix = Matrix::Identity(4, 4);
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev               = 2;
+    solver.config.abstol            = 1e-12;
+    solver.V                        = Matrix::Identity(4, 2);
+    solver.status.eigVal            = VectorReal::Ones(2);
+    solver.status.rNormsAbs         = (VectorReal(2) << std::pow(0.5, 4), 1.0).finished();
+    solver.status.num_matvecs       = 1;
+    solver.status.num_matvecs_total = 5;
+    solver.status.optIdx            = {0, 1};
+    solver.T_evals                  = solver.status.eigVal;
+    for(Eigen::Index i = 0; i < 5; ++i)
+        grit_test::add_iteration_sample(solver, i, i + 1, Correction::JACOBI_DAVIDSON, VectorReal::Ones(2),
+                                        (VectorReal(2) << std::pow(0.5, i), i % 2 == 0 ? 1.0 : 1.2).finished());
+
+    auto [have_saturated, saturated_pairs] = solver.rNorms_have_saturated();
+    REQUIRE_FALSE(have_saturated);
+    REQUIRE(saturated_pairs(0) == 0);
+    REQUIRE(saturated_pairs(1) == 1);
+
+    solver.updateStatus();
+
+    REQUIRE(solver.status.ritzvl_saturated_for(0) == 1);
+    REQUIRE(solver.status.ritzvl_saturated_for(1) == 1);
+    REQUIRE(solver.status.rnorms_saturated_for(0) == 0);
+    REQUIRE(solver.status.rnorms_saturated_for(1) == 1);
 }
 
 TEST_CASE("standard direct Ritz verification rejects cached convergence") {
@@ -936,8 +976,8 @@ TEST_CASE("standard saturation counters continue across correction changes") {
     solver.status.optIdx                     = {0};
     solver.status.eigVal                     = VectorReal::Ones(1);
     solver.status.rNormsAbs                  = VectorReal::Ones(1);
-    solver.status.saturation_count_eigVal    = 4;
-    solver.status.saturation_count_rNorm     = 4;
+    solver.status.ritzvl_saturated_for       = grit::form::base<double>::VectorIdxT::Constant(1, 4);
+    solver.status.rnorms_saturated_for       = grit::form::base<double>::VectorIdxT::Constant(1, 4);
     solver.status.num_matvecs_total          = 4;
     solver.status.num_matvecs                = 1;
     solver.residual_correction_type_internal = Correction::CHEAP_OLSEN;
@@ -945,8 +985,8 @@ TEST_CASE("standard saturation counters continue across correction changes") {
 
     solver.updateStatus();
 
-    REQUIRE(solver.status.saturation_count_eigVal == 5);
-    REQUIRE(solver.status.saturation_count_rNorm == 5);
+    REQUIRE(solver.status.ritzvl_saturated_for(0) == 5);
+    REQUIRE(solver.status.rnorms_saturated_for(0) == 5);
     REQUIRE(solver.status.history.back().residual_correction == Correction::CHEAP_OLSEN);
     REQUIRE(solver.get_num_consecutive_correction_samples(Correction::CHEAP_OLSEN) == 1);
     REQUIRE(grit::has_flag(solver.status.stopReason, grit::StopReason::ritz_value_stalled));
@@ -981,36 +1021,36 @@ TEST_CASE("standard saturation stopping can be disabled without disabling its co
     auto   A        = grit::matvec<double>(2, [&](auto const &X) { return A_matrix * X; });
 
     grit::standard::gdplusk<double> solver(A);
-    solver.config.nev                     = 1;
-    solver.config.ncv                     = 3;
-    solver.config.block_size              = 1;
-    solver.config.abstol                  = 1e-12;
-    solver.config.max_iters               = -1;
-    solver.config.quit_when_saturated     = false;
-    solver.V                              = Matrix::Identity(2, 1);
-    solver.AV                             = 2.0 * solver.V;
-    solver.BV                             = solver.V;
-    solver.S                              = solver.V;
-    solver.Q                              = solver.V;
-    solver.AQ                             = solver.AV;
-    solver.BQ                             = solver.V;
-    solver.T_evals                        = VectorReal::Ones(1);
-    solver.status.optIdx                  = {0};
-    solver.status.eigVal                  = VectorReal::Ones(1);
-    solver.status.rNormsAbs               = VectorReal::Ones(1);
-    solver.status.max_history_size        = 12;
-    solver.status.saturation_count_eigVal = solver.config.ncv - 1;
-    solver.status.saturation_count_rNorm  = solver.config.ncv - 1;
-    solver.status.num_matvecs_total       = 10;
-    solver.status.num_matvecs             = 1;
+    solver.config.nev                  = 1;
+    solver.config.ncv                  = 3;
+    solver.config.block_size           = 1;
+    solver.config.abstol               = 1e-12;
+    solver.config.max_iters            = -1;
+    solver.config.quit_when_saturated  = false;
+    solver.V                           = Matrix::Identity(2, 1);
+    solver.AV                          = 2.0 * solver.V;
+    solver.BV                          = solver.V;
+    solver.S                           = solver.V;
+    solver.Q                           = solver.V;
+    solver.AQ                          = solver.AV;
+    solver.BQ                          = solver.V;
+    solver.T_evals                     = VectorReal::Ones(1);
+    solver.status.optIdx               = {0};
+    solver.status.eigVal               = VectorReal::Ones(1);
+    solver.status.rNormsAbs            = VectorReal::Ones(1);
+    solver.status.max_history_size     = 12;
+    solver.status.ritzvl_saturated_for = grit::form::base<double>::VectorIdxT::Constant(1, solver.config.ncv - 1);
+    solver.status.rnorms_saturated_for = grit::form::base<double>::VectorIdxT::Constant(1, solver.config.ncv - 1);
+    solver.status.num_matvecs_total    = 10;
+    solver.status.num_matvecs          = 1;
     for(Eigen::Index i = 0; i < 11; ++i)
         grit_test::add_iteration_sample(solver, i, i, Correction::NONE, VectorReal::Constant(1, 1.0 + (i % 2 == 0 ? -1e-8 : 1e-8)),
                                         VectorReal::Constant(1, i % 2 == 0 ? 1.0 : 1.2));
 
     solver.updateStatus();
     REQUIRE(solver.status.stopReason == grit::StopReason::none);
-    REQUIRE(solver.status.saturation_count_rNorm == solver.config.ncv);
-    REQUIRE(solver.status.saturation_count_eigVal == solver.config.ncv);
+    REQUIRE(solver.status.rnorms_saturated_for(0) == solver.config.ncv);
+    REQUIRE(solver.status.ritzvl_saturated_for(0) == solver.config.ncv);
 }
 
 int main(int argc, char **argv) {

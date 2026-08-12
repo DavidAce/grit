@@ -89,19 +89,38 @@ namespace grit::algo {
 
         auto rows = std::min({cfg().nev, status.eigVal.size(), status.rNormsAbs.size()});
         if(rows <= 0) return;
+        if(status.ritzvl_saturated_for.size() != rows) status.ritzvl_saturated_for = VectorIdxT::Zero(rows);
 
-        auto         ritz_samples          = this->get_num_consecutive_correction_samples(auto_residual_correction.iteration_method);
-        const bool   ritz_progress_ready   = ritz_samples >= Base::min_saturation_samples;
-        VectorReal   ritz_slopes           = VectorReal::Constant(rows, std::numeric_limits<RealScalar>::quiet_NaN());
-        VectorReal   drift_thresholds      = VectorReal::Constant(rows, std::numeric_limits<RealScalar>::quiet_NaN());
-        Eigen::Index ritz_suffix_samples   = 0;
-        bool         ritz_progress_stopped = false;
+        auto         ritz_samples        = static_cast<Eigen::Index>(status.history.size());
+        const bool   ritz_progress_ready = ritz_samples >= Base::min_saturation_samples;
+        VectorReal   ritz_slopes         = VectorReal::Constant(rows, std::numeric_limits<RealScalar>::quiet_NaN());
+        VectorReal   drift_thresholds    = VectorReal::Constant(rows, std::numeric_limits<RealScalar>::quiet_NaN());
+        Eigen::Index ritz_suffix_samples = 0;
         if(ritz_progress_ready) {
-            drift_thresholds      = this->get_ritz_drift_thresholds(rows);
-            ritz_progress_stopped = this->eigVals_have_saturated(&ritz_slopes, &ritz_suffix_samples, nullptr, ritz_samples);
+            drift_thresholds = this->get_ritz_drift_thresholds(rows);
+            this->eigVals_have_saturated(&ritz_slopes, &ritz_suffix_samples);
         }
         const auto saturation_count_switch = std::max<Eigen::Index>(1, status.saturation_count_max / 2);
-        const bool ritz_switch_ready       = ritz_progress_stopped && status.saturation_count_eigVal >= saturation_count_switch;
+        auto       targets                 = this->rNormAbsTargets().topRows(rows);
+        bool       have_unconverged        = false;
+        bool       ritz_has_saturated      = true;
+        bool       ritz_switch_ready       = true;
+        for(Eigen::Index i = 0; i < rows; ++i) {
+            if(status.rNormsAbs(i) <= targets(i)) continue;
+            have_unconverged = true;
+            if(status.ritzvl_saturated_for(i) == 0) ritz_has_saturated = false;
+            if(status.ritzvl_saturated_for(i) < saturation_count_switch) ritz_switch_ready = false;
+        }
+        ritz_has_saturated = have_unconverged && ritz_has_saturated;
+        ritz_switch_ready  = have_unconverged && ritz_switch_ready;
+
+        std::string ritz_saturation_msg;
+        if(rows == 1)
+            ritz_saturation_msg = fmt::format("{}", status.ritzvl_saturated_for(0));
+        else if(rows <= 3)
+            ritz_saturation_msg = fmt::format("[{}]", fmt::join(status.ritzvl_saturated_for.begin(), status.ritzvl_saturated_for.end(), ","));
+        else
+            ritz_saturation_msg = fmt::format("min {}", status.ritzvl_saturated_for.minCoeff());
 
         auto        outer_iteration_time = std::max(0.0, status.time_elapsed.get_time() - auto_residual_correction.outer_iteration_time_start);
         const auto  num_matvecs_iter     = status.num_matvecs + status.num_matvecs_inner;
@@ -116,17 +135,17 @@ namespace grit::algo {
            auto_residual_correction.iteration_method == ResidualCorrectionType::CHEAP_OLSEN) {
             if(auto_residual_correction.cheap_olsen_iters == 0) { auto_residual_correction.probes_started++; }
             auto_residual_correction.cheap_olsen_iters++;
-            if(auto_residual_correction.cheap_olsen_iters < config.auto_probe_length || (ritz_progress_stopped && !ritz_switch_ready)) {
+            if(auto_residual_correction.cheap_olsen_iters < config.auto_probe_length || (ritz_has_saturated && !ritz_switch_ready)) {
                 if(log) {
                     log->trace("AUTO probe: {}/{} | Ritz sat={}/{} stop={} suffix={} slope/mv {::.3e} threshold/mv={::.3e} | it={} mv={}",
-                               auto_residual_correction.cheap_olsen_iters, config.auto_probe_length, status.saturation_count_eigVal, saturation_count_switch,
+                               auto_residual_correction.cheap_olsen_iters, config.auto_probe_length, ritz_saturation_msg, saturation_count_switch,
                                status.saturation_count_max, ritz_suffix_samples, ritz_slopes, drift_thresholds, status.outer_iter, status.num_matvecs_total);
                 }
                 return;
             }
 
             auto probe_iters      = auto_residual_correction.cheap_olsen_iters;
-            bool keep_cheap_olsen = !ritz_progress_stopped;
+            bool keep_cheap_olsen = !ritz_has_saturated;
             if(!keep_cheap_olsen) auto_residual_correction.cheap_olsen_iters = 0;
             auto_residual_correction.active = keep_cheap_olsen ? ResidualCorrectionType::CHEAP_OLSEN : ResidualCorrectionType::JACOBI_DAVIDSON;
             if(keep_cheap_olsen) {
@@ -138,7 +157,7 @@ namespace grit::algo {
                 log->debug("AUTO probe: {} after {} iterations | Ritz slope/mv {::.3e} threshold/mv={::.3e} sat={}/{} stop={} suffix={} tol={:.3e} | "
                            "it={} mv={}|{}{} t={:.1e}|{:.1e}s",
                            keep_cheap_olsen ? "keep CHEAP_OLSEN" : "return JACOBI_DAVIDSON", probe_iters, ritz_slopes, drift_thresholds,
-                           status.saturation_count_eigVal, saturation_count_switch, status.saturation_count_max, ritz_suffix_samples,
+                           ritz_saturation_msg, saturation_count_switch, status.saturation_count_max, ritz_suffix_samples,
                            config.ritz_saturation_tolerance, status.outer_iter, num_matvecs_iter, status.num_matvecs_total, pcMsg, outer_iteration_time,
                            status.time_elapsed.get_time());
             }
@@ -160,7 +179,7 @@ namespace grit::algo {
 
         if(log) {
             log->trace("AUTO Cheap Olsen: Ritz slope/mv {::.3e} threshold/mv={::.3e} sat={}/{} stop={} suffix={} tol={:.3e} | CO iters={} it={} mv={}",
-                       ritz_slopes, drift_thresholds, status.saturation_count_eigVal, saturation_count_switch, status.saturation_count_max, ritz_suffix_samples,
+                       ritz_slopes, drift_thresholds, ritz_saturation_msg, saturation_count_switch, status.saturation_count_max, ritz_suffix_samples,
                        config.ritz_saturation_tolerance, auto_residual_correction.cheap_olsen_iters, status.outer_iter, status.num_matvecs_total);
         }
         if(!ritz_switch_ready) return;
@@ -172,7 +191,7 @@ namespace grit::algo {
             log->info("AUTO switch: {} -> {} | Ritz slope/mv {::.3e} threshold/mv={::.3e} sat={}/{} stop={} suffix={} tol={:.3e} | "
                       "it={} mv={}|{}{} t={:.1e}|{:.1e}s",
                       enum2sv(ResidualCorrectionType::CHEAP_OLSEN), enum2sv(ResidualCorrectionType::JACOBI_DAVIDSON), ritz_slopes, drift_thresholds,
-                      status.saturation_count_eigVal, saturation_count_switch, status.saturation_count_max, ritz_suffix_samples,
+                      ritz_saturation_msg, saturation_count_switch, status.saturation_count_max, ritz_suffix_samples,
                       config.ritz_saturation_tolerance, status.outer_iter, num_matvecs_iter, status.num_matvecs_total, pcMsg, outer_iteration_time,
                       status.time_elapsed.get_time());
         }

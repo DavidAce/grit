@@ -456,19 +456,22 @@ namespace grit::form {
         return samples;
     }
 
-    template<typename Scalar, grit::Form form_> bool base<Scalar, form_>::rNorms_have_saturated() {
-        if(status.history.empty()) return false;
+    template<typename Scalar, grit::Form form_>
+    std::pair<bool, typename base<Scalar, form_>::VectorIdxT> base<Scalar, form_>::rNorms_have_saturated() {
+        auto       rows            = std::min<Eigen::Index>(cfg().nev, status.rNormsAbs.size());
+        VectorIdxT saturated_pairs = VectorIdxT::Zero(rows);
+        if(status.history.empty()) return {false, std::move(saturated_pairs)};
         auto       available      = static_cast<Eigen::Index>(status.history.size());
         const bool history_ready  = available >= min_saturation_samples;
         const bool have_residuals = status.rNormsAbs.size() > 0;
-        if(!history_ready || !have_residuals) return false;
+        if(!history_ready || !have_residuals) return {false, std::move(saturated_pairs)};
 
-        auto       rows    = std::min<Eigen::Index>(cfg().nev, status.rNormsAbs.size());
-        VectorReal targets = rNormAbsTargets().topRows(rows);
+        VectorReal targets          = rNormAbsTargets().topRows(rows);
+        bool       have_unconverged = (status.rNormsAbs.topRows(rows).array() > targets.array()).any();
         for(Eigen::Index samples = available; samples >= min_saturation_samples; --samples) {
             VectorReal errors;
-            VectorReal slopes    = get_rnorm_slopes(samples, &errors).topRows(rows);
-            bool       saturated = false;
+            VectorReal slopes         = get_rnorm_slopes(samples, &errors).topRows(rows);
+            bool       have_saturated = true;
             for(Eigen::Index i = 0; i < rows; ++i) {
                 if(status.rNormsAbs(i) <= targets(i)) continue;
 
@@ -476,15 +479,12 @@ namespace grit::form {
                 const bool decreasing           = slopes(i) < RealScalar{0};
                 const bool significant_decrease = -slopes(i) > RealScalar{2} * errors(i);
                 const bool progressing          = finite_fit && decreasing && significant_decrease;
-                if(progressing) {
-                    saturated = false;
-                    break;
-                }
-                saturated = true;
+                if(!progressing) saturated_pairs(i) = 1;
+                if(saturated_pairs(i) == 0) have_saturated = false;
             }
-            if(saturated) return true;
+            if(have_unconverged && have_saturated) return {true, std::move(saturated_pairs)};
         }
-        return false;
+        return {false, std::move(saturated_pairs)};
     }
 
     template<typename Scalar, grit::Form form_>
@@ -506,46 +506,36 @@ namespace grit::form {
     }
 
     template<typename Scalar, grit::Form form_>
-    bool base<Scalar, form_>::eigVals_have_saturated(VectorReal *detected_slopes, Eigen::Index *detected_samples, VectorIdxT *saturated_pairs,
-                                                     Eigen::Index last_n) {
-        auto rows = std::min({cfg().nev, status.eigVal.size(), status.rNormsAbs.size()});
-        if(saturated_pairs) *saturated_pairs = VectorIdxT::Zero(rows);
-        if(status.history.empty()) return false;
+    std::pair<bool, typename base<Scalar, form_>::VectorIdxT> base<Scalar, form_>::eigVals_have_saturated(VectorReal *detected_slopes,
+                                                                                                         Eigen::Index *detected_samples,
+                                                                                                         Eigen::Index last_n) {
+        auto       rows            = std::min({cfg().nev, status.eigVal.size(), status.rNormsAbs.size()});
+        VectorIdxT saturated_pairs = VectorIdxT::Zero(rows);
+        if(status.history.empty()) return {false, std::move(saturated_pairs)};
         auto available = last_n < 0 ? static_cast<Eigen::Index>(status.history.size()) : std::min(last_n, static_cast<Eigen::Index>(status.history.size()));
         const bool history_ready  = available >= min_saturation_samples;
         const bool have_residuals = status.rNormsAbs.size() > 0;
-        if(!history_ready || !have_residuals) return false;
+        if(!history_ready || !have_residuals) return {false, std::move(saturated_pairs)};
 
         VectorReal targets          = rNormAbsTargets().topRows(rows);
         VectorReal drift_thresholds = get_ritz_drift_thresholds(rows);
-        VectorIdxT pair_saturation  = VectorIdxT::Zero(rows);
+        bool       have_unconverged = (status.rNormsAbs.topRows(rows).array() > targets.array()).any();
         for(Eigen::Index samples = available; samples >= min_saturation_samples; --samples) {
-            VectorReal slopes           = get_ritz_slopes(samples).topRows(rows);
-            bool       have_unconverged = false;
-            bool       saturated        = true;
+            VectorReal slopes         = get_ritz_slopes(samples).topRows(rows);
+            bool       have_saturated = true;
             for(Eigen::Index i = 0; i < rows; ++i) {
-                if(status.rNormsAbs(i) <= targets(i)) {
-                    pair_saturation(i) = 1;
-                    continue;
-                }
+                if(status.rNormsAbs(i) <= targets(i)) continue;
 
-                have_unconverged       = true;
                 const bool finite_fit  = std::isfinite(slopes(i)) && std::isfinite(drift_thresholds(i));
                 const bool progressing = finite_fit && std::abs(slopes(i)) > drift_thresholds(i);
-                if(progressing)
-                    saturated = false;
-                else
-                    pair_saturation(i) = 1;
+                if(!progressing) saturated_pairs(i) = 1;
+                if(saturated_pairs(i) == 0) have_saturated = false;
             }
             if(detected_slopes) *detected_slopes = slopes;
             if(detected_samples) *detected_samples = samples;
-            if(have_unconverged && saturated) {
-                if(saturated_pairs) *saturated_pairs = pair_saturation;
-                return true;
-            }
+            if(have_unconverged && have_saturated) return {true, std::move(saturated_pairs)};
         }
-        if(saturated_pairs) *saturated_pairs = pair_saturation;
-        return false;
+        return {false, std::move(saturated_pairs)};
     }
 
     template<typename Scalar, grit::Form form_> void base<Scalar, form_>::refresh_direct_ritz_residuals() {
@@ -658,31 +648,34 @@ namespace grit::form {
                                                     .rnorms              = status.rNormsAbs.topRows(cfg().nev)});
         while(status.history.size() > status.max_history_size) status.history.pop_front();
 
-        VectorIdxT saturated_pairs;
-        const bool eigvals_saturated = eigVals_have_saturated(nullptr, nullptr, &saturated_pairs);
-        if(eigvals_saturated) {
-            status.saturation_count_eigVal++;
-        } else {
-            status.saturation_count_eigVal          = 0;
-            auto_residual_correction.probes_started = 0;
-        }
+        Eigen::Index rows = std::min({cfg().nev, status.eigVal.size(), status.rNormsAbs.size()});
+        if(status.ritzvl_saturated_for.size() != rows) status.ritzvl_saturated_for = VectorIdxT::Zero(rows);
+        if(status.rnorms_saturated_for.size() != rows) status.rnorms_saturated_for = VectorIdxT::Zero(rows);
 
+        auto [have_saturated, saturated_pairs] = eigVals_have_saturated();
+        for(Eigen::Index i = 0; i < rows; ++i) {
+            if(saturated_pairs(i) != 0)
+                status.ritzvl_saturated_for(i)++;
+            else
+                status.ritzvl_saturated_for(i) = 0;
+        }
+        if(!have_saturated) auto_residual_correction.probes_started = 0;
+
+        const auto saturation_count_trigger = std::max<Eigen::Index>(1, status.saturation_count_max / 2);
         if(cfg().reltol > RealScalar{0}) {
-            Eigen::Index rows = std::min(cfg().nev, status.rNormsAbs.size());
             if(status.rnorm_abs_reference.size() != rows) status.rnorm_abs_reference = VectorReal::Zero(rows);
-            if(status.saturation_count_eigVal >= status.saturation_count_max) {
-                for(Eigen::Index i = 0; i < rows; ++i)
-                    if(status.rnorm_abs_reference(i) <= RealScalar{0}) status.rnorm_abs_reference(i) = status.rNormsAbs(i);
-            } else {
-                for(Eigen::Index i = 0; i < std::min(rows, saturated_pairs.size()); ++i)
-                    if(saturated_pairs(i) == 0) status.rnorm_abs_reference(i) = RealScalar{0};
-            }
+            for(Eigen::Index i = 0; i < rows; ++i)
+                if(status.ritzvl_saturated_for(i) >= saturation_count_trigger && status.rnorm_abs_reference(i) <= RealScalar{0})
+                    status.rnorm_abs_reference(i) = status.rNormsAbs(i);
         }
 
-        if(rNorms_have_saturated())
-            status.saturation_count_rNorm++;
-        else
-            status.saturation_count_rNorm = 0;
+        std::tie(have_saturated, saturated_pairs) = rNorms_have_saturated();
+        for(Eigen::Index i = 0; i < rows; ++i) {
+            if(saturated_pairs(i) != 0)
+                status.rnorms_saturated_for(i)++;
+            else
+                status.rnorms_saturated_for(i) = 0;
+        }
 
         constexpr auto beta      = RealScalar{0.5f};
         VectorReal     rNormsAbs = status.rNormsAbs.topRows(cfg().nev);
@@ -712,10 +705,20 @@ namespace grit::form {
             status.stopReason |= StopReason::max_matvecs;
         }
 
-        if(cfg().quit_when_saturated && std::min(status.saturation_count_eigVal, status.saturation_count_rNorm) >= status.saturation_count_max) {
-            status.stopMessage.emplace_back(fmt::format("saturation_count (eigVal {} rNorm {}) >= saturation_count_max ({}) | outer_iter {} | mv {} | {:.3e} s",
-                                                        status.saturation_count_eigVal, status.saturation_count_rNorm, status.saturation_count_max,
-                                                        status.outer_iter + 1, status.num_matvecs_total, status.time_elapsed.get_time()));
+        bool have_unconverged = false;
+        have_saturated        = true;
+        for(Eigen::Index i = 0; i < rows; ++i) {
+            if(rNormsAbs(i) <= targets(i)) continue;
+            have_unconverged = true;
+            if(status.ritzvl_saturated_for(i) < status.saturation_count_max || status.rnorms_saturated_for(i) < status.saturation_count_max) {
+                have_saturated = false;
+                break;
+            }
+        }
+        if(cfg().quit_when_saturated && have_unconverged && have_saturated) {
+            status.stopMessage.emplace_back(fmt::format("all unconverged Ritz pairs saturated for at least {} iterations | outer_iter {} | mv {} | {:.3e} s",
+                                                        status.saturation_count_max, status.outer_iter + 1, status.num_matvecs_total,
+                                                        status.time_elapsed.get_time()));
             status.stopReason |= StopReason::ritz_value_stalled;
             status.stopReason |= StopReason::ritz_residual_stalled;
         }
@@ -768,14 +771,23 @@ namespace grit::form {
         std::string pcMsg;
         if(num_precond_iter > 0) pcMsg = fmt::format(" pc={:>4}|{:<4}", num_precond_iter, status.num_precond_total);
         std::string rescaledMsg = cfg().use_rescaled_rnorm_tolerance ? " (rescaled)" : "";
+        std::string saturationMsg;
+        if(status.ritzvl_saturated_for.size() == 1) {
+            saturationMsg = fmt::format("sat={}:{}", status.ritzvl_saturated_for(0), status.rnorms_saturated_for(0));
+        } else if(status.ritzvl_saturated_for.size() <= 3) {
+            saturationMsg = fmt::format("sat=[{}]:[{}]", fmt::join(status.ritzvl_saturated_for.begin(), status.ritzvl_saturated_for.end(), ","),
+                                        fmt::join(status.rnorms_saturated_for.begin(), status.rnorms_saturated_for.end(), ","));
+        } else {
+            saturationMsg = fmt::format("sat=min({}:{})", status.ritzvl_saturated_for.minCoeff(), status.rnorms_saturated_for.minCoeff());
+        }
 
         log->info("it={:>3} dim={} ritz={} mv={:>4}|{:<4}{} t={:.1e}|{:.1e}s eigVal={::.16f} orthErr={:.3e} "
-                  "|rNorm|={::.3e} tgt={::.3e} ({:.2e}/mv) tol={:.1e} rtol={:.1e}{} {} sat={}:{}/{} col={} bs={} "
+                  "|rNorm|={::.3e} tgt={::.3e} ({:.2e}/mv) tol={:.1e} rtol={:.1e}{} {} {}/{} col={} bs={} "
                   "|op|={:.2e} κ(A)={:.2e} κ(B)={:.2e}{}",
                   status.outer_iter, N, enum2sv(cfg().ritz), num_matvecs_iter, status.num_matvecs_total, pcMsg, status.time_elapsed.get_time_lap(),
                   status.time_elapsed.get_time(), status.eigVal, orthError, status.rNormsAbs, rNormAbsTargets, get_rNorms_log10_change_per_matvec(),
-                  cfg().abstol, cfg().reltol, rescaledMsg, innerMsg, status.saturation_count_eigVal, status.saturation_count_rNorm, status.saturation_count_max,
-                  Q.cols(), cfg().block_size, op_norm_estimate, status.condition_a, status.condition_b, timingMsg);
+                  cfg().abstol, cfg().reltol, rescaledMsg, innerMsg, saturationMsg, status.saturation_count_max, Q.cols(), cfg().block_size, op_norm_estimate,
+                  status.condition_a, status.condition_b, timingMsg);
 
         if(status.outer_iter == status.num_outer_iters_last_restart && log->should_log(spdlog::level::debug)) log->debug(get_direct_ritz_diagnostics());
     }
@@ -871,9 +883,9 @@ namespace grit::form {
         status.stopMessage.clear();
         status.residual_converged      = false;
         status.residual_below_gap      = false;
-        status.saturation_count_eigVal = 0;
-        status.saturation_count_rNorm  = 0;
-        status.saturation_count_max    = cfg().saturation_count_max;
+        status.ritzvl_saturated_for = VectorIdxT::Zero(cfg().nev);
+        status.rnorms_saturated_for = VectorIdxT::Zero(cfg().nev);
+        status.saturation_count_max = cfg().saturation_count_max;
         status.max_history_size        = static_cast<size_t>(std::max<Eigen::Index>(12, 2 * cfg().ncv / cfg().block_size + 1));
         status.history.clear();
     }

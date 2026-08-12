@@ -95,8 +95,8 @@ namespace bench_generalized {
             snapshot.precond                      = static_cast<int64_t>(view.num_precond());
             snapshot.precond_inner                = static_cast<int64_t>(view.num_precond_inner());
             snapshot.precond_total                = static_cast<int64_t>(view.num_precond_total());
-            snapshot.saturation_count_eigval      = static_cast<int64_t>(view.saturation_count_eigval());
-            snapshot.saturation_count_rnorm       = static_cast<int64_t>(view.saturation_count_rnorm());
+            snapshot.ritzvl_saturated_for         = view.ritzvl_saturated_for();
+            snapshot.rnorms_saturated_for         = view.rnorms_saturated_for();
             snapshot.saturation_count_max         = static_cast<int64_t>(view.saturation_count_max());
             snapshot.op_norm_estimate             = view.op_norm_estimate();
             snapshot.condition_a                  = view.condition_a();

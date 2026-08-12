@@ -221,9 +221,9 @@ namespace grit::form {
             VectorReal                  rnorm_abs_reference;                /*!< Residual norms recorded when the selected Ritz values stabilize. */
             std::deque<IterationSample> history;                            /*!< Recent completed outer-iteration samples. */
             size_t                      max_history_size        = 12;       /*!< Maximum stored history length. */
-            Eigen::Index                saturation_count_eigVal = 0;        /*!< Consecutive eigenvalue saturation count. */
-            Eigen::Index                saturation_count_rNorm  = 0;        /*!< Consecutive residual saturation count. */
-            Eigen::Index                saturation_count_max    = 5;        /*!< Saturation count required before stopping. */
+            VectorIdxT                  ritzvl_saturated_for;                /*!< Consecutive saturated iterations for each Ritz value. */
+            VectorIdxT                  rnorms_saturated_for;                /*!< Consecutive saturated iterations for each residual norm. */
+            Eigen::Index                saturation_count_max = 5;           /*!< Saturation count required before stopping. */
             std::vector<std::string>    stopMessage             = {};       /*!< Human-readable stop messages. */
             StopReason                  stopReason              = StopReason::none; /*!< Solver stop reason. */
             Ritz                        ritz_internal           = Ritz::NONE;       /*!< Effective Ritz selector used internally. */
@@ -652,17 +652,16 @@ namespace grit::form {
         Eigen::Index get_num_consecutive_correction_samples(ResidualCorrectionType correction) const;
         /*! Absolute drift-per-matvec thresholds for the selected Ritz values. */
         VectorReal get_ritz_drift_thresholds(Eigen::Index rows) const;
-        /*! Whether residual norms have saturated by the configured criterion. */
-        bool rNorms_have_saturated();
+        /*! Whether residual norms have saturated by the configured criterion, with per-pair saturation flags. */
+        std::pair<bool, VectorIdxT> rNorms_have_saturated();
         /*!
          * Whether Ritz values have saturated by the configured criterion.
          * @param slopes Optional slopes from the suffix that determined the result.
          * @param samples Optional length of the suffix that determined the result.
-         * @param saturated_pairs Optional per-pair saturation flags over the inspected suffixes.
          * @param last_n Maximum number of trailing entries to inspect; negative uses the complete history.
+         * @return Whether all unconverged pairs have saturated, with per-pair saturation flags.
          */
-        bool eigVals_have_saturated(VectorReal *slopes = nullptr, Eigen::Index *samples = nullptr, VectorIdxT *saturated_pairs = nullptr,
-                                    Eigen::Index last_n = -1);
+        std::pair<bool, VectorIdxT> eigVals_have_saturated(VectorReal *slopes = nullptr, Eigen::Index *samples = nullptr, Eigen::Index last_n = -1);
         /*!
          * l2-orthogonalize Y against X and refresh A Y when requested.
          * @param X Existing basis block.

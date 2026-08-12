@@ -81,8 +81,8 @@ namespace bench_generalized {
             insert_field(h5type, "precond", &Row::precond);
             insert_field(h5type, "precond_inner", &Row::precond_inner);
             insert_field(h5type, "precond_total", &Row::precond_total);
-            insert_field(h5type, "saturation_count_eigval", &Row::saturation_count_eigval);
-            insert_field(h5type, "saturation_count_rnorm", &Row::saturation_count_rnorm);
+            insert_field(h5type, "ritzvl_saturated_for", &Row::ritzvl_saturated_for);
+            insert_field(h5type, "rnorms_saturated_for", &Row::rnorms_saturated_for);
             insert_field(h5type, "saturation_count_max", &Row::saturation_count_max);
             insert_field(h5type, "op_norm_estimate", &Row::op_norm_estimate);
             insert_field(h5type, "condition_a", &Row::condition_a);

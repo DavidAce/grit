@@ -91,11 +91,15 @@ TEST_CASE("results contain only requested eigenpairs") {
         REQUIRE(view.eigVal().size() == nev);
         REQUIRE(view.eigVecs().cols() == nev);
         REQUIRE(view.rNormsAbs().size() == nev);
+        REQUIRE(view.ritzvl_saturated_for().size() == nev);
+        REQUIRE(view.rnorms_saturated_for().size() == nev);
 
         auto result = solver.get_result();
         REQUIRE(result.eigVal().size() == nev);
         REQUIRE(result.eigVecs().cols() == nev);
         REQUIRE(result.rNormsAbs().size() == nev);
+        REQUIRE(result.ritzvl_saturated_for() == view.ritzvl_saturated_for());
+        REQUIRE(result.rnorms_saturated_for() == view.rnorms_saturated_for());
     }
 }
 

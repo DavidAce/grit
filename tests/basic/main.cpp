@@ -67,7 +67,7 @@ TEST_CASE("residual tolerance uses the larger floor") {
     REQUIRE(solver.rNormAbsTarget(0) == Approx(2.0e-4));
 }
 
-TEST_CASE("relative residual references use Ritz saturation") {
+TEST_CASE("relative residual references use the Ritz saturation trigger and persist") {
     using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorReal = Eigen::Vector<double, Eigen::Dynamic>;
 
@@ -87,26 +87,42 @@ TEST_CASE("relative residual references use Ritz saturation") {
     solver.status.num_matvecs               = 1;
 
     for(Eigen::Index iter = 0; iter < 5; ++iter) {
-        solver.T_evals          = (VectorReal(2) << 1.0, 2.0 + static_cast<double>(iter)).finished();
+        solver.status.eigVal    = (VectorReal(2) << 1.0, 2.0 + static_cast<double>(iter)).finished();
+        solver.T_evals          = solver.status.eigVal;
         solver.status.rNormsAbs = (VectorReal(2) << 0.5, 1.0).finished();
         solver.Base::updateStatus();
     }
 
     REQUIRE(solver.status.rnorm_abs_reference(0) == Approx(0.0));
     REQUIRE(solver.status.rnorm_abs_reference(1) == Approx(0.0));
+    REQUIRE(solver.status.ritzvl_saturated_for(0) == 1);
+    REQUIRE(solver.status.ritzvl_saturated_for(1) == 0);
 
-    for(Eigen::Index iter = 0; iter < 9; ++iter) {
-        solver.T_evals = (VectorReal(2) << 1.0, 7.0).finished();
+    for(Eigen::Index iter = 0; iter < 5; ++iter) {
+        solver.status.eigVal = (VectorReal(2) << 1.0, 7.0).finished();
+        solver.T_evals       = solver.status.eigVal;
         solver.Base::updateStatus();
     }
 
+    REQUIRE(solver.status.ritzvl_saturated_for(0) == 6);
+    REQUIRE(solver.status.ritzvl_saturated_for(1) == 1);
+    REQUIRE(solver.status.rnorm_abs_reference(0) == Approx(0.5));
+    REQUIRE(solver.status.rnorm_abs_reference(1) == Approx(0.0));
+
+    solver.Base::updateStatus();
+
+    REQUIRE(solver.status.ritzvl_saturated_for(0) == 7);
+    REQUIRE(solver.status.ritzvl_saturated_for(1) == 2);
     REQUIRE(solver.status.rnorm_abs_reference(0) == Approx(0.5));
     REQUIRE(solver.status.rnorm_abs_reference(1) == Approx(1.0));
 
-    solver.T_evals = (VectorReal(2) << 1.1, 7.0).finished();
+    solver.status.eigVal = (VectorReal(2) << 10.0, 7.0).finished();
+    solver.T_evals       = solver.status.eigVal;
     solver.Base::updateStatus();
 
-    REQUIRE(solver.status.rnorm_abs_reference(0) == Approx(0.0));
+    REQUIRE(solver.status.ritzvl_saturated_for(0) == 0);
+    REQUIRE(solver.status.ritzvl_saturated_for(1) > 0);
+    REQUIRE(solver.status.rnorm_abs_reference(0) == Approx(0.5));
     REQUIRE(solver.status.rnorm_abs_reference(1) == Approx(1.0));
 }
 

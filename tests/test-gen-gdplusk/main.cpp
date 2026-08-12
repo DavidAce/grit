@@ -711,7 +711,7 @@ TEST_CASE("generalized AUTO uses the Ritz saturation criterion") {
 
     SECTION("drift below the threshold starts JD") {
         solver.config.ritz_saturation_tolerance = 6e-3;
-        solver.status.saturation_count_eigVal   = solver.status.saturation_count_max;
+        solver.status.ritzvl_saturated_for      = grit::form::base<double>::VectorIdxT::Constant(solver.config.nev, solver.status.saturation_count_max);
         solver.update_auto_residual_correction_state();
         REQUIRE(solver.auto_residual_correction.active == Correction::JACOBI_DAVIDSON);
     }
@@ -737,10 +737,10 @@ TEST_CASE("generalized Ritz saturation accounts for the projected B condition") 
                                         VectorReal::Ones(1));
 
     solver.status.condition_b = 1.0;
-    REQUIRE_FALSE(solver.eigVals_have_saturated());
+    REQUIRE_FALSE(solver.eigVals_have_saturated().first);
 
     solver.status.condition_b = 1e12;
-    REQUIRE(solver.eigVals_have_saturated());
+    REQUIRE(solver.eigVals_have_saturated().first);
 }
 
 TEST_CASE("generalized condition numbers do not depend on the solver inner product") {

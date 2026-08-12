@@ -23,6 +23,7 @@ namespace grit {
         using RealScalar = decltype(std::real(std::declval<Scalar>()));           /*!< Real scalar type used for Ritz values and norms. */
         using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>; /*!< Dense block of eigenvectors. */
         using VectorReal = Eigen::Matrix<RealScalar, Eigen::Dynamic, 1>;          /*!< Real-valued vector. */
+        using VectorIdxT = Eigen::Matrix<Eigen::Index, Eigen::Dynamic, 1>;        /*!< Vector of indices and counters. */
         using MatrixView = Eigen::Ref<const MatrixType>;                          /*!< Non-owning dense matrix view. */
         using VectorView = Eigen::Ref<const VectorReal>;                          /*!< Non-owning real vector view. */
 
@@ -147,10 +148,10 @@ namespace grit {
         [[nodiscard]] RealScalar inner_error_last() const;
         /*! Last inner correction tolerance. */
         [[nodiscard]] RealScalar inner_tol_last() const;
-        /*! Number of consecutive eigenvalue saturation checks. */
-        [[nodiscard]] Eigen::Index saturation_count_eigval() const;
-        /*! Number of consecutive residual saturation checks. */
-        [[nodiscard]] Eigen::Index saturation_count_rnorm() const;
+        /*! Consecutive saturated-iteration counts for each Ritz value. */
+        [[nodiscard]] const VectorIdxT &ritzvl_saturated_for() const;
+        /*! Consecutive saturated-iteration counts for each residual norm. */
+        [[nodiscard]] const VectorIdxT &rnorms_saturated_for() const;
         /*! Saturation count required before a saturation stop. */
         [[nodiscard]] Eigen::Index saturation_count_max() const;
         /*! Current operator norm estimate used for rescaled residuals. */

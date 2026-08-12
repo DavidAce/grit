@@ -261,12 +261,12 @@ namespace grit {
         return internal::visit_solver_source(source, [](const auto &src) { return src.status.inner_tol_last; });
     }
 
-    template<typename Scalar_> Eigen::Index ResultView<Scalar_>::saturation_count_eigval() const {
-        return internal::visit_solver_source(source, [](const auto &src) { return src.status.saturation_count_eigVal; });
+    template<typename Scalar_> const typename ResultView<Scalar_>::VectorIdxT &ResultView<Scalar_>::ritzvl_saturated_for() const {
+        return internal::visit_solver_source(source, [](const auto &src) -> const VectorIdxT & { return src.status.ritzvl_saturated_for; });
     }
 
-    template<typename Scalar_> Eigen::Index ResultView<Scalar_>::saturation_count_rnorm() const {
-        return internal::visit_solver_source(source, [](const auto &src) { return src.status.saturation_count_rNorm; });
+    template<typename Scalar_> const typename ResultView<Scalar_>::VectorIdxT &ResultView<Scalar_>::rnorms_saturated_for() const {
+        return internal::visit_solver_source(source, [](const auto &src) -> const VectorIdxT & { return src.status.rnorms_saturated_for; });
     }
 
     template<typename Scalar_> Eigen::Index ResultView<Scalar_>::saturation_count_max() const {
