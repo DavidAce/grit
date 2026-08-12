@@ -291,6 +291,7 @@ namespace grit::form {
 
         Status                 status = {};                                                      /*!< Current solver status and diagnostics. */
         Eigen::Index           N;                                                                /*!< Operator dimension. */
+        std::string            tag;                                                              /*!< User-defined solver label retained as application metadata. */
         ResidualCorrectionType residual_correction_type_internal = ResidualCorrectionType::NONE; /*!< Effective residual correction used internally. */
         Matvec<Scalar>        &A;                                                                /*!< Matrix-free operator A. */
         std::optional<std::reference_wrapper<Matvec<Scalar>>> B = std::nullopt; /*!< Optional matrix-free operator B for generalized problems. */
