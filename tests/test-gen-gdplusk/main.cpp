@@ -207,6 +207,71 @@ TEST_CASE("generalized gdplusk matches dense eigensolver") {
     require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
 }
 
+TEST_CASE("generalized gdplusk supports more requested eigenpairs than block columns") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = Matrix::Identity(16, 16);
+    Matrix B_matrix = Matrix::Identity(16, 16);
+    A_matrix.diagonal().setLinSpaced(16.0, 1.0);
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+    auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
+
+    for(Eigen::Index nev : {2, 3}) {
+        for(Eigen::Index block_size : {1, 2, 4}) {
+            grit::generalized::gdplusk<double> solver(A, B);
+            solver.config.nev        = nev;
+            solver.config.ncv        = 8;
+            solver.config.block_size = block_size;
+            solver.config.max_iters  = 100;
+            solver.config.abstol     = 1e-9;
+            solver.config.ritz       = grit::Ritz::LM;
+            solver.config.log_level  = spdlog::level::off;
+            solver.set_initial_guess(Matrix::Identity(16, 1));
+            std::srand(1);
+            solver.run();
+
+            auto result = solver.get_result();
+            REQUIRE(result.eigVal().size() == nev);
+            REQUIRE(result.eigVecs().cols() == nev);
+            REQUIRE(result.rNormsAbs().size() == nev);
+            REQUIRE(grit::has_flag(result.stopReason(), grit::StopReason::converged));
+            require_close(result.eigVal(), A_matrix.diagonal().head(nev), 1e-8);
+        }
+    }
+}
+
+TEST_CASE("generalized gdplusk returns two pairs from a one-column exact initial guess in one iteration") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = Matrix::Identity(16, 16);
+    Matrix B_matrix = Matrix::Identity(16, 16);
+    A_matrix.diagonal().setLinSpaced(16.0, 1.0);
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+    auto B = grit::matvec<double>(B_matrix.rows(), [&](auto const &X) { return B_matrix * X; });
+
+    Matrix initial = Matrix::Zero(16, 1);
+    initial(0, 0)  = 1.0;
+
+    grit::generalized::gdplusk<double> solver(A, B);
+    solver.config.nev                 = 2;
+    solver.config.ncv                 = 8;
+    solver.config.block_size          = 1;
+    solver.config.max_iters           = 1;
+    solver.config.abstol              = 1e-12;
+    solver.config.reltol              = 1e-3;
+    solver.config.ritz                = grit::Ritz::LM;
+    solver.config.use_b_inner_product = true;
+    solver.config.log_level           = spdlog::level::off;
+    solver.set_initial_guess(initial);
+    solver.run();
+
+    auto result = solver.get_result();
+    REQUIRE(result.eigVal().size() == 2);
+    REQUIRE(result.eigVecs().cols() == 2);
+    REQUIRE(result.rNormsAbs().size() == 2);
+    REQUIRE_FALSE(grit::has_flag(result.stopReason(), grit::StopReason::converged));
+}
+
 TEST_CASE("generalized gdplusk converges with l2 and bm projectors") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 

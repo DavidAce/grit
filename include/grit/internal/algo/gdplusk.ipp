@@ -56,6 +56,15 @@ namespace grit::algo {
 
     template<typename Scalar, grit::Form form_> void gdplusk<Scalar, form_>::preamble() {
         Base::preamble();
+        const auto nev = this->cfg().nev;
+        if(V.cols() > nev) {
+            V.conservativeResize(Eigen::NoChange, nev);
+            AV.conservativeResize(Eigen::NoChange, nev);
+            BV.conservativeResize(Eigen::NoChange, nev);
+            S.conservativeResize(Eigen::NoChange, nev);
+            status.rNormsAbs.conservativeResize(nev);
+            status.optIdx.resize(static_cast<size_t>(nev));
+        }
         adjust_inner_tolerance(S);
         adjust_residual_correction_type();
         if(config.residual_correction_type == ResidualCorrectionType::AUTO)
@@ -92,16 +101,23 @@ namespace grit::algo {
         K_prev = K;
         K      = V.leftCols(k);
 
-        if(k > this->cfg().block_size) {
-            V.conservativeResize(Eigen::NoChange, this->cfg().block_size);
-            AV.conservativeResize(Eigen::NoChange, this->cfg().block_size);
-            BV.conservativeResize(Eigen::NoChange, this->cfg().block_size);
-            S.conservativeResize(Eigen::NoChange, this->cfg().block_size);
-            status.rNormsAbs.conservativeResize(this->cfg().block_size);
+        const auto nev                 = this->cfg().nev;
+        const auto num_selected_pairs  = static_cast<Eigen::Index>(status.optIdx.size());
+        const auto num_pairs_to_correct = std::min(nev, num_selected_pairs);
+        if(V.cols() != num_selected_pairs || AV.cols() != num_selected_pairs || BV.cols() != num_selected_pairs || S.cols() != num_selected_pairs ||
+           status.rNormsAbs.size() != num_selected_pairs) {
+            throw std::logic_error("gdplusk Ritz extraction produced inconsistent pair counts");
+        }
+        if(num_selected_pairs > num_pairs_to_correct) {
+            V.conservativeResize(Eigen::NoChange, num_pairs_to_correct);
+            AV.conservativeResize(Eigen::NoChange, num_pairs_to_correct);
+            BV.conservativeResize(Eigen::NoChange, num_pairs_to_correct);
+            S.conservativeResize(Eigen::NoChange, num_pairs_to_correct);
+            status.rNormsAbs.conservativeResize(num_pairs_to_correct);
+            status.optIdx.resize(static_cast<size_t>(num_pairs_to_correct));
         }
 
-        Eigen::Index rows = std::min(this->cfg().nev, status.rNormsAbs.size());
-        if(status.rnorm_abs_reference.size() != rows) status.rnorm_abs_reference = VectorReal::Zero(rows);
+        if(status.rnorm_abs_reference.size() != num_pairs_to_correct) status.rnorm_abs_reference = VectorReal::Zero(num_pairs_to_correct);
     }
 
     template<typename Scalar, grit::Form form_> void gdplusk<Scalar, form_>::run_user_callback() {
@@ -111,6 +127,8 @@ namespace grit::algo {
 
     template<typename Scalar, grit::Form form_> void gdplusk<Scalar, form_>::make_new_Q_block() {
         if(S.cols() == 0) return;
+        const auto nev        = this->cfg().nev;
+        const auto block_size = this->cfg().block_size;
         Q_new = get_sBlock(S);
 
         auto orthogonalize_Q_new = [&]() {
@@ -138,10 +156,15 @@ namespace grit::algo {
         };
 
         orthogonalize_Q_new();
-        if(Q_new.cols() == 0 && config.inject_randomness) {
+        if(Q_new.cols() == 0 && (config.inject_randomness || status.eigVal.size() < nev)) {
             if(log) log->debug("Replacing Q_new with a random vector");
-            Q_new = Eigen::MatrixXf::Random(N, this->cfg().block_size).template cast<Scalar>();
+            Q_new = Eigen::MatrixXf::Random(N, block_size).template cast<Scalar>();
             orthogonalize_Q_new();
+        }
+        if(Q_new.cols() > block_size) {
+            Q_new.conservativeResize(Eigen::NoChange, block_size);
+            AQ_new.conservativeResize(Eigen::NoChange, block_size);
+            BQ_new.conservativeResize(Eigen::NoChange, block_size);
         }
     }
 
@@ -181,8 +204,9 @@ namespace grit::algo {
                 T1            = (T1 + T1.adjoint()) * Base::half;
                 T2            = (T2 + T2.adjoint()) * Base::half;
 
-                auto W  = get_bm_normalizer_for_the_projected_pencil(T2);
-                cols_ks = std::clamp(std::min(config.maxRetainBlocks * this->cfg().block_size, W.cols()), this->cfg().block_size, W.cols());
+                auto       W                        = get_bm_normalizer_for_the_projected_pencil(T2);
+                const auto num_restart_ritz_pairs = std::max(this->cfg().nev, config.maxRetainBlocks * this->cfg().block_size);
+                cols_ks                            = std::clamp(std::min(num_restart_ritz_pairs, W.cols()), this->cfg().block_size, W.cols());
 
                 MatrixType WT1W = W.adjoint() * T1 * W;
                 MatrixType WT2W = W.adjoint() * T2 * W;
@@ -249,7 +273,8 @@ namespace grit::algo {
                 T            = (T + T.adjoint()) * Base::half;
                 Eigen::SelfAdjointEigenSolver<MatrixType> es(T, Eigen::ComputeEigenvectors);
                 if(es.info() != Eigen::Success) throw std::runtime_error("gdplusk restart: eigensolver failed");
-                cols_ks        = std::clamp(std::min(config.maxRetainBlocks * this->cfg().block_size, Q.cols()), this->cfg().block_size, Q.cols());
+                const auto num_restart_ritz_pairs = std::max(this->cfg().nev, config.maxRetainBlocks * this->cfg().block_size);
+                cols_ks                            = std::clamp(std::min(num_restart_ritz_pairs, Q.cols()), this->cfg().block_size, Q.cols());
                 cols_ks        = std::min(cols_ks, es.eigenvalues().size());
                 auto selectIdx = this->get_ritz_indices(this->cfg().ritz, 0, cols_ks, es.eigenvalues());
 
@@ -298,7 +323,8 @@ namespace grit::algo {
 
         assert(Q_new.rows() == N);
 
-        auto availableCols = std::max<Eigen::Index>(0, N - Q.cols());
+        const auto max_basis_cols = std::min(N, this->cfg().ncv);
+        auto availableCols = std::max<Eigen::Index>(0, max_basis_cols - Q.cols());
         auto copyCols      = std::min<Eigen::Index>(availableCols, Q_new.cols());
         if(copyCols == 0) return;
 

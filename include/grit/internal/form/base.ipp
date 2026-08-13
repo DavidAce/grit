@@ -99,9 +99,11 @@ namespace grit::form {
         VectorReal rNormAbsTargets = VectorReal::Constant(cfg().nev, cfg().abstol);
         if(cfg().use_rescaled_rnorm_tolerance) rNormAbsTargets = rNormAbsTargets.cwiseProduct(rNormScales());
 
-        Eigen::Index rows = std::min(cfg().nev, status.rnorm_abs_reference.size());
-        if(cfg().reltol > RealScalar{0} && rows > 0) {
-            rNormAbsTargets.topRows(rows) = rNormAbsTargets.topRows(rows).cwiseMax((cfg().reltol * status.rnorm_abs_reference.topRows(rows)).eval());
+        const auto num_relative_residual_references = std::min(cfg().nev, status.rnorm_abs_reference.size());
+        if(cfg().reltol > RealScalar{0} && num_relative_residual_references > 0) {
+            rNormAbsTargets.topRows(num_relative_residual_references) =
+                rNormAbsTargets.topRows(num_relative_residual_references)
+                    .cwiseMax((cfg().reltol * status.rnorm_abs_reference.topRows(num_relative_residual_references)).eval());
         }
         return rNormAbsTargets;
     }
@@ -302,8 +304,9 @@ namespace grit::form {
                 // We may need to orthonormalize V in generalized problems
                 block_orthonormalize();
 
-                S             = get_residuals(Y, AV, BV, status.rNormsAbs);
-                status.eigVal = Y.topRows(cfg().nev); // Make sure we only take nev values here. In general, nev <= block_size
+                S                                  = get_residuals(Y, AV, BV, status.rNormsAbs);
+                const auto num_initial_ritz_pairs = std::min(cfg().nev, Y.size());
+                status.eigVal                      = Y.topRows(num_initial_ritz_pairs);
             } else {
                 block_orthonormalize();
                 Q            = V;
@@ -320,17 +323,20 @@ namespace grit::form {
                 AV            = AQ * Z;
                 BV            = V;
                 BQ            = Q;
-                S             = get_residuals(Y, AV, V, status.rNormsAbs);
-                status.eigVal = Y.topRows(cfg().nev); // Make sure we only take nev values here. In general, nev <= block_size
+                S                                  = get_residuals(Y, AV, V, status.rNormsAbs);
+                const auto num_initial_ritz_pairs = std::min(cfg().nev, Y.size());
+                status.eigVal                      = Y.topRows(num_initial_ritz_pairs);
 
                 auto A_max_abs          = T_evals.cwiseAbs().maxCoeff();
                 status.op_norm_estimate = std::max({A_max_abs, AQ.norm() / Q.norm(), RealScalar{1}});
             }
         }
         update_condition_numbers();
-        status.op_norm_estimate     = get_op_norm_estimate();
-        Eigen::Index rows           = std::min(cfg().nev, status.rNormsAbs.size());
-        status.rnorm_abs_reference  = VectorReal::Zero(rows);
+        status.op_norm_estimate              = get_op_norm_estimate();
+        const auto num_initial_ritz_pairs    = status.eigVal.size();
+        status.rnorm_abs_reference           = VectorReal::Zero(num_initial_ritz_pairs);
+        status.ritzvl_saturated_for          = VectorIdxT::Zero(num_initial_ritz_pairs);
+        status.rnorms_saturated_for          = VectorIdxT::Zero(num_initial_ritz_pairs);
         status.num_matvecs_total   += status.num_matvecs;
         status.num_matvecs_a_total += status.num_matvecs_a;
         status.num_matvecs_b_total += status.num_matvecs_b;
@@ -618,11 +624,22 @@ namespace grit::form {
     template<typename Scalar, grit::Form form_> void base<Scalar, form_>::updateStatus() {
         auto t_status_update = status.time_status_update.tic_token();
 
-        // Eigenvalues are sorted in ascending order.
-        status.eigVal = T_evals(status.optIdx).topRows(cfg().nev);
+        const auto nev                      = cfg().nev;
+        const auto num_selected_pairs       = static_cast<Eigen::Index>(status.optIdx.size());
+        // Block and restart methods may select more projected pairs than requested, while GD+K startup may temporarily select fewer.
+        const auto num_available_ritz_pairs = std::min(nev, num_selected_pairs);
+        if(num_available_ritz_pairs <= 0) throw std::logic_error("status update requires at least one selected Ritz pair");
+        if(V.cols() < num_available_ritz_pairs || AV.cols() < num_available_ritz_pairs || BV.cols() < num_available_ritz_pairs ||
+           S.cols() < num_available_ritz_pairs || status.rNormsAbs.size() < num_available_ritz_pairs) {
+            throw std::logic_error("status update found inconsistent Ritz vector and residual counts");
+        }
 
-        VectorReal targets            = rNormAbsTargets();
-        bool       verify_convergence = (status.rNormsAbs.topRows(cfg().nev).array() < targets.array()).all();
+        // Eigenvalues are sorted in ascending order.
+        status.eigVal = T_evals(status.optIdx).topRows(num_available_ritz_pairs);
+
+        const bool have_all_requested_pairs = num_available_ritz_pairs == nev;
+        VectorReal targets                  = rNormAbsTargets().topRows(num_available_ritz_pairs);
+        const bool verify_convergence       = have_all_requested_pairs && (status.rNormsAbs.topRows(nev).array() < targets.array()).all();
         if(verify_convergence) refresh_direct_ritz_residuals();
 
         // Accumulate counters after optional direct applications.
@@ -640,20 +657,47 @@ namespace grit::form {
 
         status.op_norm_estimate = get_op_norm_estimate();
 
+        if(!have_all_requested_pairs) {
+            if(!status.history.empty()) {
+                if(log) log->warn("status update found convergence history before all requested Ritz pairs were available");
+                throw std::logic_error("status update found partial Ritz data after convergence history had started");
+            }
+            status.rnorm_abs_reference  = VectorReal::Zero(num_available_ritz_pairs);
+            status.ritzvl_saturated_for = VectorIdxT::Zero(num_available_ritz_pairs);
+            status.rnorms_saturated_for = VectorIdxT::Zero(num_available_ritz_pairs);
+            status.residual_converged   = false;
+            status.residual_below_gap   = false;
+
+            if(cfg().max_iters >= 0 && status.outer_iter + 1 >= cfg().max_iters) {
+                status.stopMessage.emplace_back(fmt::format("outer iterations ({}) >= max_iters ({}) | mv {} | {:.3e} s", status.outer_iter + 1,
+                                                            cfg().max_iters, status.num_matvecs_total, status.time_elapsed.get_time()));
+                status.stopReason |= StopReason::max_iters;
+            }
+            if(cfg().max_matvecs >= 0 && status.num_matvecs_total >= cfg().max_matvecs) {
+                status.stopMessage.emplace_back(fmt::format("num_matvecs_total ({}) >= max_matvecs ({}) | {:.3e} s", status.num_matvecs_total,
+                                                            cfg().max_matvecs, status.time_elapsed.get_time()));
+                status.stopReason |= StopReason::max_matvecs;
+            }
+            return;
+        }
+
+        if(!status.history.empty() && (status.history.back().eigvals.size() != nev || status.history.back().rnorms.size() != nev)) {
+            if(log) log->warn("status update found convergence history with a pair count different from nev={}", nev);
+            throw std::logic_error("status update found inconsistent convergence history pair counts");
+        }
         status.history.emplace_back(IterationSample{.outer_iter          = status.outer_iter,
                                                     .matvecs             = status.num_matvecs_total,
                                                     .time                = status.time_elapsed.get_time(),
                                                     .residual_correction = residual_correction_type_internal,
-                                                    .eigvals             = status.eigVal.topRows(cfg().nev),
-                                                    .rnorms              = status.rNormsAbs.topRows(cfg().nev)});
+                                                    .eigvals             = status.eigVal,
+                                                    .rnorms              = status.rNormsAbs.topRows(nev)});
         while(status.history.size() > status.max_history_size) status.history.pop_front();
 
-        Eigen::Index rows = std::min({cfg().nev, status.eigVal.size(), status.rNormsAbs.size()});
-        if(status.ritzvl_saturated_for.size() != rows) status.ritzvl_saturated_for = VectorIdxT::Zero(rows);
-        if(status.rnorms_saturated_for.size() != rows) status.rnorms_saturated_for = VectorIdxT::Zero(rows);
+        if(status.ritzvl_saturated_for.size() != nev) status.ritzvl_saturated_for = VectorIdxT::Zero(nev);
+        if(status.rnorms_saturated_for.size() != nev) status.rnorms_saturated_for = VectorIdxT::Zero(nev);
 
         auto [have_saturated, saturated_pairs] = eigVals_have_saturated();
-        for(Eigen::Index i = 0; i < rows; ++i) {
+        for(Eigen::Index i = 0; i < nev; ++i) {
             if(saturated_pairs(i) != 0)
                 status.ritzvl_saturated_for(i)++;
             else
@@ -663,14 +707,14 @@ namespace grit::form {
 
         const auto saturation_count_trigger = std::max<Eigen::Index>(1, status.saturation_count_max / 2);
         if(cfg().reltol > RealScalar{0}) {
-            if(status.rnorm_abs_reference.size() != rows) status.rnorm_abs_reference = VectorReal::Zero(rows);
-            for(Eigen::Index i = 0; i < rows; ++i)
+            if(status.rnorm_abs_reference.size() != nev) status.rnorm_abs_reference = VectorReal::Zero(nev);
+            for(Eigen::Index i = 0; i < nev; ++i)
                 if(status.ritzvl_saturated_for(i) >= saturation_count_trigger && status.rnorm_abs_reference(i) <= RealScalar{0})
                     status.rnorm_abs_reference(i) = status.rNormsAbs(i);
         }
 
         std::tie(have_saturated, saturated_pairs) = rNorms_have_saturated();
-        for(Eigen::Index i = 0; i < rows; ++i) {
+        for(Eigen::Index i = 0; i < nev; ++i) {
             if(saturated_pairs(i) != 0)
                 status.rnorms_saturated_for(i)++;
             else
@@ -678,7 +722,7 @@ namespace grit::form {
         }
 
         constexpr auto beta      = RealScalar{0.5f};
-        VectorReal     rNormsAbs = status.rNormsAbs.topRows(cfg().nev);
+        VectorReal     rNormsAbs = status.rNormsAbs.topRows(nev);
         targets                  = rNormAbsTargets();
         RealScalar relGap        = status.gap * get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
         if(rNormsAbs.size() != targets.size()) throw std::logic_error("unequal residual norm and target sizes");
@@ -707,7 +751,7 @@ namespace grit::form {
 
         bool have_unconverged = false;
         have_saturated        = true;
-        for(Eigen::Index i = 0; i < rows; ++i) {
+        for(Eigen::Index i = 0; i < nev; ++i) {
             if(rNormsAbs(i) <= targets(i)) continue;
             have_unconverged = true;
             if(status.ritzvl_saturated_for(i) < status.saturation_count_max || status.rnorms_saturated_for(i) < status.saturation_count_max) {
@@ -764,8 +808,9 @@ namespace grit::form {
             orthError       = (Gram - MatrixType::Identity(Gram.rows(), Gram.cols())).norm();
         }
 
-        const auto  op_norm_estimate = get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
-        const auto  rNormAbsTargets  = this->rNormAbsTargets();
+        const auto  op_norm_estimate  = get_op_norm_estimate(status.eigVal.size() > 0 ? std::optional<RealScalar>{status.eigVal(0)} : std::nullopt);
+        const auto  num_reported_pairs = std::min(status.eigVal.size(), status.rNormsAbs.size());
+        const auto  rNormAbsTargets   = this->rNormAbsTargets().topRows(num_reported_pairs);
         const auto  num_matvecs_iter = status.num_matvecs + status.num_matvecs_inner;
         const auto  num_precond_iter = status.num_precond + status.num_precond_inner;
         std::string pcMsg;
@@ -795,7 +840,8 @@ namespace grit::form {
     template<typename Scalar, grit::Form form_> void base<Scalar, form_>::printFinal() {
         if(!log || status.eigVal.size() == 0 || status.rNormsAbs.size() == 0) return;
 
-        const Eigen::Index nev      = std::min(cfg().nev, std::min(status.eigVal.size(), status.rNormsAbs.size()));
+        const Eigen::Index nev                = cfg().nev;
+        const Eigen::Index num_reported_pairs = std::min(nev, std::min(status.eigVal.size(), status.rNormsAbs.size()));
         const Eigen::Index inner_mv = status.num_matvecs_inner_total;
         const Eigen::Index outer_mv = status.num_matvecs_total - inner_mv;
         const Eigen::Index inner_pc = status.num_precond_inner_total;
@@ -803,7 +849,7 @@ namespace grit::form {
         const RealScalar   inner_t  = status.time_solve_inner.get_time();
         const RealScalar   outer_t  = std::max<RealScalar>(RealScalar{0}, status.time_elapsed.get_time() - inner_t);
 
-        for(Eigen::Index i = 0; i < nev; ++i) {
+        for(Eigen::Index i = 0; i < num_reported_pairs; ++i) {
             const RealScalar op_norm_estimate = get_op_norm_estimate(std::optional<RealScalar>{status.eigVal(i)});
             std::string      outerPcMsg;
             std::string      innerPcMsg;

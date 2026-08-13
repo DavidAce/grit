@@ -3,6 +3,7 @@
 #include "solver_test_utils.h"
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <Eigen/Eigenvalues>
 #include <format>
 #include <grit/grit.h>
@@ -89,6 +90,66 @@ TEST_CASE("standard gdplusk owns temporary initial guess") {
     print_eigenvalue_comparison("standard gdplusk temporary initial guess", view.eigVal(), exact.eigenvalues(), view.eigVal().size());
     REQUIRE(view.stopReason() == grit::StopReason::converged);
     require_close(view.eigVal(), exact.eigenvalues().head(1), 1e-10);
+}
+
+TEST_CASE("standard gdplusk supports more requested eigenpairs than block columns") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = Matrix::Identity(16, 16);
+    A_matrix.diagonal().setLinSpaced(16.0, 1.0);
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    for(Eigen::Index nev : {2, 3}) {
+        for(Eigen::Index block_size : {1, 2, 4}) {
+            grit::standard::gdplusk<double> solver(A);
+            solver.config.nev        = nev;
+            solver.config.ncv        = 8;
+            solver.config.block_size = block_size;
+            solver.config.max_iters  = 100;
+            solver.config.abstol     = 1e-9;
+            solver.config.ritz       = grit::Ritz::LM;
+            solver.config.log_level  = spdlog::level::off;
+            solver.set_initial_guess(Matrix::Identity(16, 1));
+            std::srand(1);
+            solver.run();
+
+            auto result = solver.get_result();
+            REQUIRE(result.eigVal().size() == nev);
+            REQUIRE(result.eigVecs().cols() == nev);
+            REQUIRE(result.rNormsAbs().size() == nev);
+            REQUIRE(grit::has_flag(result.stopReason(), grit::StopReason::converged));
+            require_close(result.eigVal(), A_matrix.diagonal().head(nev), 1e-8);
+        }
+    }
+}
+
+TEST_CASE("standard gdplusk returns two pairs from a one-column exact initial guess in one iteration") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = Matrix::Identity(16, 16);
+    A_matrix.diagonal().setLinSpaced(16.0, 1.0);
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    Matrix initial = Matrix::Zero(16, 1);
+    initial(0, 0)  = 1.0;
+
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev        = 2;
+    solver.config.ncv        = 8;
+    solver.config.block_size = 1;
+    solver.config.max_iters  = 1;
+    solver.config.abstol     = 1e-12;
+    solver.config.reltol     = 1e-3;
+    solver.config.ritz       = grit::Ritz::LM;
+    solver.config.log_level  = spdlog::level::off;
+    solver.set_initial_guess(initial);
+    solver.run();
+
+    auto result = solver.get_result();
+    REQUIRE(result.eigVal().size() == 2);
+    REQUIRE(result.eigVecs().cols() == 2);
+    REQUIRE(result.rNormsAbs().size() == 2);
+    REQUIRE_FALSE(grit::has_flag(result.stopReason(), grit::StopReason::converged));
 }
 
 TEST_CASE("standard gdplusk handles nos4 restart block search") {
@@ -904,6 +965,9 @@ TEST_CASE("standard saturation counters track Ritz pairs independently") {
     solver.config.nev               = 2;
     solver.config.abstol            = 1e-12;
     solver.V                        = Matrix::Identity(4, 2);
+    solver.AV                       = solver.V;
+    solver.BV                       = solver.V;
+    solver.S                        = solver.V;
     solver.status.eigVal            = VectorReal::Ones(2);
     solver.status.rNormsAbs         = (VectorReal(2) << std::pow(0.5, 4), 1.0).finished();
     solver.status.num_matvecs       = 1;

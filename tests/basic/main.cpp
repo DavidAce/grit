@@ -80,6 +80,9 @@ TEST_CASE("relative residual references use the Ritz saturation trigger and pers
     solver.config.reltol                    = 1e-1;
     solver.config.ritz_saturation_tolerance = 1e-3;
     solver.V                                = Matrix::Identity(4, 2);
+    solver.AV                               = solver.V;
+    solver.BV                               = solver.V;
+    solver.S                                = solver.V;
     solver.status.optIdx                    = {0, 1};
     solver.status.eigVal                    = (VectorReal(2) << 1.0, 1.0).finished();
     solver.status.rNormsAbs                 = VectorReal::Ones(2);
@@ -124,6 +127,29 @@ TEST_CASE("relative residual references use the Ritz saturation trigger and pers
     REQUIRE(solver.status.ritzvl_saturated_for(1) > 0);
     REQUIRE(solver.status.rnorm_abs_reference(0) == Approx(0.5));
     REQUIRE(solver.status.rnorm_abs_reference(1) == Approx(1.0));
+}
+
+TEST_CASE("status update rejects inconsistent convergence history") {
+    using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorReal = Eigen::Vector<double, Eigen::Dynamic>;
+    using IterationSample = grit::form::base<double>::IterationSample;
+
+    Matrix A_matrix = Matrix::Identity(4, 4);
+    auto   A        = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev       = 2;
+    solver.V                = Matrix::Identity(4, 2);
+    solver.AV               = solver.V;
+    solver.BV               = solver.V;
+    solver.S                = solver.V;
+    solver.T_evals          = VectorReal::Ones(2);
+    solver.status.optIdx    = {0, 1};
+    solver.status.rNormsAbs = VectorReal::Ones(2);
+    solver.status.history.emplace_back(IterationSample{.eigvals = VectorReal::Ones(1), .rnorms = VectorReal::Ones(1)});
+
+    REQUIRE_THROWS_WITH(solver.Base::updateStatus(), "status update found inconsistent convergence history pair counts");
+    REQUIRE(solver.status.history.size() == 1);
 }
 
 int main(int argc, char **argv) {
