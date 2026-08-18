@@ -216,6 +216,7 @@ namespace bench_standard {
             solver.config.log_level                    = opts.log_level;
 
             if constexpr(std::is_same_v<Solver, GdSolver>) {
+                solver.config.maxRetainBlocks              = opts.maxRetainBlocks;
                 solver.config.residual_correction_type     = opts.residual_correction;
                 solver.config.use_adaptive_inner_tolerance = opts.use_adaptive_inner_tolerance;
                 solver.config.inner_max_iters              = opts.inner_max_iters;

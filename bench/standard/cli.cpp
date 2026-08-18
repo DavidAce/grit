@@ -91,8 +91,8 @@ namespace bench_standard {
                 reject(opts.explicit_auto_max_probes, "auto-max-probes");
             }
 
-            if(opts.algo != Algo::lanczos && opts.explicit_max_retain_blocks) {
-                throw std::runtime_error("--max-retain-blocks is only supported for --algo=lanczos");
+            if(opts.algo == Algo::lobpcg && opts.explicit_max_retain_blocks) {
+                throw std::runtime_error("--max-retain-blocks is only supported for --algo=gdplusk or --algo=lanczos");
             }
         }
     }
@@ -143,7 +143,7 @@ namespace bench_standard {
         app.add_option("--max-iters", opts.max_iters, "Maximum solver outer iterations, or a negative value for unlimited");
         app.add_option("--max-matvecs", opts.max_matvecs, "Maximum matrix-vector products, or a negative value for unlimited");
         auto *inner_max_iters_opt = app.add_option("--inner-max-iters", opts.inner_max_iters, "Maximum Jacobi-Davidson inner iterations, or a comma list")->delimiter(',');
-        auto *max_retain_blocks_opt = app.add_option("--max-retain-blocks", opts.max_retain_blocks, "Lanczos retained restart blocks, or a comma list")->delimiter(',');
+        auto *max_retain_blocks_opt = app.add_option("--max-retain-blocks", opts.max_retain_blocks, "GD+K or Lanczos retained restart blocks, or a comma list")->delimiter(',');
         app.add_option("--reps", opts.reps, "Number of benchmark repetitions")->check(CLI::PositiveNumber);
         app.add_option("--abstol", opts.abstol, "Absolute residual-norm convergence tolerance, or rescaled residual tolerance with --use-rescaled-rnorm-tolerance")->delimiter(',');
         app.add_option("--reltol", opts.reltol, "Stabilized-reference residual reduction tolerance");

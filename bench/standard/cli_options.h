@@ -16,7 +16,7 @@ namespace bench_standard {
         int                       nev               = 1;      /*!< Number of requested eigenpairs. */
         std::vector<int>          ncv               = {8};    /*!< Maximum search-space columns, optionally as a sweep list. */
         std::vector<int>          block_size        = {1};    /*!< Solver block size, optionally as a sweep list. */
-        std::vector<int>          max_retain_blocks = {1};    /*!< Retained restart blocks for lanczos, optionally as a sweep list. */
+        std::vector<int>          max_retain_blocks = {1};    /*!< Retained restart blocks for GD+K and Lanczos, optionally as a sweep list. */
         int                       max_iters         = 100;    /*!< Maximum outer solver iterations; negative means unlimited. */
         int                       max_matvecs       = -1;     /*!< Maximum total matrix-vector products; negative means unlimited. */
         std::vector<int>          inner_max_iters   = {1000}; /*!< Maximum inner correction iterations, optionally as a sweep list. */

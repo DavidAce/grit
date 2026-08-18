@@ -48,8 +48,8 @@ namespace bench_standard {
         std::println("  sweep axes: abstol {}", fmt::format("{}", opts.abstol));
         std::println("  ritz saturation tolerance per matvec: {:.3e}", opts.ritz_saturation_tolerance);
         if(opts.algo == Algo::gdplusk) {
-            std::println("  sweep axes: residual correction {} | inner tol {} | inner max iterations {} | refined {} | adaptive {}", opts.residual_correction,
-                         fmt::format("{}", opts.inner_tol), fmt::format("{}", opts.inner_max_iters), fmt::format("{}", opts.use_refined_rayleigh_ritz),
+            std::println("  sweep axes: max retain blocks {} | residual correction {} | inner tol {} | inner max iterations {} | refined {} | adaptive {}",
+                         fmt::format("{}", opts.max_retain_blocks), opts.residual_correction, fmt::format("{}", opts.inner_tol), fmt::format("{}", opts.inner_max_iters), fmt::format("{}", opts.use_refined_rayleigh_ritz),
                          fmt::format("{}", opts.use_adaptive_inner_tolerance));
             if(opts.residual_correction.find("auto") != std::string::npos || opts.residual_correction.find("AUTO") != std::string::npos) {
                 std::println("  auto correction: probe length {} | max probes {}", opts.auto_probe_length, opts.auto_max_probes);
