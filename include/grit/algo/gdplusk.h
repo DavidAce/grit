@@ -125,6 +125,7 @@ namespace grit::algo {
         void adjust_residual_correction_type();
         /*! Update AUTO residual correction counters after an outer iteration. */
         void update_auto_residual_correction_state();
+
         /*!
          * Compute the cheap Olsen correction block.
          * @param V Current Ritz vectors.
@@ -133,12 +134,31 @@ namespace grit::algo {
          */
         [[nodiscard]] MatrixType cheap_Olsen_correction(const MatrixType &V, const MatrixType &S);
         /*!
+         * Compute the cheap Olsen correction block for selected Ritz pairs.
+         * @param V Selected Ritz vectors.
+         * @param BV B applied to the selected Ritz vectors.
+         * @param S Selected residual block.
+         * @return Correction block.
+         */
+        [[nodiscard]] MatrixType cheap_Olsen_correction(const MatrixType &V, const MatrixType &BV, const MatrixType &S);
+
+        /*!
          * Compute the full Olsen correction block.
          * @param V Current Ritz vectors.
          * @param S Current residual block.
          * @return Correction block.
          */
         [[nodiscard]] MatrixType full_Olsen_correction(const MatrixType &V, const MatrixType &S);
+        /*!
+         * Compute the full Olsen correction block for selected Ritz pairs.
+         * @param V Selected Ritz vectors.
+         * @param BV B applied to the selected Ritz vectors.
+         * @param S Selected residual block.
+         * @param evals Selected Ritz values.
+         * @return Correction block.
+         */
+        [[nodiscard]] MatrixType full_Olsen_correction(const MatrixType &V, const MatrixType &BV, const MatrixType &S, const VectorReal &evals);
+
         /*!
          * Compute an l2 Jacobi-Davidson correction block.
          * @param V Current Ritz vectors.
@@ -163,6 +183,18 @@ namespace grit::algo {
          * @return Correction block.
          */
         [[nodiscard]] MatrixType get_sBlock(const MatrixType &S_in);
+        /*!
+         * Build the correction block for selected Ritz pairs.
+         * @param V Selected Ritz vectors.
+         * @param BV B applied to the selected Ritz vectors.
+         * @param S Selected residual block.
+         * @param evals Selected Ritz values.
+         * @param V_proj Ritz vectors used by the correction projector.
+         * @param BV_proj B applied to the Ritz vectors used by the correction projector.
+         * @return Correction block.
+         */
+        [[nodiscard]] MatrixType get_sBlock(const MatrixType &V, const MatrixType &BV, const MatrixType &S, const VectorReal &evals,
+                                            const MatrixType &V_proj, const MatrixType &BV_proj);
 
         public:
         /*! Expand or restart the GD+K search space. */

@@ -152,6 +152,70 @@ TEST_CASE("standard gdplusk returns two pairs from a one-column exact initial gu
     REQUIRE_FALSE(grit::has_flag(result.stopReason(), grit::StopReason::converged));
 }
 
+TEST_CASE("standard gdplusk soft locks converged Ritz pairs") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    using Vector = grit::Matvec<double>::VectorType;
+
+    Matrix A_matrix = Matrix::Identity(16, 16);
+    A_matrix.diagonal().setLinSpaced(16.0, 1.0);
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    std::vector<double> corrected_eigenvalues;
+    A.set_preconditioner_update([&](double theta) { corrected_eigenvalues.push_back(theta); });
+    A.set_preconditioner_apply([](const Eigen::Ref<const Vector> &x, Eigen::Ref<Vector> y, double) { y = x; });
+
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev                      = 2;
+    solver.config.ncv                      = 8;
+    solver.config.block_size               = 1;
+    solver.config.max_iters                = 200;
+    solver.config.abstol                   = 1e-9;
+    solver.config.ritz                     = grit::Ritz::LM;
+    solver.config.quit_when_saturated      = false;
+    solver.config.residual_correction_type = grit::ResidualCorrectionType::CHEAP_OLSEN;
+    Eigen::Index previous_basis_size       = 0;
+    bool         basis_growth_is_bounded   = true;
+    solver.config.user_callback            = [&](const auto &current) {
+        if(current.Q.cols() > previous_basis_size && current.Q.cols() - previous_basis_size > current.config.block_size) basis_growth_is_bounded = false;
+        previous_basis_size = current.Q.cols();
+    };
+    solver.set_initial_guess(Matrix::Identity(16, 1));
+    std::srand(1);
+    solver.run();
+
+    auto result = solver.get_result();
+    REQUIRE(grit::has_flag(result.stopReason(), grit::StopReason::converged));
+    require_close(result.eigVal(), A_matrix.diagonal().head(2), 1e-8);
+    REQUIRE(basis_growth_is_bounded);
+    REQUIRE_FALSE(corrected_eigenvalues.empty());
+    bool corrected_locked_pair = false;
+    for(double theta : corrected_eigenvalues)
+        if(std::abs(theta - A_matrix(0, 0)) <= 1e-8) corrected_locked_pair = true;
+    REQUIRE_FALSE(corrected_locked_pair);
+}
+
+TEST_CASE("standard gdplusk converges from an exact initial block") {
+    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+    Matrix A_matrix = Matrix::Identity(4, 4);
+    A_matrix.diagonal().setLinSpaced(4.0, 1.0);
+    auto A = grit::matvec<double>(A_matrix.rows(), [&](auto const &X) { return A_matrix * X; });
+
+    grit::standard::gdplusk<double> solver(A);
+    solver.config.nev        = 2;
+    solver.config.ncv        = 4;
+    solver.config.block_size = 2;
+    solver.config.max_iters  = 10;
+    solver.config.abstol     = 1e-12;
+    solver.config.ritz       = grit::Ritz::LM;
+    solver.set_initial_guess(Matrix::Identity(4, 2));
+    solver.run();
+
+    auto result = solver.get_result();
+    REQUIRE(result.stopReason() == grit::StopReason::converged);
+    require_close(result.eigVal(), A_matrix.diagonal().head(2), 1e-12);
+}
+
 TEST_CASE("standard gdplusk handles nos4 restart block search") {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 

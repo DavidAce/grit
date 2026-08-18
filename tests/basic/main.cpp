@@ -130,8 +130,8 @@ TEST_CASE("relative residual references use the Ritz saturation trigger and pers
 }
 
 TEST_CASE("status update rejects inconsistent convergence history") {
-    using Matrix     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
-    using VectorReal = Eigen::Vector<double, Eigen::Dynamic>;
+    using Matrix          = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorReal      = Eigen::Vector<double, Eigen::Dynamic>;
     using IterationSample = grit::form::base<double>::IterationSample;
 
     Matrix A_matrix = Matrix::Identity(4, 4);

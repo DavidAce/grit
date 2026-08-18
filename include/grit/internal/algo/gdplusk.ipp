@@ -6,6 +6,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace grit::algo {
     template<typename Scalar, grit::Form form_>
@@ -126,10 +127,49 @@ namespace grit::algo {
     }
 
     template<typename Scalar, grit::Form form_> void gdplusk<Scalar, form_>::make_new_Q_block() {
+        Q_new  = MatrixType{};
+        AQ_new = MatrixType{};
+        BQ_new = MatrixType{};
         if(S.cols() == 0) return;
-        const auto nev        = this->cfg().nev;
-        const auto block_size = this->cfg().block_size;
-        Q_new = get_sBlock(S);
+
+        const auto nev                 = this->cfg().nev;
+        const auto block_size          = this->cfg().block_size;
+        const auto num_available_pairs = S.cols();
+        if(V.cols() != num_available_pairs || AV.cols() != num_available_pairs || BV.cols() != num_available_pairs ||
+           status.rNormsAbs.size() != num_available_pairs || static_cast<Eigen::Index>(status.optIdx.size()) != num_available_pairs) {
+            throw std::logic_error("gdplusk correction found inconsistent Ritz vector and residual counts");
+        }
+        if(num_available_pairs > nev) throw std::logic_error("gdplusk correction found more Ritz pairs than requested");
+
+        const auto                targets = this->rNormAbsTargets();
+        std::vector<Eigen::Index> active_indices;
+        std::vector<Eigen::Index> projector_indices;
+        active_indices.reserve(static_cast<std::size_t>(block_size));
+        projector_indices.reserve(static_cast<std::size_t>(num_available_pairs));
+        for(Eigen::Index i = 0; i < num_available_pairs; ++i) {
+            if(status.rNormsAbs(i) < targets(i)) {
+                projector_indices.push_back(i);
+            } else if(static_cast<Eigen::Index>(active_indices.size()) < block_size) {
+                active_indices.push_back(i);
+                projector_indices.push_back(i);
+            }
+        }
+
+        if(!active_indices.empty()) {
+            MatrixType active_V  = V(Eigen::placeholders::all, active_indices);
+            MatrixType active_BV = BV(Eigen::placeholders::all, active_indices);
+            MatrixType active_S  = S(Eigen::placeholders::all, active_indices);
+            MatrixType V_proj    = V(Eigen::placeholders::all, projector_indices);
+            MatrixType BV_proj   = BV(Eigen::placeholders::all, projector_indices);
+            VectorReal active_evals(active_indices.size());
+            for(Eigen::Index i = 0; i < active_evals.size(); ++i) {
+                const auto ritz_pair       = static_cast<std::size_t>(active_indices[static_cast<std::size_t>(i)]);
+                const auto projected_index = status.optIdx[ritz_pair];
+                active_evals(i)            = T_evals(projected_index);
+            }
+
+            Q_new = get_sBlock(active_V, active_BV, active_S, active_evals, V_proj, BV_proj);
+        }
 
         auto orthogonalize_Q_new = [&]() {
             OrthMeta m;
@@ -161,11 +201,7 @@ namespace grit::algo {
             Q_new = Eigen::MatrixXf::Random(N, block_size).template cast<Scalar>();
             orthogonalize_Q_new();
         }
-        if(Q_new.cols() > block_size) {
-            Q_new.conservativeResize(Eigen::NoChange, block_size);
-            AQ_new.conservativeResize(Eigen::NoChange, block_size);
-            BQ_new.conservativeResize(Eigen::NoChange, block_size);
-        }
+        if(Q_new.cols() > block_size) throw std::logic_error("gdplusk correction block exceeds block_size");
     }
 
     template<typename Scalar, grit::Form form_> void gdplusk<Scalar, form_>::build() {
@@ -185,6 +221,12 @@ namespace grit::algo {
     void gdplusk<Scalar, form_>::build(MatrixType &Q, MatrixType &AQ, MatrixType &BQ, const MatrixType &Q_new, const MatrixType &AQ_new,
                                        const MatrixType &BQ_new) {
         if(status.stopReason != StopReason::none) return;
+
+        const auto nev = this->cfg().nev;
+        if(Q_new.cols() == 0 && V.cols() == nev && status.rNormsAbs.size() == nev) {
+            const auto targets = this->rNormAbsTargets();
+            if((status.rNormsAbs.array() < targets.array()).all()) return;
+        }
 
         if(Q_new.cols() == 0 && status.outer_iter <= status.num_outer_iters_last_restart + 2) {
             status.stopReason |= StopReason::subspace_exhausted;

@@ -199,10 +199,21 @@ namespace grit::algo {
 
     template<typename Scalar, grit::Form form_>
     typename gdplusk<Scalar, form_>::MatrixType gdplusk<Scalar, form_>::cheap_Olsen_correction(const MatrixType &V, const MatrixType &S) {
+        const auto &BV_current = BV.rows() == V.rows() && BV.cols() == V.cols() ? BV : V;
+        return cheap_Olsen_correction(V, BV_current, S);
+    }
+
+    template<typename Scalar, grit::Form form_>
+    typename gdplusk<Scalar, form_>::MatrixType gdplusk<Scalar, form_>::cheap_Olsen_correction(const MatrixType &V, const MatrixType &BV,
+                                                                                               const MatrixType &S) {
         MatrixType D(S.rows(), S.cols());
 
         assert(V.allFinite());
+        assert(BV.allFinite());
         assert(S.allFinite());
+        assert(V.rows() == S.rows());
+        assert(V.cols() == S.cols());
+        assert(BV.size() == V.size());
         for(long i = 0; i < S.cols(); ++i) {
             auto d           = D.col(i);
             auto v           = V.col(i);
@@ -210,7 +221,7 @@ namespace grit::algo {
             auto numerator   = Scalar{1};
             auto denominator = Scalar{1};
 
-            if(this->cfg().use_b_inner_product && BV.rows() == V.rows() && BV.cols() > i) {
+            if(this->cfg().use_b_inner_product) {
                 auto bv     = BV.col(i);
                 numerator   = bv.dot(s);
                 denominator = bv.dot(v);
@@ -227,21 +238,28 @@ namespace grit::algo {
 
     template<typename Scalar, grit::Form form_>
     typename gdplusk<Scalar, form_>::MatrixType gdplusk<Scalar, form_>::full_Olsen_correction(const MatrixType &V, const MatrixType &S) {
+        const auto &BV_current = BV.rows() == V.rows() && BV.cols() == V.cols() ? BV : V;
+        auto        evals      = T_evals(status.optIdx);
+        return full_Olsen_correction(V, BV_current, S, evals);
+    }
+
+    template<typename Scalar, grit::Form form_>
+    typename gdplusk<Scalar, form_>::MatrixType gdplusk<Scalar, form_>::full_Olsen_correction(const MatrixType &V, const MatrixType &BV,
+                                                                                              const MatrixType &S, const VectorReal &evals) {
         MatrixType MV;
         MatrixType MS;
         MatrixType coeffs;
-        auto       Y = T_evals(status.optIdx);
 
-        if(this->cfg().use_b_inner_product && BV.rows() == V.rows() && BV.cols() == V.cols()) {
-            MV.noalias() = A.has_preconditioner_apply() ? MultP(V, Y) : V;
-            MS.noalias() = A.has_preconditioner_apply() ? MultP(S, Y) : S;
+        if(this->cfg().use_b_inner_product) {
+            MV.noalias() = A.has_preconditioner_apply() ? MultP(V, evals) : V;
+            MS.noalias() = A.has_preconditioner_apply() ? MultP(S, evals) : S;
 
             MatrixType G       = BV.adjoint() * MV;
             MatrixType VT_B_MS = BV.adjoint() * MS;
             coeffs             = G.ldlt().solve(VT_B_MS);
         } else {
-            MV.noalias() = A.has_preconditioner_apply() ? MultP(V, Y) : V;
-            MS.noalias() = A.has_preconditioner_apply() ? MultP(S, Y) : S;
+            MV.noalias() = A.has_preconditioner_apply() ? MultP(V, evals) : V;
+            MS.noalias() = A.has_preconditioner_apply() ? MultP(S, evals) : S;
 
             MatrixType G     = V.adjoint() * MV;
             MatrixType VT_MS = V.adjoint() * MS;
@@ -254,7 +272,7 @@ namespace grit::algo {
     typename gdplusk<Scalar, form_>::MatrixType gdplusk<Scalar, form_>::jacobi_davidson_l2_correction(const MatrixType &V, const MatrixType &S,
                                                                                                       const VectorReal &evals) {
         assert(V.rows() == S.rows());
-        assert(V.cols() == S.cols());
+        assert(S.cols() == evals.size());
         assert(!this->cfg().use_b_inner_product);
 
         auto ProjectOpL = [this, &V](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
@@ -293,62 +311,54 @@ namespace grit::algo {
             RealScalar        th  = evals(i);
             const VectorType &rhs = RHS.col(i);
 
-            if(i > 0) {
-                const VectorType &s  = S.col(i);
-                const VectorType &v  = V.col(i);
-                auto              ev = evals.middleRows(i, 1);
-                D.col(i).noalias()   = MultP(s, ev);
-                D.col(i).noalias()   = cheap_Olsen_correction(v, D.col(i));
-            } else {
-                if(A.has_preconditioner_update()) {
-                    A.preconditioner_update(th);
-                    status.time_preconditioner_update_inner += A.t_precond_update->get_last_interval();
-                    status.num_preconditioner_updates_inner++;
-                }
-
-                IterativeLinearSolverConfig<Scalar> cfg;
-                cfg.result               = {};
-                cfg.matdef               = MatDef::IND;
-                cfg.max_inner_iters      = config.inner_max_iters;
-                cfg.tolerance            = current_inner_tol;
-                cfg.theta                = th;
-                cfg.preconditioner_apply = [this](const Eigen::Ref<const VectorType> &x, Eigen::Ref<VectorType> y, RealScalar theta) -> void {
-                    A.preconditioner_apply(x, y, theta);
-                    if(A.has_preconditioner_apply()) {
-                        status.time_preconditioner_apply_inner += A.t_precond->get_last_interval();
-                        status.num_preconditioner_apply_inner++;
-                    }
-                };
-
-                auto ResidualOp = [this, th](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> HX) -> void {
-                    HX.resize(X.rows(), X.cols());
-                    if constexpr(form_ == grit::Form::GENERALIZED) {
-                        if(config.use_jd_b_only) {
-                            HX.noalias() = MultB_inner(X);
-                        } else {
-                            HX.noalias() = MultA_inner(X) - th * MultB_inner(X);
-                        }
-                    } else {
-                        HX.noalias() = MultA_inner(X) - th * X;
-                    }
-                };
-
-                auto JDop = internal::precondition::JacobiDavidsonOperator<Scalar>(rhs.rows(), ResidualOp, ProjectOpL, ProjectOpR);
-
-                d.noalias() = internal::precondition::JacobiDavidsonSolver(JDop, rhs, cfg);
-                d.noalias() = ProjectOpR_tmp(d);
-
-                status.num_inner_iters     += cfg.result.num_inner_iters;
-                status.num_operator_inner  += cfg.result.matvecs;
-                status.time_solve_inner    += cfg.result.time;
-                status.time_operator_inner += cfg.result.time_matvecs;
-                if(A.has_preconditioner_apply()) {
-                    status.num_precond_inner         += cfg.result.precond;
-                    status.time_preconditioner_inner += cfg.result.time_precond;
-                }
-                status.inner_error_last = std::max(status.inner_error_last, cfg.result.error);
-                status.inner_tol_last   = std::max(status.inner_tol_last, cfg.tolerance);
+            if(A.has_preconditioner_update()) {
+                A.preconditioner_update(th);
+                status.time_preconditioner_update_inner += A.t_precond_update->get_last_interval();
+                status.num_preconditioner_updates_inner++;
             }
+
+            IterativeLinearSolverConfig<Scalar> cfg;
+            cfg.result               = {};
+            cfg.matdef               = MatDef::IND;
+            cfg.max_inner_iters      = config.inner_max_iters;
+            cfg.tolerance            = current_inner_tol;
+            cfg.theta                = th;
+            cfg.preconditioner_apply = [this](const Eigen::Ref<const VectorType> &x, Eigen::Ref<VectorType> y, RealScalar theta) -> void {
+                A.preconditioner_apply(x, y, theta);
+                if(A.has_preconditioner_apply()) {
+                    status.time_preconditioner_apply_inner += A.t_precond->get_last_interval();
+                    status.num_preconditioner_apply_inner++;
+                }
+            };
+
+            auto ResidualOp = [this, th](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> HX) -> void {
+                HX.resize(X.rows(), X.cols());
+                if constexpr(form_ == grit::Form::GENERALIZED) {
+                    if(config.use_jd_b_only) {
+                        HX.noalias() = MultB_inner(X);
+                    } else {
+                        HX.noalias() = MultA_inner(X) - th * MultB_inner(X);
+                    }
+                } else {
+                    HX.noalias() = MultA_inner(X) - th * X;
+                }
+            };
+
+            auto JDop = internal::precondition::JacobiDavidsonOperator<Scalar>(rhs.rows(), ResidualOp, ProjectOpL, ProjectOpR);
+
+            d.noalias() = internal::precondition::JacobiDavidsonSolver(JDop, rhs, cfg);
+            d.noalias() = ProjectOpR_tmp(d);
+
+            status.num_inner_iters     += cfg.result.num_inner_iters;
+            status.num_operator_inner  += cfg.result.matvecs;
+            status.time_solve_inner    += cfg.result.time;
+            status.time_operator_inner += cfg.result.time_matvecs;
+            if(A.has_preconditioner_apply()) {
+                status.num_precond_inner         += cfg.result.precond;
+                status.time_preconditioner_inner += cfg.result.time_precond;
+            }
+            status.inner_error_last = std::max(status.inner_error_last, cfg.result.error);
+            status.inner_tol_last   = std::max(status.inner_tol_last, cfg.tolerance);
         }
         return D;
     }
@@ -360,7 +370,7 @@ namespace grit::algo {
     {
         assert(this->cfg().use_b_inner_product);
         assert(V.rows() == S.rows());
-        assert(V.cols() == S.cols());
+        assert(S.cols() == evals.size());
         assert(BV.size() == V.size());
 
         auto ProjectOpL = [this, &V, &BV](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
@@ -400,88 +410,88 @@ namespace grit::algo {
             auto              d   = D.col(i);
             const RealScalar &th  = evals(i);
             const VectorType &rhs = RHS.col(i);
-            if(i >= cfg().nev) {
-                const VectorType &s  = S.col(i);
-                const VectorType &v  = V.col(i);
-                auto              ev = evals.middleRows(i, 1);
-                D.col(i).noalias()   = MultP(s, ev);
-                D.col(i).noalias()   = cheap_Olsen_correction(v, D.col(i));
-            } else {
-                if(A.has_preconditioner_update()) {
-                    A.preconditioner_update(th);
-                    status.time_preconditioner_update_inner += A.t_precond_update->get_last_interval();
-                    status.num_preconditioner_updates_inner++;
-                }
-
-                IterativeLinearSolverConfig<Scalar> cfg;
-                cfg.result               = {};
-                cfg.matdef               = MatDef::IND;
-                cfg.max_inner_iters      = config.inner_max_iters;
-                cfg.tolerance            = current_inner_tol;
-                cfg.theta                = th;
-                cfg.preconditioner_apply = [this](const Eigen::Ref<const VectorType> &x, Eigen::Ref<VectorType> y, RealScalar theta) -> void {
-                    A.preconditioner_apply(x, y, theta);
-                    if(A.has_preconditioner_apply()) {
-                        status.time_preconditioner_apply_inner += A.t_precond->get_last_interval();
-                        status.num_preconditioner_apply_inner++;
-                    }
-                };
-
-                auto ResidualOp = [this, th](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> HX) -> void {
-                    HX.resize(X.rows(), X.cols());
-                    if(config.use_jd_b_only) {
-                        HX.noalias() = MultB_inner(X);
-                    } else {
-                        HX.noalias() = MultA_inner(X) - th * MultB_inner(X);
-                    }
-                };
-
-                auto JDop = internal::precondition::JacobiDavidsonOperator<Scalar>(rhs.rows(), ResidualOp, ProjectOpL, ProjectOpR);
-
-                d.noalias() = internal::precondition::JacobiDavidsonSolver(JDop, rhs, cfg);
-                d.noalias() = ProjectOpR_tmp(d);
-
-                status.num_inner_iters     += cfg.result.num_inner_iters;
-                status.num_operator_inner  += cfg.result.matvecs;
-                status.time_solve_inner    += cfg.result.time;
-                status.time_operator_inner += cfg.result.time_matvecs;
-                if(A.has_preconditioner_apply()) {
-                    status.num_precond_inner         += cfg.result.precond;
-                    status.time_preconditioner_inner += cfg.result.time_precond;
-                }
-                status.inner_error_last = std::max(status.inner_error_last, cfg.result.error);
-                status.inner_tol_last   = std::max(status.inner_tol_last, cfg.tolerance);
+            if(A.has_preconditioner_update()) {
+                A.preconditioner_update(th);
+                status.time_preconditioner_update_inner += A.t_precond_update->get_last_interval();
+                status.num_preconditioner_updates_inner++;
             }
+
+            IterativeLinearSolverConfig<Scalar> cfg;
+            cfg.result               = {};
+            cfg.matdef               = MatDef::IND;
+            cfg.max_inner_iters      = config.inner_max_iters;
+            cfg.tolerance            = current_inner_tol;
+            cfg.theta                = th;
+            cfg.preconditioner_apply = [this](const Eigen::Ref<const VectorType> &x, Eigen::Ref<VectorType> y, RealScalar theta) -> void {
+                A.preconditioner_apply(x, y, theta);
+                if(A.has_preconditioner_apply()) {
+                    status.time_preconditioner_apply_inner += A.t_precond->get_last_interval();
+                    status.num_preconditioner_apply_inner++;
+                }
+            };
+
+            auto ResidualOp = [this, th](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> HX) -> void {
+                HX.resize(X.rows(), X.cols());
+                if(config.use_jd_b_only) {
+                    HX.noalias() = MultB_inner(X);
+                } else {
+                    HX.noalias() = MultA_inner(X) - th * MultB_inner(X);
+                }
+            };
+
+            auto JDop = internal::precondition::JacobiDavidsonOperator<Scalar>(rhs.rows(), ResidualOp, ProjectOpL, ProjectOpR);
+
+            d.noalias() = internal::precondition::JacobiDavidsonSolver(JDop, rhs, cfg);
+            d.noalias() = ProjectOpR_tmp(d);
+
+            status.num_inner_iters     += cfg.result.num_inner_iters;
+            status.num_operator_inner  += cfg.result.matvecs;
+            status.time_solve_inner    += cfg.result.time;
+            status.time_operator_inner += cfg.result.time_matvecs;
+            if(A.has_preconditioner_apply()) {
+                status.num_precond_inner         += cfg.result.precond;
+                status.time_preconditioner_inner += cfg.result.time_precond;
+            }
+            status.inner_error_last = std::max(status.inner_error_last, cfg.result.error);
+            status.inner_tol_last   = std::max(status.inner_tol_last, cfg.tolerance);
         }
         return D;
     }
 
     template<typename Scalar, grit::Form form_> typename gdplusk<Scalar, form_>::MatrixType gdplusk<Scalar, form_>::get_sBlock(const MatrixType &S_in) {
+        auto evals = T_evals(status.optIdx);
+        return get_sBlock(V, BV, S_in, evals, V, BV);
+    }
+
+    template<typename Scalar, grit::Form form_>
+    typename gdplusk<Scalar, form_>::MatrixType gdplusk<Scalar, form_>::get_sBlock(const MatrixType &V, const MatrixType &BV, const MatrixType &S_in,
+                                                                                  const VectorReal &evals, const MatrixType &V_proj,
+                                                                                  const MatrixType &BV_proj) {
         auto       t_residual_correction = status.time_residual_correction.tic_token();
         MatrixType S                     = S_in;
         assert(S.allFinite());
         assert(S.cols() > 0);
-        auto Y = T_evals(status.optIdx);
+        assert(S.cols() == evals.size());
 
         switch(residual_correction_type_internal) {
             case ResidualCorrectionType::NONE:
-                if(A.has_preconditioner_apply()) { S = MultP(S, Y); }
+                if(A.has_preconditioner_apply()) { S = MultP(S, evals); }
                 break;
             case ResidualCorrectionType::AUTO: [[fallthrough]];
             case ResidualCorrectionType::CHEAP_OLSEN:
-                if(A.has_preconditioner_apply()) { S = MultP(S, Y); }
-                S.noalias() = cheap_Olsen_correction(V, S);
+                if(A.has_preconditioner_apply()) { S = MultP(S, evals); }
+                S.noalias() = cheap_Olsen_correction(V, BV, S);
                 break;
-            case ResidualCorrectionType::FULL_OLSEN: S.noalias() = full_Olsen_correction(V, S); break;
+            case ResidualCorrectionType::FULL_OLSEN: S.noalias() = full_Olsen_correction(V, BV, S, evals); break;
             case ResidualCorrectionType::JACOBI_DAVIDSON:
                 if constexpr(form_ == grit::Form::GENERALIZED) {
                     if(this->cfg().use_b_inner_product) {
-                        S.noalias() = jacobi_davidson_bm_correction(V, BV, S, Y);
+                        S.noalias() = jacobi_davidson_bm_correction(V_proj, BV_proj, S, evals);
                     } else {
-                        S.noalias() = jacobi_davidson_l2_correction(V, S, Y);
+                        S.noalias() = jacobi_davidson_l2_correction(V_proj, S, evals);
                     }
                 } else {
-                    S.noalias() = jacobi_davidson_l2_correction(V, S, Y);
+                    S.noalias() = jacobi_davidson_l2_correction(V_proj, S, evals);
                 }
                 break;
         }
