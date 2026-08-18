@@ -1,7 +1,5 @@
 #include "cli.h"
 #include "text.h"
-#include <algorithm>
-#include <cmath>
 #include <format>
 #include <map>
 #include <sstream>
@@ -56,25 +54,15 @@ namespace bench_standard {
             return values;
         }
 
-        template<typename T, typename Predicate>
-        void require_all(const std::vector<T> &values, std::string_view name, Predicate predicate, std::string_view message) {
+        template<typename T>
+        void require_nonempty(const std::vector<T> &values, std::string_view name) {
             if(values.empty()) throw std::runtime_error(std::format("{} must not be empty", name));
-            for(const auto &value : values)
-                if(!predicate(value)) throw std::runtime_error(std::format("{} {}", name, message));
         }
 
         std::string strip_bracket_list(std::string text) {
             text = trim_copy(std::move(text));
             if(text.size() >= 2 && text.front() == '[' && text.back() == ']') return text.substr(1, text.size() - 2);
             return text;
-        }
-
-        void adjust_block_geometry(Options &opts, int requested_ncv, int requested_block_size, Eigen::Index matrix_rows) {
-            const auto rows = static_cast<int>(matrix_rows);
-            opts.nev        = std::min(std::max(1, opts.nev), rows);
-            opts.block_size = std::clamp(std::max(opts.nev, requested_block_size), 1, rows);
-            opts.ncv        = std::min(std::max(opts.block_size, requested_ncv), rows);
-            opts.ncv        = std::max(opts.block_size, (opts.ncv / opts.block_size) * opts.block_size);
         }
 
         void validate_algo_specific_options(const CliOptions &opts) {
@@ -137,7 +125,7 @@ namespace bench_standard {
         app.add_option("--save-eigvec", opts.save_eigvec, "Path to HDF5 file where final eigenvectors are saved");
         app.add_option("--save-results", opts.save_results, "Path to HDF5 file where final result rows and solver snapshots are saved");
         app.add_flag("--print-summary", opts.print_summary, "Print the summary from --save-results without running the benchmark");
-        app.add_option("--nev", opts.nev, "Number of eigenpairs")->check(CLI::PositiveNumber);
+        app.add_option("--nev", opts.nev, "Number of eigenpairs");
         app.add_option("--ncv", opts.ncv, "Maximum subspace columns, or a comma list like [8,16]")->delimiter(',');
         app.add_option("--block-size", opts.block_size, "Solver block size, or a comma list like [1,2]")->delimiter(',');
         app.add_option("--max-iters", opts.max_iters, "Maximum solver outer iterations, or a negative value for unlimited");
@@ -149,11 +137,9 @@ namespace bench_standard {
         app.add_option("--reltol", opts.reltol, "Stabilized-reference residual reduction tolerance");
         app.add_option("--quit-when-saturated", opts.quit_when_saturated, "Stop after confirmed Ritz and residual saturation");
         auto *inner_tol_opt = app.add_option("--inner-tol", opts.inner_tol, "Jacobi-Davidson inner tolerance, or a comma list")->delimiter(',');
-        app.add_option("--ritz-saturation-tolerance", opts.ritz_saturation_tolerance, "Relative Ritz-value drift threshold per matvec")
-            ->check(CLI::PositiveNumber);
+        app.add_option("--ritz-saturation-tolerance", opts.ritz_saturation_tolerance, "Relative Ritz-value drift threshold per matvec");
         auto *auto_probe_length_opt =
-            app.add_option("--auto-probe-length", opts.auto_probe_length, "Minimum outer iterations using the method tested by each AUTO probe")
-                ->check(CLI::PositiveNumber);
+            app.add_option("--auto-probe-length", opts.auto_probe_length, "Minimum outer iterations using the method tested by each AUTO probe");
         auto *auto_max_probes_opt =
             app.add_option("--auto-max-probes", opts.auto_max_probes, "Maximum AUTO probes while Ritz values remain stabilized; 0 disables and -1 allows unlimited probes");
         app.add_option("--seed", opts.seed, "Random seed for deterministic initial guess");
@@ -178,23 +164,18 @@ namespace bench_standard {
     }
 
     void normalize_options(CliOptions &opts) {
-        require_all(opts.ncv, "--ncv", [](int value) { return value > 0; }, "must be positive");
-        require_all(opts.block_size, "--block-size", [](int value) { return value > 0; }, "must be positive");
-        require_all(opts.max_retain_blocks, "--max-retain-blocks", [](int value) { return value > 0; }, "must be positive");
-        require_all(opts.inner_max_iters, "--inner-max-iters", [](int value) { return value > 0; }, "must be positive");
-        require_all(opts.abstol, "--abstol", [](double value) { return value > 0.0; }, "must be positive");
-        require_all(opts.inner_tol, "--inner-tol", [](double value) { return value > 0.0; }, "must be positive");
-        if(opts.use_refined_rayleigh_ritz.empty()) throw std::runtime_error("--refined-rayleigh-ritz must not be empty");
-        if(opts.use_adaptive_inner_tolerance.empty()) throw std::runtime_error("--use-adaptive-inner-tolerance must not be empty");
-        if(opts.reltol < 0.0) throw std::runtime_error("--reltol must be non-negative");
-        if(!std::isfinite(opts.ritz_saturation_tolerance) || opts.ritz_saturation_tolerance <= 0.0)
-            throw std::runtime_error("--ritz-saturation-tolerance must be finite and positive");
-        if(opts.auto_probe_length < 5) throw std::runtime_error("--auto-probe-length must be at least 5");
-        if(opts.auto_max_probes < -1) throw std::runtime_error("--auto-max-probes must be at least -1");
+        require_nonempty(opts.ncv, "--ncv");
+        require_nonempty(opts.block_size, "--block-size");
+        require_nonempty(opts.max_retain_blocks, "--max-retain-blocks");
+        require_nonempty(opts.inner_max_iters, "--inner-max-iters");
+        require_nonempty(opts.abstol, "--abstol");
+        require_nonempty(opts.inner_tol, "--inner-tol");
+        require_nonempty(opts.use_refined_rayleigh_ritz, "--refined-rayleigh-ritz");
+        require_nonempty(opts.use_adaptive_inner_tolerance, "--use-adaptive-inner-tolerance");
         validate_algo_specific_options(opts);
     }
 
-    std::vector<Options> expand_sweep(const CliOptions &cli, Eigen::Index matrix_rows) {
+    std::vector<Options> expand_sweep(const CliOptions &cli) {
         const auto &ncv_values                 = cli.ncv;
         const auto &block_values               = cli.block_size;
         const auto &max_retain_block_values    = cli.max_retain_blocks;
@@ -227,7 +208,8 @@ namespace bench_standard {
                                             opts.save_eigvec   = cli.save_eigvec;
                                             opts.save_results  = cli.save_results;
                                             opts.nev           = cli.nev;
-                                            adjust_block_geometry(opts, ncv, block_size, matrix_rows);
+                                            opts.ncv           = ncv;
+                                            opts.block_size    = block_size;
                                             opts.maxRetainBlocks             = max_retain_blocks;
                                             opts.max_iters                    = cli.max_iters;
                                             opts.max_matvecs                  = cli.max_matvecs;

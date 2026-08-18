@@ -31,12 +31,7 @@ namespace bench_standard {
         DenseMatrix initial_guess(const Options &opts, Eigen::Index rows, int rep) {
             if(opts.initial_guess.empty()) return random_initial_guess(rows, opts.block_size, opts.seed + static_cast<unsigned int>(rep - 1));
 
-            auto guess = load_initial_guess_hdf5(opts.initial_guess, opts.algo);
-            if(guess.rows() != rows) { throw std::runtime_error(std::format("Initial guess rows ({}) do not match matrix rows ({})", guess.rows(), rows)); }
-            if(guess.cols() < opts.nev) {
-                throw std::runtime_error(std::format("Initial guess columns ({}) must be at least nev ({})", guess.cols(), opts.nev));
-            }
-            return guess;
+            return load_initial_guess_hdf5(opts.initial_guess, opts.algo);
         }
 
         template<std::size_t N>

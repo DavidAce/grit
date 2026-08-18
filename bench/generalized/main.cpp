@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
             throw std::runtime_error(std::format("Generalized benchmark requires A and B with matching dimensions: A is {} x {}, B is {} x {}", matrix_a.rows(),
                                                  matrix_a.cols(), matrix_b.rows(), matrix_b.cols()));
         }
-        auto cases = bench_generalized::expand_sweep(opts, matrix_a.rows());
+        auto cases = bench_generalized::expand_sweep(opts);
         bench_generalized::validate_hdf5_options(opts, cases.size());
         if(!opts.save_results.empty()) bench_generalized::initialize_results_hdf5(opts.save_results, opts.algo);
 

@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
 
         const std::filesystem::path matrix_path = opts.matrix_path;
         auto                        matrix      = bench_standard::read_matrix_market(matrix_path);
-        auto                        cases       = bench_standard::expand_sweep(opts, matrix.rows());
+        auto                        cases       = bench_standard::expand_sweep(opts);
         bench_standard::validate_hdf5_options(opts, cases.size());
         if(!opts.save_results.empty()) bench_standard::initialize_results_hdf5(opts.save_results, opts.algo);
 
