@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <fmt/ranges.h>
 #include <format>
 #include <h5pp/h5pp.h>
 #include <limits>
@@ -72,6 +73,9 @@ namespace bench_generalized {
             insert_field(h5type, "eigenvalue", &Row::eigenvalue);
             insert_field(h5type, "rnorm_abs", &Row::rnorm_abs);
             insert_field(h5type, "rnorm_rel", &Row::rnorm_rel);
+            insert_field(h5type, "eigenvalues", &Row::eigenvalues);
+            insert_field(h5type, "rnorms_abs", &Row::rnorms_abs);
+            insert_field(h5type, "rnorms_rel", &Row::rnorms_rel);
             insert_field(h5type, "outer_iterations", &Row::outer_iterations);
             insert_field(h5type, "matvecs", &Row::matvecs);
             insert_field(h5type, "outer_matvecs", &Row::outer_matvecs);
@@ -196,9 +200,9 @@ namespace bench_generalized {
             Row          row;
             int64_t      count     = 0;
             int64_t      converged = 0;
-            RunningStats eigval;
-            RunningStats rnorm_abs;
-            RunningStats rnorm_rel;
+            std::vector<RunningStats> eigvals;
+            std::vector<RunningStats> rnorms_abs;
+            std::vector<RunningStats> rnorms_rel;
             RunningStats outer_iterations;
             RunningStats matvecs;
             RunningStats time;
@@ -219,9 +223,20 @@ namespace bench_generalized {
                 if(count == 0) row = value;
                 count++;
                 if(to_string(value.stop_reason).find("converged") != std::string::npos) converged++;
-                eigval.add(value.eigenvalue);
-                rnorm_abs.add(value.rnorm_abs);
-                rnorm_rel.add(value.rnorm_rel);
+                eigvals.resize(std::max(eigvals.size(), value.eigenvalues.size()));
+                rnorms_abs.resize(std::max(rnorms_abs.size(), value.rnorms_abs.size()));
+                rnorms_rel.resize(std::max(rnorms_rel.size(), value.rnorms_rel.size()));
+                for(std::size_t i = 0; i < value.eigenvalues.size(); ++i) eigvals[i].add(value.eigenvalues[i]);
+                for(std::size_t i = 0; i < value.rnorms_abs.size(); ++i) rnorms_abs[i].add(value.rnorms_abs[i]);
+                for(std::size_t i = 0; i < value.rnorms_rel.size(); ++i) rnorms_rel[i].add(value.rnorms_rel[i]);
+                if(value.eigenvalues.empty()) {
+                    eigvals.resize(1);
+                    rnorms_abs.resize(1);
+                    rnorms_rel.resize(1);
+                    eigvals[0].add(value.eigenvalue);
+                    rnorms_abs[0].add(value.rnorm_abs);
+                    rnorms_rel[0].add(value.rnorm_rel);
+                }
                 outer_iterations.add(static_cast<double>(value.outer_iterations));
                 matvecs.add(static_cast<double>(value.matvecs));
                 time.add(value.time);
@@ -248,6 +263,13 @@ namespace bench_generalized {
             auto mean = stats.mean();
             auto se   = stats.stderr();
             return std::format("{} ± {}", std::vformat(fmt, std::make_format_args(mean)), std::vformat(fmt, std::make_format_args(se)));
+        }
+
+        std::string means_text(const std::vector<RunningStats> &stats) {
+            std::vector<double> means;
+            means.reserve(stats.size());
+            for(const auto &entry : stats) means.push_back(entry.mean());
+            return fmt::format("{::.6e}", means);
         }
 
         template<typename Result>
@@ -322,29 +344,29 @@ namespace bench_generalized {
             std::println("");
             std::println("summary: {}", path.string());
             if constexpr(std::is_same_v<Row, GdpluskSnapshot>) {
-                std::println("{:<5} {:>8} {:>5} {:>5} {:<17} {:>9} {:>9} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18}", "case", "algo", "ncv", "blk",
-                             "correction", "conv", "reps", "eigval mean", "rnorm_abs mean", "rnorm_rel mean", "outer_iter mean±se", "matvec mean±se",
+                std::println("{:<5} {:>8} {:>5} {:>5} {:<17} {:>9} {:>9} {:>38} {:>28} {:>28} {:>18} {:>18} {:>18} {:>18}", "case", "algo", "ncv", "blk",
+                             "correction", "conv", "reps", "eigvals mean", "rnorms_abs mean", "rnorms_rel mean", "outer_iter mean±se", "matvec mean±se",
                              "time mean±se", "jd switch ±se");
                 for(const auto &[case_id, group] : groups) {
                     (void) case_id;
-                    std::println("{:<5} {:>8} {:>5} {:>5} {:<17} {:>4}/{:<4} {:>9} {:>18.10e} {:>18.4e} {:>18.4e} {:>18} {:>18} {:>18} {:>18}",
+                    std::println("{:<5} {:>8} {:>5} {:>5} {:<17} {:>4}/{:<4} {:>9} {:>38} {:>28} {:>28} {:>18} {:>18} {:>18} {:>18}",
                                  group.row.case_id, to_string(group.row.algo), group.row.ncv, group.row.block_size, to_string(group.row.residual_correction),
-                                 group.converged, group.count, group.count, group.eigval.mean(), group.rnorm_abs.mean(), group.rnorm_rel.mean(),
+                                 group.converged, group.count, group.count, means_text(group.eigvals), means_text(group.rnorms_abs), means_text(group.rnorms_rel),
                                  mean_stderr_text(group.outer_iterations, "{:.1f}"), mean_stderr_text(group.matvecs, "{:.1f}"),
                                  mean_stderr_text(group.time, "{:.4f}"), mean_stderr_text(group.first_jd_switch, "{:.1f}"));
                 }
             } else if constexpr(std::is_same_v<Row, LanczosSnapshot>) {
-                std::println("{:<5} {:>8} {:>5} {:>5} {:>6} {:>9} {:>9} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} "
+                std::println("{:<5} {:>8} {:>5} {:>5} {:>6} {:>9} {:>9} {:>38} {:>28} {:>28} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} "
                              "{:>18} {:>18} {:>18}",
-                             "case", "algo", "ncv", "blk", "retain", "conv", "reps", "eigval mean", "rnorm_abs mean", "rnorm_rel mean", "outer_iter mean±se",
+                             "case", "algo", "ncv", "blk", "retain", "conv", "reps", "eigvals mean", "rnorms_abs mean", "rnorms_rel mean", "outer_iter mean±se",
                              "matvec mean±se", "time mean±se", "orth mean±se", "orthn mean±se", "proj mean±se", "factor mean±se", "update mean±se",
                              "refresh mean±se", "mask mean±se", "diag mean±se", "ritz mean±se", "restart mean±se");
                 for(const auto &[case_id, group] : groups) {
                     (void) case_id;
-                    std::println("{:<5} {:>8} {:>5} {:>5} {:>6} {:>4}/{:<4} {:>9} {:>18.10e} {:>18.4e} {:>18.4e} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} "
+                    std::println("{:<5} {:>8} {:>5} {:>5} {:>6} {:>4}/{:<4} {:>9} {:>38} {:>28} {:>28} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18} "
                                  "{:>18} {:>18} {:>18} {:>18} {:>18} {:>18}",
                                  group.row.case_id, to_string(group.row.algo), group.row.ncv, group.row.block_size, group.row.max_retain_blocks,
-                                 group.converged, group.count, group.count, group.eigval.mean(), group.rnorm_abs.mean(), group.rnorm_rel.mean(),
+                                 group.converged, group.count, group.count, means_text(group.eigvals), means_text(group.rnorms_abs), means_text(group.rnorms_rel),
                                  mean_stderr_text(group.outer_iterations, "{:.1f}"), mean_stderr_text(group.matvecs, "{:.1f}"),
                                  mean_stderr_text(group.time, "{:.4f}"), mean_stderr_text(group.time_orthogonalize, "{:.4f}"),
                                  mean_stderr_text(group.time_orthonormalize, "{:.4f}"), mean_stderr_text(group.time_orth_project, "{:.4f}"),
@@ -354,13 +376,13 @@ namespace bench_generalized {
                                  mean_stderr_text(group.time_restart, "{:.4f}"));
                 }
             } else {
-                std::println("{:<5} {:>8} {:>5} {:>5} {:>9} {:>9} {:>18} {:>18} {:>18} {:>18} {:>18} {:>18}", "case", "algo", "ncv", "blk", "conv", "reps",
-                             "eigval mean", "rnorm_abs mean", "rnorm_rel mean", "outer_iter mean±se", "matvec mean±se", "time mean±se");
+                std::println("{:<5} {:>8} {:>5} {:>5} {:>9} {:>9} {:>38} {:>28} {:>28} {:>18} {:>18} {:>18}", "case", "algo", "ncv", "blk", "conv", "reps",
+                             "eigvals mean", "rnorms_abs mean", "rnorms_rel mean", "outer_iter mean±se", "matvec mean±se", "time mean±se");
                 for(const auto &[case_id, group] : groups) {
                     (void) case_id;
-                    std::println("{:<5} {:>8} {:>5} {:>5} {:>4}/{:<4} {:>9} {:>18.10e} {:>18.4e} {:>18.4e} {:>18} {:>18} {:>18}", group.row.case_id,
-                                 to_string(group.row.algo), group.row.ncv, group.row.block_size, group.converged, group.count, group.count, group.eigval.mean(),
-                                 group.rnorm_abs.mean(), group.rnorm_rel.mean(), mean_stderr_text(group.outer_iterations, "{:.1f}"),
+                    std::println("{:<5} {:>8} {:>5} {:>5} {:>4}/{:<4} {:>9} {:>38} {:>28} {:>28} {:>18} {:>18} {:>18}", group.row.case_id,
+                                 to_string(group.row.algo), group.row.ncv, group.row.block_size, group.converged, group.count, group.count, means_text(group.eigvals),
+                                 means_text(group.rnorms_abs), means_text(group.rnorms_rel), mean_stderr_text(group.outer_iterations, "{:.1f}"),
                                  mean_stderr_text(group.matvecs, "{:.1f}"), mean_stderr_text(group.time, "{:.4f}"));
                 }
             }

@@ -52,11 +52,20 @@ namespace bench_generalized {
             return converted;
         }
 
-        double rnorm_rel(grit::ResultView<Scalar> view) {
-            if(view.rNormsAbs().size() == 0) return 0.0;
-            auto scale = std::max(view.op_norm_estimate(), std::numeric_limits<double>::min());
-            if(view.eigVecs().cols() > 0) scale = std::max(scale * view.eigVecs().col(0).norm(), std::numeric_limits<double>::min());
-            return view.rNormsAbs()(0) / scale;
+        template<typename Vector>
+        std::vector<double> to_double_vector(const Vector &values) {
+            return {values.data(), values.data() + values.size()};
+        }
+
+        std::vector<double> rnorms_rel(grit::ResultView<Scalar> view) {
+            std::vector<double> result;
+            result.reserve(static_cast<std::size_t>(view.rNormsAbs().size()));
+            for(Eigen::Index i = 0; i < view.rNormsAbs().size(); ++i) {
+                auto scale = std::max(view.op_norm_estimate(), std::numeric_limits<double>::min());
+                if(i < view.eigVecs().cols()) scale = std::max(scale * view.eigVecs().col(i).norm(), std::numeric_limits<double>::min());
+                result.push_back(view.rNormsAbs()(i) / scale);
+            }
+            return result;
         }
 
         template<typename Snapshot>
@@ -83,9 +92,12 @@ namespace bench_generalized {
             snapshot.use_b_inner_product          = static_cast<uint8_t>(opts.use_b_inner_product);
             snapshot.use_rescaled_rnorm_tolerance = static_cast<uint8_t>(opts.use_rescaled_rnorm_tolerance);
             snapshot.stop_reason                  = fixed_string<64>(grit::enum2s(view.stopReason()), "stop_reason");
-            snapshot.eigenvalue                   = view.eigVal().size() > 0 ? view.eigVal()(0) : 0.0;
-            snapshot.rnorm_abs                    = view.rNormsAbs().size() > 0 ? view.rNormsAbs()(0) : 0.0;
-            snapshot.rnorm_rel                    = rnorm_rel(view);
+            snapshot.eigenvalues                  = to_double_vector(view.eigVal());
+            snapshot.rnorms_abs                   = to_double_vector(view.rNormsAbs());
+            snapshot.rnorms_rel                   = rnorms_rel(view);
+            snapshot.eigenvalue                   = snapshot.eigenvalues.empty() ? 0.0 : snapshot.eigenvalues[0];
+            snapshot.rnorm_abs                    = snapshot.rnorms_abs.empty() ? 0.0 : snapshot.rnorms_abs[0];
+            snapshot.rnorm_rel                    = snapshot.rnorms_rel.empty() ? 0.0 : snapshot.rnorms_rel[0];
             snapshot.outer_iterations             = static_cast<int64_t>(view.outer_iter());
             snapshot.matvecs                      = static_cast<int64_t>(view.num_matvecs_total());
             snapshot.outer_matvecs                = static_cast<int64_t>(view.num_matvecs());

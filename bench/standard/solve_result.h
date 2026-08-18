@@ -41,6 +41,9 @@ namespace bench_standard {
         double                eigenvalue                         = 0.0;
         double                rnorm_abs                          = 0.0;
         double                rnorm_rel                          = 0.0;
+        h5pp::varr_t<double>  eigenvalues;
+        h5pp::varr_t<double>  rnorms_abs;
+        h5pp::varr_t<double>  rnorms_rel;
         int64_t               outer_iterations                   = 0;
         int64_t               matvecs                            = 0;
         int64_t               outer_matvecs                      = 0;
@@ -123,6 +126,9 @@ namespace bench_standard {
         double                eigenvalue         = 0.0;
         double                rnorm_abs          = 0.0;
         double                rnorm_rel          = 0.0;
+        h5pp::varr_t<double>  eigenvalues;
+        h5pp::varr_t<double>  rnorms_abs;
+        h5pp::varr_t<double>  rnorms_rel;
         int64_t               outer_iterations   = 0;
         int64_t               matvecs            = 0;
         int64_t               outer_matvecs      = 0;
@@ -181,6 +187,9 @@ namespace bench_standard {
         double                eigenvalue         = 0.0;
         double                rnorm_abs          = 0.0;
         double                rnorm_rel          = 0.0;
+        h5pp::varr_t<double>  eigenvalues;
+        h5pp::varr_t<double>  rnorms_abs;
+        h5pp::varr_t<double>  rnorms_rel;
         int64_t               outer_iterations   = 0;
         int64_t               matvecs            = 0;
         int64_t               outer_matvecs      = 0;
